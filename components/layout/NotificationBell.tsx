@@ -7,9 +7,20 @@ import { format, formatDistanceToNow, parseISO } from 'date-fns'
 import { subscribeToNotifications } from '@/lib/supabase/realtime'
 import { Toast } from '@/components/ui/Toast'
 
+interface Notification {
+  id: string
+  is_read: boolean
+  group_id?: string
+  booking_id?: string
+  message: string
+  group_name?: string
+  match_date?: string
+  created_at?: string
+}
+
 export function NotificationBell({ userId }: { userId: string }) {
   const router = useRouter()
-  const [notifications, setNotifications] = useState<any[]>([])
+  const [notifications, setNotifications] = useState<Notification[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
@@ -32,7 +43,7 @@ export function NotificationBell({ userId }: { userId: string }) {
 
   useEffect(() => {
     if (!userId) return
-    const channel = subscribeToNotifications(userId, (newNotif) => {
+    const channel = subscribeToNotifications(userId, () => {
       setToastMessage(`🏟️ New match activity detected!`)
       fetch('/api/notifications').then(r => r.json()).then(d => {
         if (d.notifications) setNotifications(d.notifications)
@@ -52,7 +63,7 @@ export function NotificationBell({ userId }: { userId: string }) {
     }
   }
 
-  const handleNotificationClick = async (n: any) => {
+  const handleNotificationClick = async (n: Notification) => {
     if (!n.is_read) {
       try {
         await fetch(`/api/notifications/${n.id}`, { method: 'PATCH' })
@@ -103,7 +114,7 @@ export function NotificationBell({ userId }: { userId: string }) {
               {notifications.length === 0 ? (
                 <div className="text-center py-10 text-sm text-neutral-400 font-bold">No notifications yet.</div>
               ) : (
-                notifications.map((n: any) => (
+                notifications.map((n: Notification) => (
                   <div 
                     key={n.id} 
                     onClick={() => handleNotificationClick(n)}

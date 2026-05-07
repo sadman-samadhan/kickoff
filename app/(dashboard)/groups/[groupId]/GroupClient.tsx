@@ -8,6 +8,38 @@ import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, S
 import { Button } from '@/components/ui/button'
 import { rsvpAction, addBookingAction } from './actions'
 
+interface Member {
+  id: string
+  full_name?: string
+  avatar_url?: string
+  preferred_position?: string
+  role: 'admin' | 'member'
+}
+
+interface Booking {
+  id: string
+  match_date: string
+  match_time: string
+  field_name: string
+  max_players: number
+  status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled'
+  rsvps?: { player_id: string; status: string; waitlist_position?: number }[]
+}
+
+interface GroupClientProps {
+  group: {
+    id: string
+    name: string
+    invite_code: string
+  }
+  members: Member[]
+  role: 'admin' | 'member'
+  nextMatch: Booking | null
+  futureBookings: Booking[]
+  pastBookings: Booking[]
+  userId: string
+}
+
 export default function GroupClient({
   group,
   members,
@@ -16,9 +48,7 @@ export default function GroupClient({
   futureBookings,
   pastBookings,
   userId
-}: any) {
-  const router = useRouter()
-  
+}: GroupClientProps) {
   // Modals state
   const [isManageModalOpen, setIsManageModalOpen] = useState(false)
   const [isAddBookingOpen, setIsAddBookingOpen] = useState(false)
@@ -40,10 +70,10 @@ export default function GroupClient({
   const [isBookingLoading, setIsBookingLoading] = useState(false)
 
   // Next Match logic
-  const myRsvpObj = nextMatch?.rsvps?.find((r: any) => r.player_id === userId)
+  const myRsvpObj = nextMatch?.rsvps?.find((r: { player_id: string }) => r.player_id === userId)
   const myRsvp = myRsvpObj?.status || 'none'
-  const inCount = nextMatch?.rsvps?.filter((r: any) => r.status === 'in').length || 0
-  const waitlistCount = nextMatch?.rsvps?.filter((r: any) => r.status === 'waitlist').length || 0
+  const inCount = nextMatch?.rsvps?.filter((r: { status: string }) => r.status === 'in').length || 0
+  const waitlistCount = nextMatch?.rsvps?.filter((r: { status: string }) => r.status === 'waitlist').length || 0
   const maxPlayers = nextMatch?.max_players || 21
   const progressPercent = Math.min(100, (inCount / maxPlayers) * 100)
   
@@ -171,7 +201,7 @@ export default function GroupClient({
               className={`h-12 rounded-xl text-base shadow-sm transition-all ${myRsvp === 'in' ? 'bg-green-600 hover:bg-green-700 text-white ring-2 ring-green-600 ring-offset-2' : 'bg-white text-green-700 border-2 border-green-200 hover:bg-green-50'}`}
             >
               <CheckCircle className={`w-5 h-5 mr-2 ${myRsvp === 'in' ? 'text-white' : 'text-green-600'}`} />
-              I'm In
+              I&apos;m In
             </Button>
             <Button 
               onClick={() => handleRsvp('out')}
@@ -179,7 +209,7 @@ export default function GroupClient({
               className={`h-12 rounded-xl text-base shadow-sm transition-all ${myRsvp === 'out' ? 'bg-red-500 hover:bg-red-600 text-white ring-2 ring-red-500 ring-offset-2' : 'bg-white text-red-600 border-2 border-red-100 hover:bg-red-50'}`}
             >
               <XCircle className={`w-5 h-5 mr-2 ${myRsvp === 'out' ? 'text-white' : 'text-red-500'}`} />
-              I'm Out
+              I&apos;m Out
             </Button>
           </div>
           {myRsvp === 'waitlist' && (
@@ -209,7 +239,7 @@ export default function GroupClient({
           <span className="text-xs font-bold text-neutral-400">{members.length} Total</span>
         </div>
         <div className="flex overflow-x-auto gap-4 pb-2 hide-scrollbar snap-x">
-          {members.map((member: any) => (
+          {members.map((member: Member) => (
             <div key={member.id} className="flex flex-col items-center shrink-0 w-16 snap-start">
               <div className="relative">
                 {member.avatar_url ? (
@@ -237,7 +267,7 @@ export default function GroupClient({
         <div>
           <h3 className="font-bold text-neutral-900 text-lg mb-3">Upcoming</h3>
           <div className="flex flex-col gap-3">
-            {futureBookings.map((booking: any) => (
+            {futureBookings.map((booking: Booking) => (
               <Link href={`/groups/${group.id}/match/${booking.id}`} key={booking.id}>
                 <div className="bg-white rounded-2xl p-4 border border-neutral-100 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-transform">
                   <div className="flex flex-col items-center justify-center bg-neutral-50 text-neutral-800 rounded-xl w-14 h-14 shrink-0">
@@ -248,7 +278,7 @@ export default function GroupClient({
                     <div className="flex justify-between items-start mb-1">
                       <h4 className="font-bold text-neutral-900 truncate">{format(parseISO(booking.match_date), 'EEEE')}</h4>
                       <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded">
-                        {booking.rsvps?.filter((r:any) => r.status === 'in').length || 0} IN
+                        {booking.rsvps?.filter((r: { status: string }) => r.status === 'in').length || 0} IN
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-neutral-500 truncate">
@@ -271,7 +301,7 @@ export default function GroupClient({
         <div>
           <h3 className="font-bold text-neutral-900 text-lg mb-3">History</h3>
           <div className="flex overflow-x-auto gap-3 pb-2 hide-scrollbar snap-x">
-            {pastBookings.map((booking: any) => (
+            {pastBookings.map((booking: Booking) => (
               <Link href={`/groups/${group.id}/match/${booking.id}`} key={booking.id} className="snap-start shrink-0">
                 <div className="bg-white rounded-xl p-3 w-40 border border-neutral-100 shadow-sm">
                   <div className="text-[10px] font-bold text-neutral-400 uppercase mb-1">
@@ -414,13 +444,13 @@ export default function GroupClient({
       {/* Confirm Out Modal */}
       {isConfirmOutOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 shadow-2xl">
+          <div className="bg-white rounded-3xl w-full max-sm p-6 animate-in zoom-in-95 duration-200 shadow-2xl">
             <h3 className="font-bold text-xl text-neutral-900 mb-2">Are you sure?</h3>
             <p className="text-neutral-600 mb-6">Your spot will automatically be given to the next person on the waitlist. You will lose your guaranteed spot.</p>
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => setIsConfirmOutOpen(false)}>Cancel</Button>
               <Button className="flex-1 h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white" onClick={() => executeRsvp('out')}>
-                {isRsvpLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Yes, I'm Out"}
+                {isRsvpLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Yes, I&apos;m Out"}
               </Button>
             </div>
           </div>
@@ -435,7 +465,7 @@ export default function GroupClient({
               <Clock className="w-8 h-8 text-purple-600" />
             </div>
             <h3 className="font-bold text-xl text-neutral-900 mb-2">Added to Waitlist!</h3>
-            <p className="text-neutral-600 mb-6">The match is currently full. You are position <strong>#{waitlistPos}</strong> on the waitlist. You'll be notified if a spot opens up.</p>
+            <p className="text-neutral-600 mb-6">The match is currently full. You are position <strong>#{waitlistPos}</strong> on the waitlist. You&apos;ll be notified if a spot opens up.</p>
             <Button className="w-full h-12 rounded-xl bg-neutral-900 text-white" onClick={() => setIsWaitlistAlertOpen(false)}>
               Got it
             </Button>

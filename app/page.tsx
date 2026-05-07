@@ -86,7 +86,7 @@ export default function LandingPage() {
                 </div>
                 <h3 className="text-xl font-bold text-neutral-900">Squad Management</h3>
                 <p className="text-neutral-500 leading-relaxed">
-                  Manage your team rosters, handle invitations, and keep track of who's in and who's out.
+                  Manage your team rosters, handle invitations, and keep track of who&apos;s in and who&apos;s out.
                 </p>
               </div>
               <div className="flex flex-col items-center space-y-4 text-center group">

@@ -553,8 +553,8 @@ export default function MatchClient({
                   onChange={e => setGoalForm({...goalForm, teamId: e.target.value, scorerId: '', assistId: ''})}
                 >
                   <option value="">Select Team...</option>
-                  <option value={matchSchedule.find((m:any) => m.id === expandedMatchId)?.home_team_id}>{getTeamName(matchSchedule.find((m:any) => m.id === expandedMatchId)?.home_team_id)}</option>
-                  <option value={matchSchedule.find((m:any) => m.id === expandedMatchId)?.away_team_id}>{getTeamName(matchSchedule.find((m:any) => m.id === expandedMatchId)?.away_team_id)}</option>
+                  <option value={matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.home_team_id || ''}>{getTeamName(matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.home_team_id)}</option>
+                  <option value={matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.away_team_id || ''}>{getTeamName(matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.away_team_id)}</option>
                 </select>
               </div>
 
@@ -567,7 +567,7 @@ export default function MatchClient({
                   onChange={e => setGoalForm({...goalForm, scorerId: e.target.value})}
                 >
                   <option value="">Select Player...</option>
-                  {teams.find((t:any) => t.id === goalForm.teamId)?.team_players.map((p:any) => (
+                  {teams.find((t: { id: string }) => t.id === goalForm.teamId)?.team_players.map((p: { player_id: string; profiles: { full_name: string } }) => (
                     <option key={p.player_id} value={p.player_id}>{p.profiles.full_name}</option>
                   ))}
                 </select>
@@ -581,7 +581,7 @@ export default function MatchClient({
                   onChange={e => setGoalForm({...goalForm, assistId: e.target.value})}
                 >
                   <option value="">None</option>
-                  {teams.find((t:any) => t.id === goalForm.teamId)?.team_players.filter((p:any) => p.player_id !== goalForm.scorerId).map((p:any) => (
+                  {teams.find((t: { id: string }) => t.id === goalForm.teamId)?.team_players.filter((p: { player_id: string }) => p.player_id !== goalForm.scorerId).map((p: { player_id: string; profiles: { full_name: string } }) => (
                     <option key={p.player_id} value={p.player_id}>{p.profiles.full_name}</option>
                   ))}
                 </select>

@@ -7,7 +7,7 @@ export default function NotFound() {
         <span className="text-5xl block mb-4">⚽</span>
         <h1 className="text-xl font-black text-neutral-900 mb-2">Page not found</h1>
         <p className="text-sm text-neutral-500 mb-6">
-          Looks like this page went offside. Let's get you back on the pitch.
+          Looks like this page went offside. Let&apos;s get you back on the pitch.
         </p>
         <Link
           href="/dashboard"

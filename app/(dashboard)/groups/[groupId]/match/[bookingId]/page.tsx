@@ -36,9 +36,14 @@ export default async function MatchPage({ params }: { params: { groupId: string,
     .eq('booking_id', params.bookingId)
     .order('scheduled_order', { ascending: true })
 
+  interface MatchScheduleItem {
+    id: string
+    scheduled_order: number
+  }
+
   // Fetch Goal Events
-  const scheduleIds = matchSchedule?.map((m: any) => m.id) || []
-  let goalEvents: any[] = []
+  const scheduleIds = matchSchedule?.map((m: MatchScheduleItem) => m.id) || []
+  let goalEvents: { id: string; scorer_id: string; assist_id?: string; profiles: unknown; assist: unknown }[] = []
   if (scheduleIds.length > 0) {
     const { data: ge } = await supabase
       .from('goal_events')

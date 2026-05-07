@@ -47,8 +47,17 @@ export default async function GroupPage({ params }: { params: { groupId: string 
 
   const now = new Date().toISOString()
 
-  let pastBookings: any[] = []
-  let upcomingBookings: any[] = []
+  interface Booking {
+    id: string
+    match_date: string
+    match_time: string
+    field_name: string
+    status: string
+    rsvps: { player_id: string; status: string }[]
+  }
+
+  const pastBookings: Booking[] = []
+  const upcomingBookings: Booking[] = []
 
   bookingsData?.forEach(b => {
     const isPast = b.status === 'completed' || b.match_date < now.split('T')[0]

@@ -43,13 +43,13 @@ export function RsvpAlertCard({ notification, groupName, onAccept, onDecline }: 
           onClick={onAccept}
           className="flex-1 bg-green-600 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-green-700 active:scale-95 transition-all"
         >
-          ✅ I'm In
+          ✅ I&apos;m In
         </button>
         <button
           onClick={onDecline}
           className="flex-1 bg-white text-red-600 text-sm font-bold py-2.5 rounded-xl border border-red-200 hover:bg-red-50 active:scale-95 transition-all"
         >
-          ❌ Can't Make It
+          ❌ Can&apos;t Make It
         </button>
       </div>
     </div>
