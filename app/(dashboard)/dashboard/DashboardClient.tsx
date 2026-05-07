@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Trophy, CheckCircle, XCircle, Plus, Calendar as CalendarIcon, MapPin, ChevronLeft, ChevronRight, Download, Users, X } from 'lucide-react'
+import { Trophy, CheckCircle, XCircle, Plus, Calendar as CalendarIcon, MapPin, ChevronLeft, ChevronRight, Download, Users, X, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, startOfWeek, endOfWeek } from 'date-fns'
 import { Button } from '@/components/ui/button'
@@ -20,15 +20,15 @@ export default function DashboardClient({
   const supabase = createClient()
   const [localPending, setLocalPending] = useState(pendingBookings)
   const [currentPendingIndex, setCurrentPendingIndex] = useState(0)
-  
+
   // Calendar State
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  
+
   const handleRsvp = async (bookingId: string, status: string) => {
     // Optimistic update
     setLocalPending((prev: any[]) => prev.filter((b: any) => b.id !== bookingId))
-    
+
     // Save to DB
     // First try to update
     const { data: existing } = await supabase
@@ -102,7 +102,7 @@ END:VCALENDAR`
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 max-w-xl mx-auto">
-      
+
       {/* 1. HEADER CARD */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100 flex flex-col items-center">
         <div className="relative mb-3">
@@ -117,12 +117,12 @@ END:VCALENDAR`
             {profile?.preferred_position || 'N/A'}
           </div>
         </div>
-        
+
         <div className="flex items-center gap-1.5 mb-1">
           <h2 className="text-xl font-bold text-neutral-900">{profile?.full_name || 'Player'}</h2>
           <Trophy className="w-4 h-4 text-green-500" />
         </div>
-        
+
         <div className="flex gap-4 mt-3 pt-3 border-t border-neutral-100 w-full justify-center">
           <div className="flex flex-col items-center">
             <span className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">Goals</span>
@@ -145,7 +145,7 @@ END:VCALENDAR`
       {localPending.length > 0 && (
         <div className="bg-amber-50 rounded-2xl p-5 border border-amber-200 shadow-[0_0_15px_rgba(251,191,36,0.2)] animate-pulse-slow relative overflow-hidden">
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-200/30 rounded-full -mr-12 -mt-12 blur-xl"></div>
-          
+
           <div className="flex justify-between items-start mb-2">
             <div className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider flex items-center gap-1">
               <span className="relative flex h-2 w-2">
@@ -160,25 +160,25 @@ END:VCALENDAR`
               </span>
             )}
           </div>
-          
+
           <p className="text-sm font-medium text-amber-900 leading-snug mb-4 relative z-10">
-            🏟️ <strong>{localPending[currentPendingIndex].groups?.name}</strong> has a match coming up! <br/>
+            🏟️ <strong>{localPending[currentPendingIndex].groups?.name}</strong> has a match coming up! <br />
             <span className="text-amber-800/80">
-              {format(parseISO(localPending[currentPendingIndex].match_date), 'EEEE, d MMM')} · {localPending[currentPendingIndex].match_time.slice(0,5)} · {localPending[currentPendingIndex].field_name}
+              {format(parseISO(localPending[currentPendingIndex].match_date), 'EEEE, d MMM')} · {localPending[currentPendingIndex].match_time.slice(0, 5)} · {localPending[currentPendingIndex].field_name}
             </span>
-            <br/><span className="mt-1 block font-bold">Are you in?</span>
+            <br /><span className="mt-1 block font-bold">Are you in?</span>
           </p>
-          
+
           <div className="flex gap-3 relative z-10">
-            <Button 
+            <Button
               onClick={() => handleRsvp(localPending[currentPendingIndex].id, 'in')}
               className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-sm border-0 h-11"
             >
               <CheckCircle className="w-5 h-5 mr-1.5" /> I'm In
             </Button>
-            <Button 
+            <Button
               onClick={() => handleRsvp(localPending[currentPendingIndex].id, 'out')}
-              variant="outline" 
+              variant="outline"
               className="flex-1 bg-white hover:bg-red-50 text-red-600 border-red-200 rounded-xl shadow-sm h-11"
             >
               <XCircle className="w-5 h-5 mr-1.5" /> Can't Make It
@@ -210,13 +210,13 @@ END:VCALENDAR`
               </div>
             </Link>
           ))}
-          
+
           <Link href="/groups/join" className="snap-start shrink-0">
             <div className="bg-green-50/50 border-2 border-dashed border-green-200 rounded-2xl p-4 w-32 h-full flex flex-col items-center justify-center text-green-700 active:scale-95 transition-transform hover:bg-green-50">
               <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mb-2">
                 <Plus className="w-5 h-5" />
               </div>
-              <span className="text-xs font-bold text-center">Add / Join<br/>Group</span>
+              <span className="text-xs font-bold text-center">Add / Join<br />Group</span>
             </div>
           </Link>
         </div>
@@ -242,7 +242,7 @@ END:VCALENDAR`
                     <h4 className="font-bold text-neutral-900 truncate">{booking.groups?.name}</h4>
                     <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1 truncate">
                       <Clock className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{booking.match_time.slice(0,5)}</span>
+                      <span className="truncate">{booking.match_time.slice(0, 5)}</span>
                       <span className="mx-0.5">•</span>
                       <MapPin className="w-3 h-3 shrink-0" />
                       <span className="truncate">{booking.field_name}</span>
@@ -295,10 +295,10 @@ END:VCALENDAR`
             const isSelected = selectedDate && isSameDay(day, selectedDate)
             const isCurrentMonth = isSameMonth(day, currentMonth)
             const isTodayDate = isToday(day)
-            
+
             return (
-              <div 
-                key={i} 
+              <div
+                key={i}
                 onClick={() => hasBooking && setSelectedDate(isSelected ? null : day)}
                 className={`
                   aspect-square flex flex-col justify-center items-center rounded-xl text-sm relative cursor-pointer
@@ -330,7 +330,7 @@ END:VCALENDAR`
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="p-5 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
               {selectedDateBookings.map((booking: any) => (
                 <div key={booking.id} className="border border-neutral-100 rounded-xl p-4 bg-white shadow-sm relative overflow-hidden">
@@ -339,7 +339,7 @@ END:VCALENDAR`
                   <div className="space-y-1 mb-4">
                     <div className="flex items-center text-sm text-neutral-600">
                       <Clock className="w-4 h-4 mr-2 text-neutral-400" />
-                      {booking.match_time.slice(0,5)}
+                      {booking.match_time.slice(0, 5)}
                     </div>
                     <div className="flex items-center text-sm text-neutral-600">
                       <MapPin className="w-4 h-4 mr-2 text-neutral-400" />

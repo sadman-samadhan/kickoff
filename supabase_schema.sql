@@ -122,21 +122,51 @@ ALTER TABLE match_schedule ENABLE ROW LEVEL SECURITY;
 ALTER TABLE goal_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
+-- 11. TRIGGER FOR NEW USER PROFILES
+-- This function runs with SECURITY DEFINER, bypassing RLS to ensure profiles are created.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, email, username, preferred_position, secondary_position, avatar_url)
+  VALUES (
+    new.id, 
+    COALESCE(new.raw_user_meta_data->>'full_name', ''), 
+    new.email,
+    new.raw_user_meta_data->>'username',
+    new.raw_user_meta_data->>'preferred_position',
+    new.raw_user_meta_data->>'secondary_position',
+    new.raw_user_meta_data->>'avatar_url'
+  );
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
 -- BASIC RLS POLICIES (read access for authenticated users)
-CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
+
+-- PROFILES
+CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
 CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+-- Insert is handled by the trigger (SECURITY DEFINER)
+-- We keep a strict insert policy just in case someone tries to insert manually
 CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
+-- GROUPS
 CREATE POLICY "Members can view their groups" ON groups FOR SELECT USING (
   id IN (SELECT group_id FROM group_members WHERE player_id = auth.uid())
 );
 CREATE POLICY "Authenticated users can create groups" ON groups FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
+-- GROUP MEMBERS
 CREATE POLICY "Members can view group members" ON group_members FOR SELECT USING (
   group_id IN (SELECT group_id FROM group_members WHERE player_id = auth.uid())
 );
 CREATE POLICY "Users can join groups" ON group_members FOR INSERT WITH CHECK (player_id = auth.uid());
 
+-- BOOKINGS
 CREATE POLICY "Members can view bookings" ON bookings FOR SELECT USING (
   group_id IN (SELECT group_id FROM group_members WHERE player_id = auth.uid())
 );
@@ -144,6 +174,7 @@ CREATE POLICY "Members can create bookings" ON bookings FOR INSERT WITH CHECK (
   group_id IN (SELECT group_id FROM group_members WHERE player_id = auth.uid())
 );
 
+-- RSVPS
 CREATE POLICY "Players can manage own RSVPs" ON rsvps FOR ALL USING (player_id = auth.uid());
 CREATE POLICY "Members can view RSVPs" ON rsvps FOR SELECT USING (
   booking_id IN (SELECT id FROM bookings WHERE group_id IN (
@@ -151,6 +182,7 @@ CREATE POLICY "Members can view RSVPs" ON rsvps FOR SELECT USING (
   ))
 );
 
+-- TEAMS
 CREATE POLICY "Members can view teams" ON teams FOR SELECT USING (
   booking_id IN (SELECT id FROM bookings WHERE group_id IN (
     SELECT group_id FROM group_members WHERE player_id = auth.uid()
@@ -162,16 +194,18 @@ CREATE POLICY "Members can create teams" ON teams FOR INSERT WITH CHECK (
   ))
 );
 
+-- SCHEDULES
 CREATE POLICY "Members can view schedules" ON match_schedule FOR SELECT USING (
   booking_id IN (SELECT id FROM bookings WHERE group_id IN (
     SELECT group_id FROM group_members WHERE player_id = auth.uid()
   ))
 );
 
+-- NOTIFICATIONS
 CREATE POLICY "Users can view own notifications" ON notifications FOR SELECT USING (player_id = auth.uid());
 CREATE POLICY "Users can update own notifications" ON notifications FOR UPDATE USING (player_id = auth.uid());
 
--- Add remaining permissive policies for team_players and goal_events
+-- TEAM PLAYERS & GOALS
 CREATE POLICY "Members can view team players" ON team_players FOR SELECT USING (true);
 CREATE POLICY "Members can view goals" ON goal_events FOR SELECT USING (true);
 CREATE POLICY "Members can insert goals" ON goal_events FOR INSERT WITH CHECK (auth.role() = 'authenticated');

@@ -19,11 +19,11 @@ export default function MatchClient({
   groupId
 }: any) {
   const router = useRouter()
-
+  
   // Players parsing
   const inPlayers = rsvps.filter((r: any) => r.status === 'in')
   const waitlistPlayers = rsvps.filter((r: any) => r.status === 'waitlist').sort((a: any, b: any) => (a.waitlist_position || 0) - (b.waitlist_position || 0))
-
+  
   const sortOrder: Record<string, number> = { 'GK': 1, 'DEF': 2, 'MID': 3, 'ATT': 4 }
   const sortedInPlayers = [...inPlayers].sort((a: any, b: any) => {
     const posA = a.profiles.preferred_position || 'ATT'
@@ -45,11 +45,11 @@ export default function MatchClient({
   // Schedule Form State
   const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false)
   const [scheduleType, setScheduleType] = useState('1-Leg League')
-
+  
   // Score Entry & Goal State
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null)
   const [scoreForms, setScoreForms] = useState<Record<string, { homeScore: number, awayScore: number }>>({})
-
+  
   const [isAddGoalOpen, setIsAddGoalOpen] = useState(false)
   const [goalForm, setGoalForm] = useState({ teamId: '', scorerId: '', assistId: '', minute: '', isOwnGoal: false })
   const [isGoalLoading, setIsGoalLoading] = useState(false)
@@ -115,7 +115,7 @@ export default function MatchClient({
     setIsScoreLoading(true)
     try {
       const form = scoreForms[matchId] || { homeScore: 0, awayScore: 0 }
-
+      
       await fetch(`/api/matches/${matchId}/score`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -189,19 +189,20 @@ export default function MatchClient({
             <Calendar className="w-4 h-4" />
             {format(parseISO(booking.match_date), 'MMM d, yyyy')}
           </div>
-          <div className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${booking.status === 'upcoming' ? 'bg-amber-100 text-amber-700' :
-              booking.status === 'ongoing' ? 'bg-blue-100 text-blue-700' :
-                'bg-neutral-100 text-neutral-700'
-            }`}>
+          <div className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+            booking.status === 'upcoming' ? 'bg-amber-100 text-amber-700' :
+            booking.status === 'ongoing' ? 'bg-blue-100 text-blue-700' :
+            'bg-neutral-100 text-neutral-700'
+          }`}>
             {booking.status}
           </div>
         </div>
-
+        
         <div className="flex items-center gap-3 text-neutral-700 mb-2">
           <Clock className="w-5 h-5 text-neutral-400" />
-          <span className="font-semibold text-lg">{booking.match_time.slice(0, 5)}</span>
+          <span className="font-semibold text-lg">{booking.match_time.slice(0,5)}</span>
         </div>
-
+        
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3 text-neutral-700">
             <MapPin className="w-5 h-5 text-neutral-400" />
@@ -218,7 +219,7 @@ export default function MatchClient({
       {/* 3. RSVP WIDGET */}
       {booking.status === 'upcoming' && (
         <div className="grid grid-cols-2 gap-3">
-          <Button
+          <Button 
             onClick={() => handleRsvp('in')}
             disabled={isRsvpLoading}
             className={`h-14 rounded-2xl text-base shadow-sm transition-all ${myRsvp === 'in' ? 'bg-green-600 hover:bg-green-700 text-white ring-2 ring-green-600 ring-offset-2' : 'bg-white text-green-700 border-2 border-green-100 hover:bg-green-50'}`}
@@ -226,7 +227,7 @@ export default function MatchClient({
             <CheckCircle className={`w-5 h-5 mr-2 ${myRsvp === 'in' ? 'text-white' : 'text-green-600'}`} />
             I'm In
           </Button>
-          <Button
+          <Button 
             onClick={() => handleRsvp('out')}
             disabled={isRsvpLoading}
             className={`h-14 rounded-2xl text-base shadow-sm transition-all ${myRsvp === 'out' ? 'bg-red-500 hover:bg-red-600 text-white ring-2 ring-red-500 ring-offset-2' : 'bg-white text-red-600 border-2 border-red-100 hover:bg-red-50'}`}
@@ -242,33 +243,41 @@ export default function MatchClient({
         <div className="p-4 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50">
           <h3 className="font-bold text-neutral-900 flex items-center gap-2">
             <Users className="w-5 h-5 text-neutral-500" />
-            Confirmed Squad
+            Confirmed Players
           </h3>
           <span className="text-sm font-bold text-neutral-500 bg-white px-2 py-1 rounded-md border border-neutral-200 shadow-sm">
             <span className={inPlayers.length >= booking.max_players ? 'text-green-600' : 'text-neutral-900'}>{inPlayers.length}</span> / {booking.max_players}
           </span>
         </div>
-
+        
         <div className="divide-y divide-neutral-50">
           {sortedInPlayers.map((rsvp: any) => (
-            <div key={rsvp.id} className="p-3 flex items-center justify-between hover:bg-neutral-50 transition-colors">
+            <div key={rsvp.id} className="p-3.5 flex items-center justify-between hover:bg-neutral-50 transition-colors">
               <div className="flex items-center gap-3">
-                {rsvp.profiles.avatar_url ? (
-                  <img src={rsvp.profiles.avatar_url} className="w-10 h-10 rounded-full object-cover" />
+                {rsvp.profiles?.avatar_url ? (
+                  <img src={rsvp.profiles.avatar_url} className="w-11 h-11 rounded-full object-cover border border-neutral-100 shadow-sm" />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center">
-                    {rsvp.profiles.full_name?.charAt(0)}
+                  <div className="w-11 h-11 rounded-full bg-green-50 text-green-700 font-bold flex items-center justify-center border border-green-100 text-lg">
+                    {rsvp.profiles?.full_name?.charAt(0) || 'P'}
                   </div>
                 )}
-                <span className="font-medium text-neutral-900">{rsvp.profiles.full_name}</span>
+                <div className="flex flex-col">
+                  <span className="font-bold text-neutral-900 leading-tight">
+                    {rsvp.profiles?.full_name || 'Anonymous Player'}
+                  </span>
+                  <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                    {rsvp.profiles?.preferred_position || 'Field Player'}
+                  </span>
+                </div>
               </div>
-              <span className="text-[10px] font-bold text-neutral-500 bg-neutral-100 px-2 py-1 rounded">
-                {rsvp.profiles.preferred_position || 'N/A'}
-              </span>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
+                <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">In</span>
+              </div>
             </div>
           ))}
           {sortedInPlayers.length === 0 && (
-            <div className="p-6 text-center text-neutral-500 text-sm">No players confirmed yet.</div>
+            <div className="p-8 text-center text-neutral-400 text-sm italic">No players confirmed yet.</div>
           )}
         </div>
 
@@ -308,7 +317,7 @@ export default function MatchClient({
               Teams
             </h3>
           </div>
-
+          
           <div className="p-4">
             {teams.length === 0 ? (
               isAddingTeams ? (
@@ -316,9 +325,9 @@ export default function MatchClient({
                   {teamForm.map((t, idx) => (
                     <div key={idx} className="p-4 bg-neutral-50 rounded-xl border border-neutral-200 space-y-3">
                       <h4 className="font-bold text-sm text-neutral-700">Team {idx + 1}</h4>
-                      <input
-                        type="text"
-                        placeholder="Team Name (e.g. Red Team)"
+                      <input 
+                        type="text" 
+                        placeholder="Team Name (e.g. Red Team)" 
                         className="w-full px-3 py-2 text-sm border rounded-lg"
                         value={t.name}
                         onChange={e => {
@@ -329,8 +338,8 @@ export default function MatchClient({
                       />
                       <div className="flex gap-2 items-center">
                         <label className="text-xs text-neutral-500 font-semibold">Color:</label>
-                        <input
-                          type="color"
+                        <input 
+                          type="color" 
                           className="w-8 h-8 rounded cursor-pointer"
                           value={t.jerseyColor}
                           onChange={e => {
@@ -340,7 +349,7 @@ export default function MatchClient({
                           }}
                         />
                       </div>
-                      <select
+                      <select 
                         className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
                         value={t.captainId}
                         onChange={e => {
@@ -403,11 +412,11 @@ export default function MatchClient({
               Schedule & Scores
             </h3>
           </div>
-
+          
           <div className="p-4">
             {matchSchedule.length === 0 ? (
               <div className="space-y-3">
-                <select
+                <select 
                   className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
                   value={scheduleType}
                   onChange={e => setScheduleType(e.target.value)}
@@ -426,10 +435,10 @@ export default function MatchClient({
                   const isCompleted = match.status === 'completed'
                   const isExpanded = expandedMatchId === match.id
                   const matchGoals = goalEvents.filter((g: any) => g.match_schedule_id === match.id)
-
+                  
                   return (
                     <div key={match.id} className={`rounded-xl border transition-colors overflow-hidden ${isCompleted ? 'bg-neutral-50 border-neutral-200' : 'bg-white border-green-100 hover:border-green-300 shadow-sm'}`}>
-                      <div
+                      <div 
                         onClick={() => handleExpandMatch(match)}
                         className="p-3 flex justify-between items-center cursor-pointer"
                       >
@@ -437,11 +446,11 @@ export default function MatchClient({
                           <span className="font-bold text-sm text-neutral-800">{getTeamName(match.home_team_id)}</span>
                           {isCompleted && <span className="text-lg font-black">{match.home_score}</span>}
                         </div>
-
+                        
                         <div className="px-3 py-1 bg-neutral-100 text-[10px] font-bold text-neutral-500 rounded mx-2">
                           VS
                         </div>
-
+                        
                         <div className="flex-1 flex justify-start items-center gap-2">
                           {isCompleted && <span className="text-lg font-black">{match.away_score}</span>}
                           <span className="font-bold text-sm text-neutral-800">{getTeamName(match.away_team_id)}</span>
@@ -453,21 +462,21 @@ export default function MatchClient({
                           <div className="flex justify-between items-center gap-4 mb-6">
                             <div className="flex-1 text-center">
                               <div className="text-xs font-bold text-neutral-500 mb-2 uppercase truncate">{getTeamName(match.home_team_id)}</div>
-                              <input
+                              <input 
                                 type="number" min="0"
                                 className="w-16 h-16 text-center text-3xl font-black bg-neutral-100 rounded-2xl border-none focus:ring-2 focus:ring-green-500"
                                 value={scoreForms[match.id]?.homeScore ?? (match.home_score || 0)}
-                                onChange={e => setScoreForms({ ...scoreForms, [match.id]: { ...scoreForms[match.id], homeScore: parseInt(e.target.value) || 0 } })}
+                                onChange={e => setScoreForms({...scoreForms, [match.id]: {...scoreForms[match.id], homeScore: parseInt(e.target.value) || 0}})}
                               />
                             </div>
                             <span className="text-xl font-black text-neutral-300">-</span>
                             <div className="flex-1 text-center">
                               <div className="text-xs font-bold text-neutral-500 mb-2 uppercase truncate">{getTeamName(match.away_team_id)}</div>
-                              <input
+                              <input 
                                 type="number" min="0"
                                 className="w-16 h-16 text-center text-3xl font-black bg-neutral-100 rounded-2xl border-none focus:ring-2 focus:ring-green-500"
                                 value={scoreForms[match.id]?.awayScore ?? (match.away_score || 0)}
-                                onChange={e => setScoreForms({ ...scoreForms, [match.id]: { ...scoreForms[match.id], awayScore: parseInt(e.target.value) || 0 } })}
+                                onChange={e => setScoreForms({...scoreForms, [match.id]: {...scoreForms[match.id], awayScore: parseInt(e.target.value) || 0}})}
                               />
                             </div>
                           </div>
@@ -477,7 +486,7 @@ export default function MatchClient({
 
                           <div className="border-t border-neutral-100 pt-4">
                             <div className="flex justify-between items-center mb-3">
-                              <h4 className="text-xs font-bold text-neutral-800 uppercase tracking-wider flex items-center gap-1.5"><Goal className="w-3.5 h-3.5 text-neutral-500" /> Goals</h4>
+                              <h4 className="text-xs font-bold text-neutral-800 uppercase tracking-wider flex items-center gap-1.5"><Goal className="w-3.5 h-3.5 text-neutral-500"/> Goals</h4>
                               <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 rounded-lg" onClick={() => setIsAddGoalOpen(true)}>
                                 <Plus className="w-3 h-3 mr-1" /> Add
                               </Button>
@@ -530,35 +539,35 @@ export default function MatchClient({
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4">
           <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full duration-200">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-lg flex items-center gap-2"><Goal className="w-5 h-5" /> Add Goal</h3>
+              <h3 className="font-bold text-lg flex items-center gap-2"><Goal className="w-5 h-5"/> Add Goal</h3>
               <button onClick={() => setIsAddGoalOpen(false)}><X className="w-5 h-5 text-neutral-500" /></button>
             </div>
-
+            
             <form onSubmit={handleAddGoal} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Team</label>
-                <select
+                <select 
                   required
                   className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
                   value={goalForm.teamId}
-                  onChange={e => setGoalForm({ ...goalForm, teamId: e.target.value, scorerId: '', assistId: '' })}
+                  onChange={e => setGoalForm({...goalForm, teamId: e.target.value, scorerId: '', assistId: ''})}
                 >
                   <option value="">Select Team...</option>
-                  <option value={matchSchedule.find((m: any) => m.id === expandedMatchId)?.home_team_id}>{getTeamName(matchSchedule.find((m: any) => m.id === expandedMatchId)?.home_team_id)}</option>
-                  <option value={matchSchedule.find((m: any) => m.id === expandedMatchId)?.away_team_id}>{getTeamName(matchSchedule.find((m: any) => m.id === expandedMatchId)?.away_team_id)}</option>
+                  <option value={matchSchedule.find((m:any) => m.id === expandedMatchId)?.home_team_id}>{getTeamName(matchSchedule.find((m:any) => m.id === expandedMatchId)?.home_team_id)}</option>
+                  <option value={matchSchedule.find((m:any) => m.id === expandedMatchId)?.away_team_id}>{getTeamName(matchSchedule.find((m:any) => m.id === expandedMatchId)?.away_team_id)}</option>
                 </select>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Scorer</label>
-                <select
+                <select 
                   required
                   className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
                   value={goalForm.scorerId}
-                  onChange={e => setGoalForm({ ...goalForm, scorerId: e.target.value })}
+                  onChange={e => setGoalForm({...goalForm, scorerId: e.target.value})}
                 >
                   <option value="">Select Player...</option>
-                  {teams.find((t: any) => t.id === goalForm.teamId)?.team_players.map((p: any) => (
+                  {teams.find((t:any) => t.id === goalForm.teamId)?.team_players.map((p:any) => (
                     <option key={p.player_id} value={p.player_id}>{p.profiles.full_name}</option>
                   ))}
                 </select>
@@ -566,13 +575,13 @@ export default function MatchClient({
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Assist (Optional)</label>
-                <select
+                <select 
                   className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
                   value={goalForm.assistId}
-                  onChange={e => setGoalForm({ ...goalForm, assistId: e.target.value })}
+                  onChange={e => setGoalForm({...goalForm, assistId: e.target.value})}
                 >
                   <option value="">None</option>
-                  {teams.find((t: any) => t.id === goalForm.teamId)?.team_players.filter((p: any) => p.player_id !== goalForm.scorerId).map((p: any) => (
+                  {teams.find((t:any) => t.id === goalForm.teamId)?.team_players.filter((p:any) => p.player_id !== goalForm.scorerId).map((p:any) => (
                     <option key={p.player_id} value={p.player_id}>{p.profiles.full_name}</option>
                   ))}
                 </select>
@@ -581,20 +590,20 @@ export default function MatchClient({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-neutral-500 uppercase">Minute (Optional)</label>
-                  <input
+                  <input 
                     type="number" min="1" max="120"
                     className="w-full px-3 py-2 border rounded-xl text-sm"
                     value={goalForm.minute}
-                    onChange={e => setGoalForm({ ...goalForm, minute: e.target.value })}
+                    onChange={e => setGoalForm({...goalForm, minute: e.target.value})}
                   />
                 </div>
                 <div className="space-y-1.5 flex flex-col justify-end pb-2">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
+                    <input 
+                      type="checkbox" 
                       className="w-4 h-4 rounded text-green-600 focus:ring-green-500"
                       checked={goalForm.isOwnGoal}
-                      onChange={e => setGoalForm({ ...goalForm, isOwnGoal: e.target.checked })}
+                      onChange={e => setGoalForm({...goalForm, isOwnGoal: e.target.checked})}
                     />
                     <span className="text-sm font-bold text-neutral-700">Own Goal</span>
                   </label>

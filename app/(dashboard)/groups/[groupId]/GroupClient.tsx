@@ -192,7 +192,13 @@ export default function GroupClient({
         <div className="bg-white rounded-3xl p-8 text-center shadow-sm border border-neutral-100">
           <Calendar className="w-12 h-12 text-neutral-300 mx-auto mb-3" />
           <h3 className="text-lg font-bold text-neutral-900">No Upcoming Matches</h3>
-          <p className="text-neutral-500 text-sm mt-1">Ready to play? Add a new booking.</p>
+          <p className="text-neutral-500 text-sm mt-1">Ready to play?</p>
+          <Button 
+            onClick={() => setIsAddBookingOpen(true)}
+            className="mt-4 bg-green-600 hover:bg-green-700 text-white rounded-full px-6 shadow-md shadow-green-600/20"
+          >
+            Add a new booking
+          </Button>
         </div>
       )}
 

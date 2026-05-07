@@ -20,13 +20,13 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
   const [tempName, setTempName] = useState(profile.full_name)
-  
+
   const [editForm, setEditForm] = useState({
     preferred_position: profile.preferred_position || '',
     secondary_position: profile.secondary_position || '',
     email: profile.email || ''
   })
-  
+
   const [isSaving, setIsSaving] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -53,7 +53,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return
     const file = e.target.files[0]
-    
+
     const fileExt = file.name.split('.').pop()
     const fileName = `${userId}-${Math.random()}.${fileExt}`
     const filePath = `${fileName}`
@@ -62,7 +62,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(filePath, file)
-      
+
       if (uploadError) throw uploadError
 
       const { data: { publicUrl } } = supabase.storage
@@ -135,14 +135,14 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
               {profile.full_name?.charAt(0)}
             </div>
           )}
-          <button 
+          <button
             onClick={() => fileInputRef.current?.click()}
             className="absolute bottom-0 right-0 bg-neutral-900 text-white p-2 rounded-full shadow-lg hover:scale-105 transition-transform z-20"
           >
             <Camera className="w-4 h-4" />
           </button>
-          <input 
-            type="file" 
+          <input
+            type="file"
             ref={fileInputRef}
             onChange={handleAvatarUpload}
             accept="image/*"
@@ -152,7 +152,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
         <div className="w-full flex justify-center items-center relative z-10 mb-1">
           {isEditingName ? (
-            <input 
+            <input
               autoFocus
               className="text-2xl font-black text-center text-neutral-900 bg-neutral-100 rounded-lg px-3 py-1 outline-none ring-2 ring-green-500 w-full max-w-[200px]"
               value={tempName}
@@ -161,7 +161,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
               onKeyDown={e => e.key === 'Enter' && saveInlineName()}
             />
           ) : (
-            <h1 
+            <h1
               className="text-2xl font-black text-neutral-900 cursor-pointer flex items-center gap-2 hover:opacity-70 transition-opacity"
               onClick={() => setIsEditingName(true)}
             >
@@ -169,11 +169,11 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
             </h1>
           )}
         </div>
-        
+
         <div className="text-neutral-500 font-medium mb-5">@{profile.username}</div>
 
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           onClick={() => setIsEditModalOpen(true)}
           className="rounded-full shadow-sm w-full max-w-[200px] border-neutral-200 z-10 relative"
         >
@@ -186,7 +186,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
         <h2 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
           <Activity className="w-5 h-5 text-neutral-400" /> My Stats
         </h2>
-        
+
         {loadingStats ? (
           <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-neutral-300" /></div>
         ) : stats ? (
@@ -194,15 +194,15 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
                 <span className="text-2xl font-black text-amber-600 mb-1">{stats.goals}</span>
-                <span className="text-[10px] font-bold text-amber-700/60 uppercase tracking-wider flex items-center gap-1.5"><Goal className="w-3 h-3"/> Goals</span>
+                <span className="text-[10px] font-bold text-amber-700/60 uppercase tracking-wider flex items-center gap-1.5"><Goal className="w-3 h-3" /> Goals</span>
               </div>
               <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
                 <span className="text-2xl font-black text-blue-600 mb-1">{stats.assists}</span>
-                <span className="text-[10px] font-bold text-blue-700/60 uppercase tracking-wider flex items-center gap-1.5"><Target className="w-3 h-3"/> Assists</span>
+                <span className="text-[10px] font-bold text-blue-700/60 uppercase tracking-wider flex items-center gap-1.5"><Target className="w-3 h-3" /> Assists</span>
               </div>
               <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
                 <span className="text-2xl font-black text-purple-600 mb-1">{stats.clean_sheets}</span>
-                <span className="text-[10px] font-bold text-purple-700/60 uppercase tracking-wider flex items-center gap-1.5"><Shield className="w-3 h-3"/> Clean Sheets</span>
+                <span className="text-[10px] font-bold text-purple-700/60 uppercase tracking-wider flex items-center gap-1.5"><Shield className="w-3 h-3" /> Clean Sheets</span>
               </div>
               <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
                 <span className="text-2xl font-black text-neutral-700 mb-1">{stats.matches_played}</span>
@@ -230,14 +230,14 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
               const isExpanded = expandedGroups[g.group_id]
               return (
                 <div key={g.group_id} className="border border-neutral-200 rounded-2xl overflow-hidden transition-colors bg-white">
-                  <button 
+                  <button
                     className="w-full p-4 flex justify-between items-center bg-white hover:bg-neutral-50 transition-colors"
                     onClick={() => toggleGroup(g.group_id)}
                   >
                     <span className="font-bold text-neutral-800 text-sm">{g.group_name}</span>
                     {isExpanded ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
                   </button>
-                  
+
                   {isExpanded && (
                     <div className="p-4 border-t border-neutral-100 bg-neutral-50/50">
                       <div className="grid grid-cols-4 gap-2 text-center">
@@ -251,7 +251,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
                         </div>
                         <div>
                           <div className="text-lg font-black text-purple-600">{g.clean_sheets}</div>
-                          <div className="text-[9px] font-bold text-neutral-400 uppercase">Clean<br/>Sheets</div>
+                          <div className="text-[9px] font-bold text-neutral-400 uppercase">Clean<br />Sheets</div>
                         </div>
                         <div>
                           <div className="text-lg font-black text-neutral-700">{g.matches_played}</div>
@@ -315,14 +315,14 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Preferred Position</label>
-                <select 
+                <select
                   className="w-full px-3 py-3 border border-neutral-200 rounded-xl text-sm font-medium bg-white outline-none focus:ring-2 focus:ring-green-500"
                   value={editForm.preferred_position}
-                  onChange={e => setEditForm({...editForm, preferred_position: e.target.value})}
+                  onChange={e => setEditForm({ ...editForm, preferred_position: e.target.value })}
                 >
                   <option value="">Select...</option>
                   <option value="GK">Goalkeeper (GK)</option>
@@ -334,10 +334,10 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Secondary Position</label>
-                <select 
+                <select
                   className="w-full px-3 py-3 border border-neutral-200 rounded-xl text-sm font-medium bg-white outline-none focus:ring-2 focus:ring-green-500"
                   value={editForm.secondary_position}
-                  onChange={e => setEditForm({...editForm, secondary_position: e.target.value})}
+                  onChange={e => setEditForm({ ...editForm, secondary_position: e.target.value })}
                 >
                   <option value="">None</option>
                   <option value="GK">Goalkeeper (GK)</option>
@@ -349,21 +349,21 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Email Address</label>
-                <input 
+                <input
                   type="email"
                   className="w-full px-3 py-3 border border-neutral-200 rounded-xl text-sm font-medium bg-white outline-none focus:ring-2 focus:ring-green-500"
                   value={editForm.email}
-                  onChange={e => setEditForm({...editForm, email: e.target.value})}
+                  onChange={e => setEditForm({ ...editForm, email: e.target.value })}
                   placeholder="name@example.com"
                 />
                 <p className="text-[10px] text-neutral-400 font-medium">Used for match notifications.</p>
               </div>
 
-              <Button 
+              <Button
                 onClick={() => {
                   updateProfile(editForm)
                   setToastMessage('✅ Profile updated!')
-                }} 
+                }}
                 disabled={isSaving}
                 className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl shadow-sm mt-4 text-base"
               >

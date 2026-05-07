@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, X, Circle } from 'lucide-react'
-import { formatDistanceToNow, parseISO } from 'date-fns'
+import { format, formatDistanceToNow, parseISO } from 'date-fns'
 import { subscribeToNotifications } from '@/lib/supabase/realtime'
 import { Toast } from '@/components/ui/Toast'
 

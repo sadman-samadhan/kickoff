@@ -77,10 +77,18 @@ export default function RegisterPage() {
     try {
       const emailToUse = formData.email || `${formData.username}@kickoff.local`
 
-      // 1. Create Auth User
+      // 1. Create Auth User with metadata (The Database Trigger will use this to create the profile)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: emailToUse,
         password: formData.password,
+        options: {
+          data: {
+            full_name: formData.fullName,
+            username: formData.username,
+            preferred_position: formData.preferredPosition,
+            secondary_position: formData.secondaryPosition,
+          }
+        }
       })
 
       if (authError) throw authError
@@ -88,8 +96,7 @@ export default function RegisterPage() {
 
       const userId = authData.user.id
 
-      // 2. Upload Avatar if exists
-      let avatarUrl = null
+      // 2. Upload Avatar and update profile if exists
       if (avatar) {
         const fileExt = avatar.name.split('.').pop()
         const fileName = `${userId}-${Math.random().toString(36).substring(2)}.${fileExt}`
@@ -102,28 +109,13 @@ export default function RegisterPage() {
           const { data: publicUrlData } = supabase.storage
             .from('avatars')
             .getPublicUrl(fileName)
-          avatarUrl = publicUrlData.publicUrl
+          const avatarUrl = publicUrlData.publicUrl
+
+          // Update the profile that was just created by the trigger
+          await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', userId)
         } else {
           console.error("Avatar upload error:", uploadError)
-          // Continue anyway, avatar is optional
         }
-      }
-
-      // 3. Insert Profile
-      const { error: profileError } = await supabase.from('profiles').insert({
-        id: userId,
-        full_name: formData.fullName,
-        email: formData.email || null,
-        username: formData.username || null,
-        preferred_position: formData.preferredPosition,
-        secondary_position: formData.secondaryPosition || null,
-        avatar_url: avatarUrl,
-      })
-
-      if (profileError) {
-        // If profile creation fails, we might have a dangling auth user. 
-        // In a production app, we might want to handle this better (e.g. edge function).
-        throw profileError
       }
 
       // 4. Redirect on success
