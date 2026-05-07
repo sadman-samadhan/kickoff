@@ -225,7 +225,7 @@ export default function MatchClient({
             className={`h-14 rounded-2xl text-base shadow-sm transition-all ${myRsvp === 'in' ? 'bg-green-600 hover:bg-green-700 text-white ring-2 ring-green-600 ring-offset-2' : 'bg-white text-green-700 border-2 border-green-100 hover:bg-green-50'}`}
           >
             <CheckCircle className={`w-5 h-5 mr-2 ${myRsvp === 'in' ? 'text-white' : 'text-green-600'}`} />
-            I'm In
+            I&apos;m In
           </Button>
           <Button 
             onClick={() => handleRsvp('out')}
@@ -233,7 +233,7 @@ export default function MatchClient({
             className={`h-14 rounded-2xl text-base shadow-sm transition-all ${myRsvp === 'out' ? 'bg-red-500 hover:bg-red-600 text-white ring-2 ring-red-500 ring-offset-2' : 'bg-white text-red-600 border-2 border-red-100 hover:bg-red-50'}`}
           >
             <XCircle className={`w-5 h-5 mr-2 ${myRsvp === 'out' ? 'text-white' : 'text-red-500'}`} />
-            I'm Out
+            I&apos;m Out
           </Button>
         </div>
       )}
@@ -627,7 +627,7 @@ export default function MatchClient({
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => setIsConfirmOutOpen(false)}>Cancel</Button>
               <Button className="flex-1 h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white" onClick={() => executeRsvp('out')}>
-                Yes, I'm Out
+                Yes, I&apos;m Out
               </Button>
             </div>
           </div>

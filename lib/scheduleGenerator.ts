@@ -13,7 +13,8 @@ export interface ScheduledMatch {
 }
 
 function shuffle<T>(array: T[]): T[] {
-  let currentIndex = array.length, randomIndex;
+  let currentIndex = array.length;
+  let randomIndex: number;
   const result = [...array];
   while (currentIndex !== 0) {
     randomIndex = Math.floor(Math.random() * currentIndex);
@@ -24,12 +25,12 @@ function shuffle<T>(array: T[]): T[] {
 }
 
 function resolveConsecutiveConstraint(matches: ScheduledMatch[]): ScheduledMatch[] {
-  let resolved = [...matches];
+  const resolved = [...matches];
   let maxIterations = 100;
   
   while (maxIterations > 0) {
     let violationIndex = -1;
-    let consecutiveCount: Record<string, number> = {};
+    const consecutiveCount: Record<string, number> = {};
     
     for (let i = 0; i < resolved.length; i++) {
       const match = resolved[i];
@@ -71,7 +72,7 @@ function resolveConsecutiveConstraint(matches: ScheduledMatch[]): ScheduledMatch
 }
 
 export function generateLeagueSchedule(teams: Team[], legs: 1 | 2): ScheduledMatch[] {
-  let matches: ScheduledMatch[] = [];
+  const matches: ScheduledMatch[] = [];
   const teamIds = teams.map(t => t.id);
   
   if (teamIds.length < 2) return [];
@@ -87,8 +88,8 @@ export function generateLeagueSchedule(teams: Team[], legs: 1 | 2): ScheduledMat
     
     for (let round = 0; round < numRounds; round++) {
       for (let i = 0; i < half; i++) {
-        let home = currentTIds[i];
-        let away = currentTIds[currentTIds.length - 1 - i];
+        const home = currentTIds[i];
+        const away = currentTIds[currentTIds.length - 1 - i];
         
         if (home !== null && away !== null) {
           if (leg === 2) {
@@ -107,7 +108,7 @@ export function generateLeagueSchedule(teams: Team[], legs: 1 | 2): ScheduledMat
 
 export function generateTournamentSchedule(teams: Team[], legs: 1 | 2): ScheduledMatch[] {
   const randomized = shuffle(teams.map(t => t.id));
-  let matches: ScheduledMatch[] = [];
+  const matches: ScheduledMatch[] = [];
   let matchNum = 1;
 
   if (randomized.length === 3) {

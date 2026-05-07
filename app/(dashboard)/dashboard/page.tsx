@@ -35,11 +35,16 @@ export default async function DashboardPage() {
     .select('group_id, groups(*)')
     .eq('player_id', user.id)
 
-  const userGroups = (userGroupsData || []).map((ug: any) => ug.groups).filter(Boolean)
-  const groupIds = userGroups.map((g: any) => g.id)
+  interface GroupInfo {
+    id: string
+    name: string
+  }
+
+  const userGroups = (userGroupsData || []).map((ug) => ug.groups as unknown as GroupInfo).filter(Boolean)
+  const groupIds = userGroups.map((g) => g.id)
 
   let allBookings: any[] = []
-  let memberCounts: Record<string, number> = {}
+  const memberCounts: Record<string, number> = {}
 
   if (groupIds.length > 0) {
     // Member counts
@@ -63,14 +68,14 @@ export default async function DashboardPage() {
   }
 
   const upcomingBookings = allBookings.filter(b => b.status === 'upcoming')
-  const myRsvps = await supabase
+  await supabase
     .from('rsvps')
     .select('*')
     .eq('player_id', user.id)
 
   // Attach my RSVP status to upcoming bookings
   const bookingsWithMyRsvp = upcomingBookings.map(b => {
-    const rsvp = b.rsvps.find((r: any) => r.player_id === user.id)
+    const rsvp = b.rsvps.find((r: { player_id: string }) => r.player_id === user.id)
     return {
       ...b,
       myRsvpStatus: rsvp ? rsvp.status : 'none'

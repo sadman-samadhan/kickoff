@@ -1,4 +1,14 @@
-export function bookingNotificationEmail({ playerName, groupName, matchDate, matchTime, fieldName, inUrl, outUrl }: any) {
+interface EmailParams {
+  playerName: string
+  groupName: string
+  matchDate: string
+  matchTime: string
+  fieldName: string
+  inUrl?: string
+  outUrl?: string
+}
+
+export function bookingNotificationEmail({ playerName, groupName, matchDate, matchTime, fieldName, inUrl, outUrl }: EmailParams) {
   return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #171717;">
       <h2 style="color: #16a34a;">⚽ New Match Added — ${groupName}</h2>
@@ -24,7 +34,7 @@ export function bookingNotificationEmail({ playerName, groupName, matchDate, mat
   `
 }
 
-export function waitlistPromotionEmail({ playerName, groupName, matchDate, matchTime, fieldName }: any) {
+export function waitlistPromotionEmail({ playerName, groupName, matchDate, matchTime, fieldName }: EmailParams) {
   return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #171717;">
       <h2 style="color: #16a34a;">🎉 You're In!</h2>
@@ -39,7 +49,7 @@ export function waitlistPromotionEmail({ playerName, groupName, matchDate, match
   `
 }
 
-export function rsvpReminderEmail({ playerName, groupName, matchDate, matchTime, fieldName, inUrl, outUrl }: any) {
+export function rsvpReminderEmail({ playerName, groupName, matchDate, matchTime, fieldName, inUrl, outUrl }: EmailParams) {
   return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #171717;">
       <h2 style="color: #d97706;">⏰ Action Required: Confirm your spot</h2>

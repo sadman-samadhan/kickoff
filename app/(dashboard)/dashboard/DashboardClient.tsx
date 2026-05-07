@@ -7,6 +7,45 @@ import Link from 'next/link'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, startOfWeek, endOfWeek } from 'date-fns'
 import { Button } from '@/components/ui/button'
 
+interface Profile {
+  full_name?: string
+  avatar_url?: string
+  preferred_position?: string
+  username?: string
+  email_notifications?: boolean
+}
+
+interface Booking {
+  id: string
+  group_id: string
+  match_date: string
+  match_time: string
+  field_name: string
+  google_maps_url?: string
+  status: string
+  groups?: { name: string }
+  rsvps: any[]
+  myRsvpStatus?: string
+}
+
+interface Group {
+  id: string
+  name: string
+  memberCount: number
+  nextMatch: string | null
+}
+
+interface DashboardClientProps {
+  user: { id: string, email?: string }
+  profile: Profile | null
+  goals: number
+  assists: number
+  pendingBookings: Booking[]
+  upcomingBookings: Booking[]
+  allBookings: Booking[]
+  groups: Group[]
+}
+
 export default function DashboardClient({
   user,
   profile,
@@ -16,10 +55,10 @@ export default function DashboardClient({
   upcomingBookings,
   allBookings,
   groups
-}: any) {
+}: DashboardClientProps) {
   const supabase = createClient()
-  const [localPending, setLocalPending] = useState(pendingBookings)
-  const [currentPendingIndex, setCurrentPendingIndex] = useState(0)
+  const [localPending, setLocalPending] = useState<Booking[]>(pendingBookings)
+  const [currentPendingIndex] = useState(0)
 
   // Calendar State
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -27,7 +66,7 @@ export default function DashboardClient({
 
   const handleRsvp = async (bookingId: string, status: string) => {
     // Optimistic update
-    setLocalPending((prev: any[]) => prev.filter((b: any) => b.id !== bookingId))
+    setLocalPending((prev: Booking[]) => prev.filter((b: Booking) => b.id !== bookingId))
 
     // Save to DB
     // First try to update
@@ -55,7 +94,7 @@ export default function DashboardClient({
     }
   }
 
-  const generateICS = (booking: any) => {
+  const generateICS = (booking: Booking) => {
     const start = new Date(`${booking.match_date}T${booking.match_time}`)
     const end = new Date(start.getTime() + 60 * 60 * 1000) // Assumes 1 hour
 
@@ -95,7 +134,7 @@ END:VCALENDAR`
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate })
 
   const getBookingsForDate = (day: Date) => {
-    return allBookings.filter((b: any) => isSameDay(parseISO(b.match_date), day))
+    return allBookings.filter((b: Booking) => isSameDay(parseISO(b.match_date), day))
   }
 
   const selectedDateBookings = selectedDate ? getBookingsForDate(selectedDate) : []
@@ -174,14 +213,14 @@ END:VCALENDAR`
               onClick={() => handleRsvp(localPending[currentPendingIndex].id, 'in')}
               className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-sm border-0 h-11"
             >
-              <CheckCircle className="w-5 h-5 mr-1.5" /> I'm In
+              <CheckCircle className="w-5 h-5 mr-1.5" /> I&apos;m In
             </Button>
             <Button
               onClick={() => handleRsvp(localPending[currentPendingIndex].id, 'out')}
               variant="outline"
               className="flex-1 bg-white hover:bg-red-50 text-red-600 border-red-200 rounded-xl shadow-sm h-11"
             >
-              <XCircle className="w-5 h-5 mr-1.5" /> Can't Make It
+              <XCircle className="w-5 h-5 mr-1.5" /> Can&apos;t Make It
             </Button>
           </div>
         </div>
@@ -193,7 +232,7 @@ END:VCALENDAR`
           <h3 className="font-bold text-neutral-800 text-lg">My Squads</h3>
         </div>
         <div className="flex overflow-x-auto gap-4 px-4 pb-4 snap-x hide-scrollbar">
-          {groups.map((group: any) => (
+          {groups.map((group: Group) => (
             <Link href={`/groups/${group.id}`} key={group.id} className="snap-start shrink-0">
               <div className="bg-white rounded-2xl p-4 w-60 border border-neutral-100 shadow-sm active:scale-95 transition-transform flex flex-col h-full">
                 <h4 className="font-bold text-neutral-900 truncate mb-1">{group.name}</h4>
@@ -231,7 +270,7 @@ END:VCALENDAR`
               <p className="text-sm text-neutral-500">No upcoming matches scheduled.</p>
             </div>
           ) : (
-            upcomingBookings.map((booking: any) => (
+            upcomingBookings.map((booking: Booking) => (
               <Link href={`/groups/${booking.group_id}/match/${booking.id}`} key={booking.id}>
                 <div className="bg-white rounded-2xl p-4 border border-neutral-100 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-transform">
                   <div className="flex flex-col items-center justify-center bg-green-50 text-green-800 rounded-xl w-14 h-14 shrink-0 border border-green-100">
@@ -332,7 +371,7 @@ END:VCALENDAR`
             </div>
 
             <div className="p-5 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
-              {selectedDateBookings.map((booking: any) => (
+              {selectedDateBookings.map((booking: Booking) => (
                 <div key={booking.id} className="border border-neutral-100 rounded-xl p-4 bg-white shadow-sm relative overflow-hidden">
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>
                   <h4 className="font-bold text-neutral-900 mb-1">{booking.groups?.name}</h4>

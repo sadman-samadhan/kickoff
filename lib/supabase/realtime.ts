@@ -1,6 +1,6 @@
 import { createClient } from './client'
 
-export function subscribeToNotifications(userId: string, onNewNotification: (n: any) => void) {
+export function subscribeToNotifications(userId: string, onNewNotification: (n: { message: string, group_id?: string, booking_id?: string }) => void) {
   const supabase = createClient()
   
   const channel = supabase
