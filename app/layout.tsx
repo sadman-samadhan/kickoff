@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { InstallPrompt } from "@/components/ui/InstallPrompt";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -45,7 +44,6 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased bg-slate-50 text-neutral-900">
         {children}
-        {/* <InstallPrompt /> */}
       </body>
     </html>
   );

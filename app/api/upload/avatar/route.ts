@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
     // 3. Upload using Admin Client (Bypasses Storage RLS)
     const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.jpg`
-    const { data: uploadData, error: uploadError } = await admin.storage
+    const { error: uploadError } = await admin.storage
       .from('avatars')
       .upload(fileName, file, {
         contentType: file.type,
@@ -40,8 +40,9 @@ export async function POST(req: Request) {
       .getPublicUrl(fileName)
 
     return NextResponse.json({ url: publicUrl })
-  } catch (err: any) {
-    console.error('Server upload error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    const error = err as Error
+    console.error('Server upload error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
