@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Upload, Trophy, Image as ImageIcon } from 'lucide-react'
+import { Loader2, Upload, Trophy } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -100,7 +100,7 @@ export default function RegisterPage() {
       if (avatar) {
         const fileExt = avatar.name.split('.').pop()
         const fileName = `${userId}-${Math.random().toString(36).substring(2)}.${fileExt}`
-        
+
         const { error: uploadError } = await supabase.storage
           .from('avatars')
           .upload(fileName, avatar)
@@ -121,7 +121,7 @@ export default function RegisterPage() {
       // 4. Redirect on success
       router.push('/dashboard')
       router.refresh()
-      
+
     } catch (err: any) {
       console.error(err)
       setServerError(err.message || 'An error occurred during registration.')
@@ -138,7 +138,7 @@ export default function RegisterPage() {
             <Trophy className="w-8 h-8 text-white" />
           </div>
         </div>
-        
+
         <Card className="border-0 shadow-xl shadow-neutral-200/50">
           <CardHeader className="space-y-2 text-center pb-6">
             <CardTitle className="text-2xl font-bold tracking-tight text-neutral-900">Join the Squad</CardTitle>
@@ -146,7 +146,7 @@ export default function RegisterPage() {
               Create your player profile to start booking matches
             </CardDescription>
           </CardHeader>
-          
+
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {serverError && (
@@ -157,7 +157,7 @@ export default function RegisterPage() {
 
               {/* Avatar Upload */}
               <div className="flex flex-col items-center justify-center space-y-3 pb-2">
-                <div 
+                <div
                   className="w-24 h-24 rounded-full border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center bg-neutral-50 text-neutral-500 cursor-pointer overflow-hidden relative hover:bg-neutral-100 transition-colors"
                   onClick={() => fileInputRef.current?.click()}
                 >
@@ -170,12 +170,12 @@ export default function RegisterPage() {
                     </>
                   )}
                 </div>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileChange} 
-                  accept="image/*" 
-                  className="hidden" 
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept="image/*"
+                  className="hidden"
                 />
                 {errors.avatar && <p className="text-xs text-red-500">{errors.avatar}</p>}
               </div>
@@ -188,7 +188,7 @@ export default function RegisterPage() {
                   className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm"
                   placeholder="Lionel Messi"
                   value={formData.fullName}
-                  onChange={(e) => setFormData({...formData, fullName: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                 />
                 {errors.fullName && <p className="text-xs text-red-500 mt-1">{errors.fullName}</p>}
               </div>
@@ -204,7 +204,7 @@ export default function RegisterPage() {
                   className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm"
                   placeholder="lm10@example.com"
                   value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
               </div>
 
@@ -220,7 +220,7 @@ export default function RegisterPage() {
                     className="w-full pl-8 pr-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm"
                     placeholder="lionel10"
                     value={formData.username}
-                    onChange={(e) => setFormData({...formData, username: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   />
                 </div>
                 {errors.username && <p className="text-xs text-red-500 mt-1">{errors.username}</p>}
@@ -234,7 +234,7 @@ export default function RegisterPage() {
                   className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm"
                   placeholder="••••••••"
                   value={formData.password}
-                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
                 {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
               </div>
@@ -246,7 +246,7 @@ export default function RegisterPage() {
                   <select
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm bg-white"
                     value={formData.preferredPosition}
-                    onChange={(e) => setFormData({...formData, preferredPosition: e.target.value, secondaryPosition: formData.secondaryPosition === e.target.value ? '' : formData.secondaryPosition})}
+                    onChange={(e) => setFormData({ ...formData, preferredPosition: e.target.value, secondaryPosition: formData.secondaryPosition === e.target.value ? '' : formData.secondaryPosition })}
                   >
                     <option value="" disabled>Select...</option>
                     {POSITIONS.map(pos => (
@@ -261,7 +261,7 @@ export default function RegisterPage() {
                   <select
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm bg-white"
                     value={formData.secondaryPosition}
-                    onChange={(e) => setFormData({...formData, secondaryPosition: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, secondaryPosition: e.target.value })}
                   >
                     <option value="">None</option>
                     {POSITIONS.filter(pos => pos !== formData.preferredPosition).map(pos => (
@@ -271,8 +271,8 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 rounded-lg mt-6 transition-all"
                 disabled={isLoading}
               >

@@ -24,7 +24,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    
+
     if (!formData.identifier.trim() || !formData.password) {
       setError('Please enter your username/email and password')
       return
@@ -63,7 +63,7 @@ export default function LoginPage() {
 
       router.push('/dashboard')
       router.refresh()
-      
+
     } catch (err: any) {
       setError(err.message || 'An error occurred during login.')
     } finally {
@@ -79,7 +79,7 @@ export default function LoginPage() {
             <Trophy className="w-8 h-8 text-white" />
           </div>
         </div>
-        
+
         <Card className="border-0 shadow-xl shadow-neutral-200/50">
           <CardHeader className="space-y-2 text-center pb-6">
             <CardTitle className="text-2xl font-bold tracking-tight text-neutral-900">Welcome Back</CardTitle>
@@ -87,7 +87,7 @@ export default function LoginPage() {
               Sign in to manage your matches and squad
             </CardDescription>
           </CardHeader>
-          
+
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
@@ -104,7 +104,7 @@ export default function LoginPage() {
                   className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm"
                   placeholder="lionel10 or lm10@example.com"
                   value={formData.identifier}
-                  onChange={(e) => setFormData({...formData, identifier: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                 />
               </div>
 
@@ -116,7 +116,7 @@ export default function LoginPage() {
                   className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm"
                   placeholder="••••••••"
                   value={formData.password}
-                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
               </div>
 
@@ -126,7 +126,7 @@ export default function LoginPage() {
                   type="checkbox"
                   id="keepSignedIn"
                   checked={formData.keepSignedIn}
-                  onChange={(e) => setFormData({...formData, keepSignedIn: e.target.checked})}
+                  onChange={(e) => setFormData({ ...formData, keepSignedIn: e.target.checked })}
                   className="h-4 w-4 rounded border-neutral-300 text-green-600 focus:ring-green-500 cursor-pointer accent-green-600"
                 />
                 <label htmlFor="keepSignedIn" className="text-sm text-neutral-600 cursor-pointer">
@@ -134,8 +134,8 @@ export default function LoginPage() {
                 </label>
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 rounded-lg mt-6 transition-all"
                 disabled={isLoading}
               >
@@ -152,7 +152,7 @@ export default function LoginPage() {
           </CardContent>
           <CardFooter className="flex justify-center border-t border-neutral-100 pt-6">
             <p className="text-sm text-neutral-600">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link href="/register" className="text-green-600 font-semibold hover:text-green-700 hover:underline">
                 Register here
               </Link>

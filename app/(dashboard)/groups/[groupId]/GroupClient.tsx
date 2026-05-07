@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, Shield, ChevronRight, X, Loader2, Copy, Trophy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { rsvpAction, addBookingAction } from './actions'
@@ -55,7 +54,7 @@ export default function GroupClient({
   const [isConfirmOutOpen, setIsConfirmOutOpen] = useState(false)
   const [isWaitlistAlertOpen, setIsWaitlistAlertOpen] = useState(false)
   const [waitlistPos, setWaitlistPos] = useState<number | null>(null)
-  
+
   const [isRsvpLoading, setIsRsvpLoading] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -76,7 +75,7 @@ export default function GroupClient({
   const waitlistCount = nextMatch?.rsvps?.filter((r: { status: string }) => r.status === 'waitlist').length || 0
   const maxPlayers = nextMatch?.max_players || 21
   const progressPercent = Math.min(100, (inCount / maxPlayers) * 100)
-  
+
   const handleRsvp = async (status: string) => {
     if (status === 'out' && myRsvp === 'in' && waitlistCount > 0) {
       setIsConfirmOutOpen(true)
@@ -142,7 +141,7 @@ export default function GroupClient({
               {copied ? 'COPIED!' : group.invite_code}
             </span>
           </div>
-          </div>
+        </div>
         <div className="flex flex-col gap-2">
           {role === 'admin' && (
             <Button variant="outline" size="sm" onClick={() => setIsManageModalOpen(true)} className="rounded-full shadow-sm w-full justify-start">
@@ -161,7 +160,7 @@ export default function GroupClient({
       {nextMatch ? (
         <div className="bg-white rounded-3xl p-5 shadow-lg shadow-neutral-200/50 border border-neutral-100 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-green-50 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-          
+
           <Link href={`/groups/${group.id}/match/${nextMatch.id}`} className="block relative z-10 active:opacity-70 transition-opacity">
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -171,7 +170,7 @@ export default function GroupClient({
                   <ChevronRight className="w-5 h-5 text-neutral-400" />
                 </h3>
                 <div className="flex items-center gap-3 mt-2 text-sm text-neutral-600 font-medium">
-                  <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-neutral-400" /> {nextMatch.match_time.slice(0,5)}</span>
+                  <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-neutral-400" /> {nextMatch.match_time.slice(0, 5)}</span>
                   <span className="flex items-center gap-1.5 truncate"><MapPin className="w-4 h-4 text-neutral-400" /> {nextMatch.field_name}</span>
                 </div>
               </div>
@@ -184,8 +183,8 @@ export default function GroupClient({
               <span className="text-neutral-400">Max {maxPlayers}</span>
             </div>
             <div className="h-2.5 bg-neutral-100 rounded-full overflow-hidden w-full">
-              <div 
-                className={`h-full rounded-full transition-all duration-500 ${inCount >= maxPlayers ? 'bg-amber-500' : 'bg-green-500'}`} 
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${inCount >= maxPlayers ? 'bg-amber-500' : 'bg-green-500'}`}
                 style={{ width: `${progressPercent}%` }}
               ></div>
             </div>
@@ -195,7 +194,7 @@ export default function GroupClient({
           </div>
 
           <div className="grid grid-cols-2 gap-3 mt-6 relative z-10">
-            <Button 
+            <Button
               onClick={() => handleRsvp('in')}
               disabled={isRsvpLoading}
               className={`h-12 rounded-xl text-base shadow-sm transition-all ${myRsvp === 'in' ? 'bg-green-600 hover:bg-green-700 text-white ring-2 ring-green-600 ring-offset-2' : 'bg-white text-green-700 border-2 border-green-200 hover:bg-green-50'}`}
@@ -203,7 +202,7 @@ export default function GroupClient({
               <CheckCircle className={`w-5 h-5 mr-2 ${myRsvp === 'in' ? 'text-white' : 'text-green-600'}`} />
               I&apos;m In
             </Button>
-            <Button 
+            <Button
               onClick={() => handleRsvp('out')}
               disabled={isRsvpLoading}
               className={`h-12 rounded-xl text-base shadow-sm transition-all ${myRsvp === 'out' ? 'bg-red-500 hover:bg-red-600 text-white ring-2 ring-red-500 ring-offset-2' : 'bg-white text-red-600 border-2 border-red-100 hover:bg-red-50'}`}
@@ -223,7 +222,7 @@ export default function GroupClient({
           <Calendar className="w-12 h-12 text-neutral-300 mx-auto mb-3" />
           <h3 className="text-lg font-bold text-neutral-900">No Upcoming Matches</h3>
           <p className="text-neutral-500 text-sm mt-1">Ready to play?</p>
-          <Button 
+          <Button
             onClick={() => setIsAddBookingOpen(true)}
             className="mt-4 bg-green-600 hover:bg-green-700 text-white rounded-full px-6 shadow-md shadow-green-600/20"
           >
@@ -283,7 +282,7 @@ export default function GroupClient({
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-neutral-500 truncate">
                       <Clock className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{booking.match_time.slice(0,5)}</span>
+                      <span className="truncate">{booking.match_time.slice(0, 5)}</span>
                       <span className="mx-0.5">•</span>
                       <MapPin className="w-3 h-3 shrink-0" />
                       <span className="truncate">{booking.field_name}</span>
@@ -322,7 +321,7 @@ export default function GroupClient({
       )}
 
       {/* FLOATING ACTION BUTTON */}
-      <button 
+      <button
         onClick={() => setIsAddBookingOpen(true)}
         className="fixed bottom-20 right-4 w-14 h-14 bg-green-600 text-white rounded-full shadow-lg shadow-green-600/30 flex items-center justify-center hover:bg-green-700 active:scale-95 transition-all z-40"
       >
@@ -330,7 +329,7 @@ export default function GroupClient({
       </button>
 
       {/* MODALS */}
-      
+
       {/* Manage Group Modal */}
       {isManageModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-neutral-900/40 p-4 pb-0 sm:pb-4">
@@ -368,7 +367,7 @@ export default function GroupClient({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="p-5 overflow-y-auto flex-1">
               <form id="booking-form" onSubmit={handleAddBooking} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -379,7 +378,7 @@ export default function GroupClient({
                       required
                       className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm bg-white"
                       value={bookingForm.matchDate}
-                      onChange={e => setBookingForm({...bookingForm, matchDate: e.target.value})}
+                      onChange={e => setBookingForm({ ...bookingForm, matchDate: e.target.value })}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -389,7 +388,7 @@ export default function GroupClient({
                       required
                       className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm bg-white"
                       value={bookingForm.matchTime}
-                      onChange={e => setBookingForm({...bookingForm, matchTime: e.target.value})}
+                      onChange={e => setBookingForm({ ...bookingForm, matchTime: e.target.value })}
                     />
                   </div>
                 </div>
@@ -402,7 +401,7 @@ export default function GroupClient({
                     placeholder="e.g. Wembley Arena"
                     className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm"
                     value={bookingForm.fieldName}
-                    onChange={e => setBookingForm({...bookingForm, fieldName: e.target.value})}
+                    onChange={e => setBookingForm({ ...bookingForm, fieldName: e.target.value })}
                   />
                 </div>
 
@@ -413,7 +412,7 @@ export default function GroupClient({
                     placeholder="https://maps.google.com/..."
                     className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm"
                     value={bookingForm.googleMapsUrl}
-                    onChange={e => setBookingForm({...bookingForm, googleMapsUrl: e.target.value})}
+                    onChange={e => setBookingForm({ ...bookingForm, googleMapsUrl: e.target.value })}
                   />
                 </div>
 
@@ -426,12 +425,12 @@ export default function GroupClient({
                     required
                     className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm"
                     value={bookingForm.maxPlayers}
-                    onChange={e => setBookingForm({...bookingForm, maxPlayers: parseInt(e.target.value) || 21})}
+                    onChange={e => setBookingForm({ ...bookingForm, maxPlayers: parseInt(e.target.value) || 21 })}
                   />
                 </div>
               </form>
             </div>
-            
+
             <div className="p-5 border-t border-neutral-100 bg-white shrink-0 sm:rounded-b-3xl">
               <Button form="booking-form" type="submit" disabled={isBookingLoading} className="w-full bg-green-600 hover:bg-green-700 text-white h-12 rounded-xl text-base shadow-sm">
                 {isBookingLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Schedule Match'}
