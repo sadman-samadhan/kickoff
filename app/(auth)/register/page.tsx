@@ -11,6 +11,46 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button'
 
 const POSITIONS = ['GK', 'DEF', 'MID', 'ATT']
+const MAX_AVATAR_SIZE = 300
+
+function compressImage(file: File, maxSize = MAX_AVATAR_SIZE): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      let width = img.width
+      let height = img.height
+
+      // Scale down to fit within maxSize x maxSize
+      if (width > height) {
+        if (width > maxSize) {
+          height = Math.round((height * maxSize) / width)
+          width = maxSize
+        }
+      } else {
+        if (height > maxSize) {
+          width = Math.round((width * maxSize) / height)
+          height = maxSize
+        }
+      }
+
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob)
+          else reject(new Error('Failed to compress image'))
+        },
+        'image/jpeg',
+        0.8
+      )
+    }
+    img.onerror = reject
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -100,24 +140,32 @@ export default function RegisterPage() {
 
       // 2. Upload Avatar and update profile if exists
       if (avatar) {
-        const fileExt = avatar.name.split('.').pop()
-        const fileName = `${userId}-${Math.random().toString(36).substring(2)}.${fileExt}`
+        try {
+          const compressed = await compressImage(avatar)
+          const fileName = `${userId}-${Math.random().toString(36).substring(2)}.jpg`
 
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(fileName, avatar)
-
-        if (!uploadError) {
-          const { data: publicUrlData } = supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from('avatars')
-            .getPublicUrl(fileName)
-          const avatarUrl = publicUrlData.publicUrl
+            .upload(fileName, compressed, { contentType: 'image/jpeg' })
 
-          // Update the profile that was just created by the trigger
-          await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', userId)
-        } else {
-          console.error("Avatar upload error:", uploadError)
+          if (!uploadError) {
+            const { data: publicUrlData } = supabase.storage
+              .from('avatars')
+              .getPublicUrl(fileName)
+            const avatarUrl = publicUrlData.publicUrl
+
+            // Update the profile that was just created by the trigger
+            await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', userId)
+          } else {
+            console.error("Avatar upload error:", uploadError)
+          }
+        } catch (compressErr) {
+          console.error("Image compression error:", compressErr)
         }
+      } else {
+        // Set default avatar using ui-avatars.com
+        const defaultUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.fullName)}&background=16a34a&color=fff&size=200`
+        await supabase.from('profiles').update({ avatar_url: defaultUrl }).eq('id', userId)
       }
 
       // 4. Redirect on success

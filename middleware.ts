@@ -2,6 +2,19 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  // ─── Skip auth for static/public assets ───
+  if (
+    pathname === '/manifest.json' ||
+    pathname === '/sw.js' ||
+    pathname === '/favicon.ico' ||
+    pathname.startsWith('/icons') ||
+    pathname.startsWith('/_next')
+  ) {
+    return NextResponse.next()
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -31,11 +44,18 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const pathname = request.nextUrl.pathname
+
 
   // ─── Public routes: magic link RSVP ───
   if (pathname.startsWith('/rsvp')) {
     return supabaseResponse
+  }
+
+  // ─── Redirect logged-in users from landing page to dashboard ───
+  if (pathname === '/' && user) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
   }
 
   // ─── Protected routes ───

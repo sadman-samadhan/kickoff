@@ -28,8 +28,8 @@ export default function MatchClient({
 
   const sortOrder: Record<string, number> = { 'GK': 1, 'DEF': 2, 'MID': 3, 'ATT': 4 }
   const sortedInPlayers = [...inPlayers].sort((a: any, b: any) => {
-    const posA = (a.profiles as any).preferred_position || 'ATT'
-    const posB = (b.profiles as any).preferred_position || 'ATT'
+    const posA = (a.profiles as any)?.preferred_position || 'ATT'
+    const posB = (b.profiles as any)?.preferred_position || 'ATT'
     return (sortOrder[posA] || 5) - (sortOrder[posB] || 5)
   })
 
@@ -210,8 +210,9 @@ export default function MatchClient({
             <span className="font-medium">{booking.field_name}</span>
           </div>
           {booking.google_maps_url && (
-            <a href={booking.google_maps_url} target="_blank" rel="noopener noreferrer" className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 p-2 rounded-xl transition-colors">
-              <MapIcon className="w-5 h-5" />
+            <a href={booking.google_maps_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-3 py-2 rounded-xl transition-colors text-xs font-semibold">
+              <MapIcon className="w-4 h-4" />
+              <span>Open in Maps</span>
             </a>
           )}
         </div>

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import MatchClient from './MatchClient'
 
@@ -17,14 +17,15 @@ export default async function MatchPage({ params }: { params: { groupId: string,
 
   if (!booking) redirect(`/groups/${params.groupId}`)
 
+  const supabaseAdmin = createAdminClient()
   // Fetch RSVPs
-  const { data: rsvps } = await supabase
+  const { data: rsvps } = await supabaseAdmin
     .from('rsvps')
     .select('*, profiles(*)')
     .eq('booking_id', params.bookingId)
 
   // Fetch Teams
-  const { data: teamsData } = await supabase
+  const { data: teamsData } = await supabaseAdmin
     .from('teams')
     .select('*, team_players(*, profiles(*))')
     .eq('booking_id', params.bookingId)
@@ -45,7 +46,7 @@ export default async function MatchPage({ params }: { params: { groupId: string,
   const scheduleIds = matchSchedule?.map((m: MatchScheduleItem) => m.id) || []
   let goalEvents: { id: string; scorer_id: string; assist_id?: string; profiles: unknown; assist: unknown }[] = []
   if (scheduleIds.length > 0) {
-    const { data: ge } = await supabase
+    const { data: ge } = await supabaseAdmin
       .from('goal_events')
       .select('*, profiles!scorer_id(*), assist:profiles!assist_id(*)')
       .in('match_schedule_id', scheduleIds)

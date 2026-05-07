@@ -1,11 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { format, parseISO } from 'date-fns'
 import Link from 'next/link'
-import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, Shield, ChevronRight, X, Loader2, Copy, Trophy } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, Shield, ChevronRight, X, Loader2, Copy, Trophy, UserMinus, ShieldCheck, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { rsvpAction, addBookingAction } from './actions'
+import { rsvpAction, addBookingAction, makeAdminAction, removeAdminAction, removeMemberAction, leaveGroupAction, deleteGroupAction } from './actions'
 
 interface Member {
   id: string
@@ -67,6 +69,44 @@ export default function GroupClient({
     maxPlayers: 21
   })
   const [isBookingLoading, setIsBookingLoading] = useState(false)
+
+  // Member stats
+  const [memberStats, setMemberStats] = useState<Record<string, { goals: number, assists: number, clean_sheets: number }>>({})
+  const [statsLoading, setStatsLoading] = useState(true)
+
+  // Admin action sheet
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null)
+  const [isAdminActionOpen, setIsAdminActionOpen] = useState(false)
+  const [isConfirmRemoveOpen, setIsConfirmRemoveOpen] = useState(false)
+  const [isLeaveGroupModalOpen, setIsLeaveGroupModalOpen] = useState(false)
+  const [isLeaveWarningOpen, setIsLeaveWarningOpen] = useState(false)
+  const [isDeleteGroupModalOpen, setIsDeleteGroupModalOpen] = useState(false)
+  const [adminActionLoading, setAdminActionLoading] = useState(false)
+
+  const router = useRouter()
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const res = await fetch(`/api/stats/group/${group.id}`)
+        const data = await res.json()
+        const statsMap: Record<string, { goals: number, assists: number, clean_sheets: number }> = {}
+        data.players?.forEach((p: any) => {
+          statsMap[p.player_id] = {
+            goals: p.goals || 0,
+            assists: p.assists || 0,
+            clean_sheets: p.clean_sheets || 0
+          }
+        })
+        setMemberStats(statsMap)
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setStatsLoading(false)
+      }
+    }
+    fetchStats()
+  }, [group.id])
 
   // Next Match logic
   const myRsvpObj = nextMatch?.rsvps?.find((r: { player_id: string }) => r.player_id === userId)
@@ -231,33 +271,76 @@ export default function GroupClient({
         </div>
       )}
 
-      {/* 3. MEMBERS ROW */}
+      {/* 3. MEMBERS TABLE */}
       <div>
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-bold text-neutral-900 text-lg">Squad</h3>
           <span className="text-xs font-bold text-neutral-400">{members.length} Total</span>
         </div>
-        <div className="flex overflow-x-auto gap-4 pb-2 hide-scrollbar snap-x">
-          {members.map((member: Member) => (
-            <div key={member.id} className="flex flex-col items-center shrink-0 w-16 snap-start">
-              <div className="relative">
-                {member.avatar_url ? (
-                  <img src={member.avatar_url} alt={member.full_name} className="w-14 h-14 rounded-full object-cover border border-neutral-200 bg-neutral-100" />
+        <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+          {/* Table Header */}
+          <div className="grid grid-cols-[1fr_40px_40px_40px] gap-2 px-4 py-2.5 border-b border-neutral-100 bg-neutral-50">
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Player</span>
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider text-center" title="Goals">G</span>
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider text-center" title="Assists">A</span>
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider text-center" title="Clean Sheets">CS</span>
+          </div>
+
+          {/* Table Rows */}
+          {members.map((member: Member) => {
+            const stats = memberStats[member.id]
+            return (
+              <div
+                key={member.id}
+                onClick={() => {
+                  if (role === 'admin' && member.id !== userId) {
+                    setSelectedMember(member)
+                    setIsAdminActionOpen(true)
+                  }
+                }}
+                className={`grid grid-cols-[1fr_40px_40px_40px] gap-2 px-4 py-3 border-b border-neutral-50 last:border-b-0 items-center ${
+                  role === 'admin' && member.id !== userId ? 'cursor-pointer active:bg-neutral-50 transition-colors' : ''
+                }`}
+              >
+                {/* Player Info */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative shrink-0">
+                    {member.avatar_url ? (
+                      <img src={member.avatar_url} alt={member.full_name} className="w-9 h-9 rounded-full object-cover border border-neutral-200" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-sm border border-green-200">
+                        {member.full_name?.charAt(0) || 'P'}
+                      </div>
+                    )}
+                    {member.role === 'admin' && (
+                      <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-[1px] shadow-sm">
+                        <Shield className="w-3 h-3 text-green-600 fill-green-50" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-sm font-bold text-neutral-800 truncate block">{member.full_name?.split(' ')[0] || 'Player'}</span>
+                    <span className="text-[10px] font-semibold text-neutral-400">{member.preferred_position || 'N/A'}</span>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                {statsLoading ? (
+                  <>
+                    <span className="text-center text-xs text-neutral-300">-</span>
+                    <span className="text-center text-xs text-neutral-300">-</span>
+                    <span className="text-center text-xs text-neutral-300">-</span>
+                  </>
                 ) : (
-                  <div className="w-14 h-14 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-xl border border-green-200">
-                    {member.full_name?.charAt(0) || 'P'}
-                  </div>
-                )}
-                {member.role === 'admin' && (
-                  <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm border border-neutral-200">
-                    <Shield className="w-3.5 h-3.5 text-green-600 fill-green-50" />
-                  </div>
+                  <>
+                    <span className="text-center text-sm font-bold text-neutral-700">{stats?.goals ?? 0}</span>
+                    <span className="text-center text-sm font-bold text-neutral-700">{stats?.assists ?? 0}</span>
+                    <span className="text-center text-sm font-bold text-neutral-700">{stats?.clean_sheets ?? 0}</span>
+                  </>
                 )}
               </div>
-              <span className="text-xs font-bold text-neutral-800 mt-2 truncate w-full text-center">{member.full_name?.split(' ')[0]}</span>
-              <span className="text-[9px] font-bold text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded-sm mt-0.5">{member.preferred_position || 'N/A'}</span>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
@@ -320,6 +403,17 @@ export default function GroupClient({
         </div>
       )}
 
+      {/* LEAVE GROUP BUTTON */}
+      <div className="mt-8 flex justify-center pb-8 border-t border-neutral-100 pt-8">
+        <button
+          onClick={() => setIsLeaveGroupModalOpen(true)}
+          className="flex items-center gap-2 text-sm font-bold text-red-500 hover:text-red-600 active:scale-95 transition-all px-4 py-2 rounded-xl hover:bg-red-50"
+        >
+          <LogOut className="w-4 h-4" />
+          Leave Group
+        </button>
+      </div>
+
       {/* FLOATING ACTION BUTTON */}
       <button
         onClick={() => setIsAddBookingOpen(true)}
@@ -352,6 +446,21 @@ export default function GroupClient({
                   </Button>
                 </div>
               </div>
+
+              {role === 'admin' && (
+                <div className="mt-6 pt-6 border-t border-neutral-100">
+                  <button
+                    onClick={() => {
+                      setIsManageModalOpen(false)
+                      setIsDeleteGroupModalOpen(true)
+                    }}
+                    className="w-full flex items-center justify-center gap-2 text-sm font-bold text-red-500 hover:text-red-600 transition-colors py-2"
+                  >
+                    <UserMinus className="w-4 h-4" />
+                    Delete Group Permanently
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -468,6 +577,204 @@ export default function GroupClient({
             <Button className="w-full h-12 rounded-xl bg-neutral-900 text-white" onClick={() => setIsWaitlistAlertOpen(false)}>
               Got it
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Action Sheet */}
+      {isAdminActionOpen && selectedMember && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-neutral-900/50 p-4 pb-0 sm:pb-4" onClick={() => { setIsAdminActionOpen(false); setSelectedMember(null) }}>
+          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-full duration-200" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-neutral-100 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-lg text-neutral-900">{selectedMember.full_name}</h3>
+                <p className="text-xs text-neutral-500">{selectedMember.preferred_position || 'Player'} · {selectedMember.role === 'admin' ? 'Admin' : 'Member'}</p>
+              </div>
+              <button onClick={() => { setIsAdminActionOpen(false); setSelectedMember(null) }} className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 flex flex-col gap-3">
+              {selectedMember.role !== 'admin' ? (
+                <button
+                  disabled={adminActionLoading}
+                  onClick={async () => {
+                    setAdminActionLoading(true)
+                    try {
+                      await makeAdminAction(group.id, selectedMember.id)
+                      setIsAdminActionOpen(false)
+                      setSelectedMember(null)
+                      router.refresh()
+                    } catch (e: any) {
+                      alert(e.message || 'Failed to make admin')
+                    } finally {
+                      setAdminActionLoading(false)
+                    }
+                  }}
+                  className="flex items-center gap-3 p-4 rounded-xl bg-green-50 border border-green-100 text-green-800 font-semibold text-sm hover:bg-green-100 transition-colors active:scale-[0.98]"
+                >
+                  <ShieldCheck className="w-5 h-5 text-green-600" />
+                  Make Admin
+                </button>
+              ) : (
+                <button
+                  disabled={adminActionLoading}
+                  onClick={async () => {
+                    setAdminActionLoading(true)
+                    try {
+                      await removeAdminAction(group.id, selectedMember.id)
+                      setIsAdminActionOpen(false)
+                      setSelectedMember(null)
+                      router.refresh()
+                    } catch (e: any) {
+                      alert(e.message || 'Failed to remove admin')
+                    } finally {
+                      setAdminActionLoading(false)
+                    }
+                  }}
+                  className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 border border-amber-100 text-amber-800 font-semibold text-sm hover:bg-amber-100 transition-colors active:scale-[0.98]"
+                >
+                  <Shield className="w-5 h-5 text-amber-600" />
+                  Remove Admin
+                </button>
+              )}
+
+              <button
+                disabled={adminActionLoading}
+                onClick={() => {
+                  setIsAdminActionOpen(false)
+                  setIsConfirmRemoveOpen(true)
+                }}
+                className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border border-red-100 text-red-700 font-semibold text-sm hover:bg-red-100 transition-colors active:scale-[0.98]"
+              >
+                <UserMinus className="w-5 h-5 text-red-500" />
+                Remove from Group
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Remove Modal */}
+      {isConfirmRemoveOpen && selectedMember && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-neutral-900/60 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 shadow-2xl">
+            <h3 className="font-bold text-xl text-neutral-900 mb-2">Remove {selectedMember.full_name?.split(' ')[0]}?</h3>
+            <p className="text-neutral-600 mb-6 text-sm">This will remove them from <strong>{group.name}</strong>. They will need to rejoin using the invite code.</p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => { setIsConfirmRemoveOpen(false); setSelectedMember(null) }}>Cancel</Button>
+              <Button
+                disabled={adminActionLoading}
+                className="flex-1 h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+                onClick={async () => {
+                  setAdminActionLoading(true)
+                  try {
+                    await removeMemberAction(group.id, selectedMember.id)
+                    setIsConfirmRemoveOpen(false)
+                    setSelectedMember(null)
+                    router.refresh()
+                  } catch (e: any) {
+                    alert(e.message || 'Failed to remove member')
+                  } finally {
+                    setAdminActionLoading(false)
+                  }
+                }}
+              >
+                {adminActionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Remove'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Group Modal */}
+      {isLeaveGroupModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-neutral-900/60 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 shadow-2xl">
+            <h3 className="font-bold text-xl text-neutral-900 mb-2">Leave Group?</h3>
+            <p className="text-neutral-600 mb-6 text-sm">Are you sure you want to leave <strong>{group.name}</strong>? You will lose access to all matches and stats for this group.</p>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => setIsLeaveGroupModalOpen(false)}>Cancel</Button>
+              <Button
+                disabled={adminActionLoading}
+                className="flex-1 h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white"
+                onClick={async () => {
+                  setAdminActionLoading(true)
+                  try {
+                    await leaveGroupAction(group.id)
+                    router.push('/dashboard')
+                  } catch (e: any) {
+                    if (e.message?.includes('make someone else an admin')) {
+                      setIsLeaveGroupModalOpen(false)
+                      setIsLeaveWarningOpen(true)
+                    } else {
+                      alert(e.message || 'Failed to leave group')
+                    }
+                  } finally {
+                    setAdminActionLoading(false)
+                  }
+                }}
+              >
+                {adminActionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Leave'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Leave Warning Modal */}
+      {isLeaveWarningOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-neutral-900/60 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+                <ShieldCheck className="w-8 h-8" />
+              </div>
+              <h3 className="font-bold text-xl text-neutral-900 mb-2">Admin Required</h3>
+              <p className="text-neutral-600 mb-6 text-sm">You are the only admin. You must promote another member to admin before you can leave this group.</p>
+              <Button 
+                className="w-full h-12 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold"
+                onClick={() => setIsLeaveWarningOpen(false)}
+              >
+                Got it
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Group Modal */}
+      {isDeleteGroupModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-neutral-900/60 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+                <UserMinus className="w-8 h-8" />
+              </div>
+              <h3 className="font-bold text-xl text-neutral-900 mb-2">Delete Group?</h3>
+              <p className="text-neutral-600 mb-6 text-sm">This action cannot be undone. All matches, stats, and member data for <strong>{group.name}</strong> will be permanently deleted.</p>
+              <div className="flex gap-3 w-full">
+                <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => setIsDeleteGroupModalOpen(false)}>Cancel</Button>
+                <Button
+                  disabled={adminActionLoading}
+                  className="flex-1 h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold"
+                  onClick={async () => {
+                    setAdminActionLoading(true)
+                    try {
+                      await deleteGroupAction(group.id)
+                      router.push('/dashboard')
+                    } catch (e: any) {
+                      alert(e.message || 'Failed to delete group')
+                    } finally {
+                      setAdminActionLoading(false)
+                    }
+                  }}
+                >
+                  {adminActionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Delete'}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

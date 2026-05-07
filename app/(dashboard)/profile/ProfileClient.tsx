@@ -8,6 +8,46 @@ import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { Toast } from '@/components/ui/Toast'
 
+const MAX_AVATAR_SIZE = 300
+
+function compressImage(file: File, maxSize = MAX_AVATAR_SIZE): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      let width = img.width
+      let height = img.height
+
+      if (width > height) {
+        if (width > maxSize) {
+          height = Math.round((height * maxSize) / width)
+          width = maxSize
+        }
+      } else {
+        if (height > maxSize) {
+          width = Math.round((width * maxSize) / height)
+          height = maxSize
+        }
+      }
+
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob)
+          else reject(new Error('Failed to compress image'))
+        },
+        'image/jpeg',
+        0.8
+      )
+    }
+    img.onerror = reject
+    img.src = URL.createObjectURL(file)
+  })
+}
+
 export default function ProfileClient({ initialProfile, userId }: { initialProfile: any, userId: string }) {
   const router = useRouter()
   const supabase = createClient()
@@ -55,26 +95,25 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
     if (!e.target.files || e.target.files.length === 0) return
     const file = e.target.files[0]
 
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${userId}-${Math.random()}.${fileExt}`
-    const filePath = `${fileName}`
-
     try {
+      const compressed = await compressImage(file)
+      const fileName = `${userId}-${Math.random().toString(36).substring(2)}.jpg`
+
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file)
+        .upload(fileName, compressed, { contentType: 'image/jpeg' })
 
       if (uploadError) throw uploadError
 
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
-        .getPublicUrl(filePath)
+        .getPublicUrl(fileName)
 
       await updateProfile({ avatar_url: publicUrl })
       setToastMessage('✅ Avatar updated!')
-    } catch (e) {
-      console.error(e)
-      alert('Error uploading avatar')
+    } catch (err) {
+      console.error('Avatar upload error:', err)
+      setToastMessage('❌ Error uploading avatar')
     }
   }
 
@@ -117,7 +156,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
   const handleLogout = async () => {
     setIsLoggingOut(true)
     await supabase.auth.signOut()
-    router.push('/login')
+    router.push('/')
   }
 
   return (

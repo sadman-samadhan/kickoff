@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import GroupClient from './GroupClient'
 
@@ -21,7 +21,8 @@ export default async function GroupPage({ params }: { params: { groupId: string 
   }
 
   // 2. Fetch members & my role
-  const { data: membersData } = await supabase
+  const supabaseAdmin = createAdminClient()
+  const { data: membersData } = await supabaseAdmin
     .from('group_members')
     .select('role, player_id, profiles(*)')
     .eq('group_id', params.groupId)
@@ -40,7 +41,7 @@ export default async function GroupPage({ params }: { params: { groupId: string 
   })) || []
 
   // 3. Fetch bookings & RSVPs
-  const { data: bookingsData } = await supabase
+  const { data: bookingsData } = await supabaseAdmin
     .from('bookings')
     .select('*, rsvps(*)')
     .eq('group_id', params.groupId)

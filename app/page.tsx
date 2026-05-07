@@ -1,17 +1,21 @@
 import Link from "next/link";
-import { Trophy, Users, Calendar, BarChart3, ChevronRight, Play } from "lucide-react";
+import Image from "next/image";
+import { Users, Calendar, BarChart3, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function LandingPage() {
   return (
     <div className="flex flex-col min-h-screen bg-white">
       {/* Navigation */}
-      <header className="px-4 lg:px-6 h-16 flex items-center border-b border-neutral-100 sticky top-0 bg-white/80 backdrop-blur-md z-50">
-        <Link className="flex items-center justify-center gap-2" href="#">
-          <div className="bg-green-600 p-1.5 rounded-lg">
-            <Trophy className="h-5 w-5 text-white" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-neutral-900">KickOff</span>
+      <header className="px-4 lg:px-6 h-20 flex items-center border-b border-neutral-100 sticky top-0 bg-white/80 backdrop-blur-md z-50">
+        <Link className="flex items-center justify-center" href="/">
+          <Image
+            src="/icons/logo.png"
+            alt="KickOff"
+            width={56}
+            height={56}
+            className="rounded-xl"
+          />
         </Link>
         <nav className="ml-auto flex gap-4 sm:gap-6 items-center">
           <Link className="text-sm font-medium text-neutral-600 hover:text-green-600 transition-colors" href="/login">
@@ -50,26 +54,24 @@ export default function LandingPage() {
                     <ChevronRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
-                <Link href="/login">
-                  <Button variant="outline" size="lg" className="h-14 px-8 rounded-full border-neutral-200 text-neutral-700 hover:bg-white text-lg font-semibold transition-all">
-                    View Demo
+                <Link href="/register">
+                  <Button variant="outline" size="lg" className="h-14 px-8 rounded-full border-green-200 text-green-700 hover:bg-green-50 text-lg font-semibold transition-all">
+                    Sign Up Now
                   </Button>
                 </Link>
               </div>
               
-              {/* Floating UI Mockup Preview */}
+              {/* App Preview Image */}
               <div className="relative w-full max-w-5xl mt-12 animate-in fade-in zoom-in duration-1000 delay-300">
-                <div className="rounded-2xl border border-neutral-200 bg-white shadow-2xl overflow-hidden aspect-[16/9] flex items-center justify-center group cursor-pointer">
-                  <div className="absolute inset-0 bg-neutral-900/5 group-hover:bg-neutral-900/0 transition-colors z-10" />
-                  <Play className="w-16 h-16 text-green-600 drop-shadow-lg z-20" />
-                  <div className="w-full h-full bg-slate-100 flex flex-col p-4 gap-4">
-                    <div className="h-8 w-1/3 bg-neutral-200 rounded-md animate-pulse" />
-                    <div className="grid grid-cols-3 gap-4 flex-1">
-                      <div className="bg-neutral-200 rounded-lg animate-pulse" />
-                      <div className="bg-neutral-200 rounded-lg animate-pulse" />
-                      <div className="bg-neutral-200 rounded-lg animate-pulse" />
-                    </div>
-                  </div>
+                <div className="rounded-2xl border border-neutral-200 bg-white shadow-2xl overflow-hidden flex items-center justify-center">
+                  <Image
+                    src="/icons/logo-wide.png"
+                    alt="KickOff App Preview"
+                    width={1200}
+                    height={675}
+                    className="w-full h-auto object-contain"
+                    priority
+                  />
                 </div>
               </div>
             </div>
@@ -115,7 +117,7 @@ export default function LandingPage() {
       <footer className="w-full py-8 border-t border-neutral-100 bg-neutral-50/50">
         <div className="container px-4 md:px-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-green-600" />
+            <Image src="/icons/logo.png" alt="KickOff" width={20} height={20} className="rounded" />
             <p className="text-sm font-medium text-neutral-500">© 2026 KickOff. Built for the game.</p>
           </div>
           <div className="flex gap-6">

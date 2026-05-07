@@ -251,7 +251,7 @@ END:VCALENDAR`
             </Link>
           ))}
 
-          <Link href="/groups/join" className="snap-start shrink-0">
+          <Link href="/groups" className="snap-start shrink-0">
             <div className="bg-green-50/50 border-2 border-dashed border-green-200 rounded-2xl p-4 w-32 h-full flex flex-col items-center justify-center text-green-700 active:scale-95 transition-transform hover:bg-green-50">
               <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mb-2">
                 <Plus className="w-5 h-5" />

@@ -94,8 +94,8 @@ export function NotificationBell({ userId }: { userId: string }) {
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4">
-          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-0 shadow-2xl animate-in slide-in-from-bottom-full duration-200 flex flex-col max-h-[80vh]">
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4" onClick={() => setIsOpen(false)}>
+          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-0 shadow-2xl animate-in slide-in-from-bottom-full duration-200 flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-neutral-100 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg text-neutral-900">Notifications</h3>
               <div className="flex items-center gap-2">
@@ -104,7 +104,7 @@ export function NotificationBell({ userId }: { userId: string }) {
                     Mark all read
                   </button>
                 )}
-                <button onClick={() => setIsOpen(false)} className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500">
+                <button onClick={() => setIsOpen(false)} className="p-1.5 rounded-full hover:bg-neutral-100 bg-neutral-50 text-neutral-600 border border-neutral-200">
                   <X className="w-5 h-5" />
                 </button>
               </div>
