@@ -40,10 +40,10 @@ export function MatchCard({ booking, userRsvpStatus, groupName, onClick }: Match
             </span>
           )}
           {userRsvpStatus === 'in' && (
-            <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">✅ You're In</span>
+            <span className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">✅ You&apos;re In</span>
           )}
           {userRsvpStatus === 'out' && (
-            <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">❌ Can't Make It</span>
+            <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">❌ Can&apos;t Make It</span>
           )}
           {(!userRsvpStatus || userRsvpStatus === 'waitlist') && (
             <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full animate-pulse">❓ Pending</span>

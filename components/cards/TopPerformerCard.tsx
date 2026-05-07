@@ -1,4 +1,5 @@
 "use client"
+import Image from 'next/image'
 
 interface TopPerformerCardProps {
   title: string
@@ -25,7 +26,7 @@ export function TopPerformerCard({ title, emoji, player, statValue, statLabel }:
       <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-3">{title}</span>
 
       {player.avatar_url ? (
-        <img src={player.avatar_url} alt="" className="w-12 h-12 rounded-full object-cover mb-2 border-2 border-white shadow-sm" />
+        <Image src={player.avatar_url || '/icons/icon-192.png'} alt={player.full_name} width={48} height={48} className="w-12 h-12 rounded-full object-cover mb-2 border-2 border-white shadow-sm" />
       ) : (
         <div className="w-12 h-12 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-lg mb-2 border-2 border-white shadow-sm">
           {player.full_name?.charAt(0)}

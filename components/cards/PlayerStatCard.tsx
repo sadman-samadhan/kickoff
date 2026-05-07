@@ -1,5 +1,6 @@
 "use client"
 
+import Image from 'next/image'
 import { Goal, Target, Shield, Activity } from 'lucide-react'
 
 interface PlayerStatCardProps {
@@ -33,7 +34,7 @@ export function PlayerStatCard({ player, stats, rank }: PlayerStatCardProps) {
 
       <div className="shrink-0">
         {player.avatar_url ? (
-          <img src={player.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
+          <Image src={player.avatar_url || '/icons/icon-192.png'} alt={player.full_name} width={40} height={40} className="w-9 h-9 rounded-full object-cover" />
         ) : (
           <div className="w-9 h-9 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-sm">
             {player.full_name?.charAt(0)}

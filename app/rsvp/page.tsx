@@ -135,7 +135,7 @@ export default async function RsvpPage({
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-8 h-8 text-green-600" />
             </div>
-            <h1 className="text-xl font-black text-neutral-900 mb-2">You're In!</h1>
+            <h1 className="text-xl font-black text-neutral-900 mb-2">You&apos;re In!</h1>
             <p className="text-sm text-neutral-600 mb-6">You are officially confirmed for {booking.groups?.name} on {booking.match_date}.</p>
           </>
         ) : finalStatus === 'waitlist' ? (
@@ -143,8 +143,8 @@ export default async function RsvpPage({
             <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Activity className="w-8 h-8 text-amber-600" />
             </div>
-            <h1 className="text-xl font-black text-neutral-900 mb-2">You're on the Waitlist</h1>
-            <p className="text-sm text-neutral-600 mb-6">The match is currently full. We'll email you if a spot opens up! (Position #{waitlistPosition})</p>
+            <h1 className="text-xl font-black text-neutral-900 mb-2">You&apos;re on the Waitlist</h1>
+            <p className="text-sm text-neutral-600 mb-6">The match is currently full. We&apos;ll email you if a spot opens up! (Position #{waitlistPosition})</p>
           </>
         ) : (
           <>
@@ -152,7 +152,7 @@ export default async function RsvpPage({
               <XCircle className="w-8 h-8 text-neutral-600" />
             </div>
             <h1 className="text-xl font-black text-neutral-900 mb-2">Got it!</h1>
-            <p className="text-sm text-neutral-600 mb-6">We've marked you as unavailable for this match. Maybe next time!</p>
+            <p className="text-sm text-neutral-600 mb-6">We&apos;ve marked you as unavailable for this match. Maybe next time!</p>
           </>
         )}
 
