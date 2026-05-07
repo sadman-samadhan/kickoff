@@ -1,0 +1,80 @@
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import GroupClient from './GroupClient'
+
+export default async function GroupPage({ params }: { params: { groupId: string } }) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) redirect('/login')
+
+  // 1. Fetch group
+  const { data: group } = await supabase
+    .from('groups')
+    .select('*')
+    .eq('id', params.groupId)
+    .single()
+
+  if (!group) {
+    redirect('/dashboard')
+  }
+
+  // 2. Fetch members & my role
+  const { data: membersData } = await supabase
+    .from('group_members')
+    .select('role, player_id, profiles(*)')
+    .eq('group_id', params.groupId)
+
+  const myMembership = membersData?.find(m => m.player_id === user.id)
+  
+  if (!myMembership) {
+    // Not a member
+    redirect('/dashboard')
+  }
+
+  const role = myMembership.role
+  const members = membersData?.map(m => ({
+    ...m.profiles,
+    role: m.role
+  })) || []
+
+  // 3. Fetch bookings & RSVPs
+  const { data: bookingsData } = await supabase
+    .from('bookings')
+    .select('*, rsvps(*)')
+    .eq('group_id', params.groupId)
+    .order('match_date', { ascending: true })
+
+  const now = new Date().toISOString()
+
+  let pastBookings: any[] = []
+  let upcomingBookings: any[] = []
+
+  bookingsData?.forEach(b => {
+    const isPast = b.status === 'completed' || b.match_date < now.split('T')[0]
+    if (isPast) {
+      pastBookings.push(b)
+    } else {
+      upcomingBookings.push(b)
+    }
+  })
+
+  // Sort past descending
+  pastBookings.sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
+
+  // Next match is the first upcoming
+  const nextMatch = upcomingBookings.length > 0 ? upcomingBookings[0] : null
+  const futureBookings = upcomingBookings.slice(1)
+
+  return (
+    <GroupClient 
+      group={group}
+      members={members}
+      role={role}
+      nextMatch={nextMatch}
+      futureBookings={futureBookings}
+      pastBookings={pastBookings}
+      userId={user.id}
+    />
+  )
+}
