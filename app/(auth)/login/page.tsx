@@ -38,19 +38,18 @@ export default function LoginPage() {
 
       // If it doesn't look like an email, treat as username
       if (!emailToLogin.includes('@')) {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('email, username')
-          .eq('username', emailToLogin)
-          .single()
-
-        if (profileError || !profileData) {
-          // Username not found, we throw a generic error to avoid user enumeration
+        const res = await fetch('/api/auth/lookup-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: emailToLogin })
+        })
+        
+        const data = await res.json()
+        if (data.error || !data.email) {
           throw new Error('Incorrect username/email or password')
         }
-
-        // If the user registered without a real email, we fall back to the generated one
-        emailToLogin = profileData.email || `${profileData.username}@kickoff.local`
+        
+        emailToLogin = data.email
       }
 
       const { error: authError } = await supabase.auth.signInWithPassword({

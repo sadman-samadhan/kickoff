@@ -101,11 +101,10 @@ export default function RegisterPage() {
   const validate = () => {
     const newErrors: Record<string, string> = {}
     if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required'
+    if (!formData.email.trim()) newErrors.email = 'Email is required'
+    if (!formData.username.trim()) newErrors.username = 'Username is required'
     if (!formData.password || formData.password.length < 8) newErrors.password = 'Password must be at least 8 characters'
     if (!formData.preferredPosition) newErrors.preferredPosition = 'Preferred Position is required'
-    if (!formData.email && !formData.username) {
-      newErrors.username = 'Username is required if no email is provided'
-    }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -118,7 +117,7 @@ export default function RegisterPage() {
     setIsLoading(true)
 
     try {
-      const emailToUse = formData.email || `${formData.username}@kickoff.local`
+      const emailToUse = formData.email.trim()
 
       // 1. Create Auth User with metadata (The Database Trigger will use this to create the profile)
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -245,7 +244,7 @@ export default function RegisterPage() {
               {/* Email */}
               <div className="space-y-1">
                 <div className="flex justify-between items-baseline">
-                  <label className="text-sm font-semibold text-neutral-700">Email <span className="text-neutral-400 font-normal">(Optional)</span></label>
+                  <label className="text-sm font-semibold text-neutral-700">Email <span className="text-red-500">*</span></label>
                   <span className="text-[10px] text-neutral-500">Used for match notifications</span>
                 </div>
                 <input
@@ -255,12 +254,13 @@ export default function RegisterPage() {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
+                {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
               </div>
 
               {/* Username */}
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-neutral-700">
-                  Username {!formData.email && <span className="text-red-500">*</span>}
+                  Username <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">@</span>
