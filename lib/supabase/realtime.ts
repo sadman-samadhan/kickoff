@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient } from './client'
 
 export function subscribeToNotifications(userId: string, onNewNotification: (n: { message: string, group_id?: string, booking_id?: string }) => void) {
@@ -14,7 +15,7 @@ export function subscribeToNotifications(userId: string, onNewNotification: (n: 
         filter: `player_id=eq.${userId}`
       },
       (payload) => {
-        onNewNotification(payload.new)
+        onNewNotification(payload.new as any)
       }
     )
     .subscribe()

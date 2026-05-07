@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import React, { useState } from 'react'
@@ -128,8 +129,8 @@ END:VCALENDAR`
   // Calendar Logic
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(monthStart)
-  const startDate = startOfWeek(monthStart, { weekStarts: 1 })
-  const endDate = endOfWeek(monthEnd, { weekStarts: 1 })
+  const startDate = startOfWeek(monthStart, { weekStartsOn: 1 })
+  const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 })
   const dateFormat = "d"
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate })
 

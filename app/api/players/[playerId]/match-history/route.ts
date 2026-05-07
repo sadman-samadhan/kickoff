@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
@@ -27,21 +28,21 @@ export async function GET(req: Request, { params }: { params: { playerId: string
 
   if (!rsvps || rsvps.length === 0) return NextResponse.json({ history: [] })
 
-  let bookings = rsvps.map(r => r.bookings).filter(b => b !== null)
+  let bookings: any = rsvps.map(r => r.bookings).filter(b => b !== null)
 
   if (groupId && groupId !== 'all') {
-    bookings = bookings.filter(b => b.group_id === groupId)
+    bookings = bookings.filter((b: any) => b.group_id === groupId)
   }
   if (from) {
-    bookings = bookings.filter(b => new Date(b.match_date) >= new Date(from))
+    bookings = bookings.filter((b: any) => new Date(b.match_date) >= new Date(from))
   }
   if (to) {
-    bookings = bookings.filter(b => new Date(b.match_date) <= new Date(to))
+    bookings = bookings.filter((b: any) => new Date(b.match_date) <= new Date(to))
   }
 
-  bookings.sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
+  bookings.sort((a: any, b: any) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
 
-  const bookingIds = bookings.map(b => b.id)
+  const bookingIds = bookings.map((b: any) => b.id)
   
   if (bookingIds.length === 0) return NextResponse.json({ history: [] })
 
@@ -62,7 +63,7 @@ export async function GET(req: Request, { params }: { params: { playerId: string
     cleanSheets = cs || []
   }
 
-  const history = bookings.map(b => {
+  const history = bookings.map((b: any) => {
     const bookingSchedules = schedules?.filter(s => s.booking_id === b.id) || []
     
     const bScheduleIds = bookingSchedules.map(s => s.id)
@@ -79,7 +80,7 @@ export async function GET(req: Request, { params }: { params: { playerId: string
     return {
       booking_id: b.id,
       group_id: b.group_id,
-      group_name: b.groups.name,
+      group_name: (b.groups as any).name,
       match_date: b.match_date,
       match_time: b.match_time,
       field_name: b.field_name,

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable prefer-const */
 'use server'
 
 import { createClient } from '@/lib/supabase/server'

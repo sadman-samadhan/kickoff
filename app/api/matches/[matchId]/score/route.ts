@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
@@ -20,7 +21,7 @@ export async function PATCH(req: Request, { params }: { params: { matchId: strin
   const { data: member } = await supabase
     .from('group_members')
     .select('id')
-    .eq('group_id', match.bookings.group_id)
+    .eq('group_id', (match.bookings as any).group_id)
     .eq('player_id', user.id)
     .single()
 

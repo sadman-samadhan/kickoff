@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email/resend'
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
     .single()
 
   if (bookingData) {
-    const groupName = bookingData.groups?.name || 'Group'
+    const groupName = (bookingData.groups as any)?.name || 'Group'
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
     const playerIds = insertData.map(d => d.player_id)

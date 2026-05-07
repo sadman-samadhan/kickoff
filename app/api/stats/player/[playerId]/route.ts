@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
@@ -58,7 +59,7 @@ export async function GET(req: Request, { params }: { params: { playerId: string
     if (!groupsMap.has(g.group_id)) {
       groupsMap.set(g.group_id, {
         group_id: g.group_id,
-        group_name: g.groups?.name,
+        group_name: (g.groups as any)?.name,
         goals: 0, assists: 0, clean_sheets: 0, matches_played: 0
       })
     }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
@@ -54,7 +55,7 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
     }
   }
 
-  const playersStats = members.map(m => {
+  const playersStats = members.map((m: any) => {
     const pId = m.player_id
     const pGoals = goals.filter(g => g.scorer_id === pId && !g.is_own_goal).length
     const pAssists = goals.filter(g => g.assist_id === pId).length

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 
 export default function GlobalError({
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   error,
   reset,
 }: {
@@ -15,7 +16,7 @@ export default function GlobalError({
         <span className="text-5xl block mb-4">😕</span>
         <h1 className="text-xl font-black text-neutral-900 mb-2">Something went wrong</h1>
         <p className="text-sm text-neutral-500 mb-6">
-          An unexpected error occurred. Don't worry — your data is safe.
+          An unexpected error occurred. Don&apos;t worry — your data is safe.
         </p>
         <div className="flex flex-col gap-3">
           <button

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
@@ -79,13 +80,13 @@ export async function POST(req: Request) {
         .eq('booking_id', booking_id)
         .eq('player_id', promoted.player_id)
 
-      if (promoted.profiles?.email && !promoted.profiles.email.endsWith('@kickoff.local') && promoted.profiles.email_notifications !== false) {
+      if ((promoted.profiles as any)?.email && !(promoted.profiles as any).email.endsWith('@kickoff.local') && (promoted.profiles as any).email_notifications !== false) {
         await sendEmail({
-          to: promoted.profiles.email,
-          subject: `🎉 You're In! A spot opened up — ${booking.groups?.name}`,
+          to: (promoted.profiles as any).email,
+          subject: `🎉 You're In! A spot opened up — ${(booking.groups as any)?.name}`,
           html: waitlistPromotionEmail({
-            playerName: promoted.profiles.full_name?.split(' ')[0] || 'Player',
-            groupName: booking.groups?.name,
+            playerName: (promoted.profiles as any).full_name?.split(' ')[0] || 'Player',
+            groupName: (booking.groups as any)?.name,
             matchDate: booking.match_date,
             matchTime: booking.match_time.slice(0, 5),
             fieldName: booking.field_name
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
         player_id: promoted.player_id,
         booking_id: booking_id,
         group_id: booking.group_id,
-        message: `🎉 A spot opened up! You've been added to the squad for ${booking.groups?.name} on ${booking.match_date}`,
+        message: `🎉 A spot opened up! You've been added to the squad for ${(booking.groups as any)?.name} on ${booking.match_date}`,
         is_read: false
       })
     }

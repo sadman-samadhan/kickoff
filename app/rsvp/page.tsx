@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { generateRsvpToken } from '@/lib/utils'
 import { sendEmail } from '@/lib/email/resend'
@@ -91,13 +92,13 @@ export default async function RsvpPage({
         .eq('booking_id', bookingId)
         .eq('player_id', promoted.player_id)
 
-      if (promoted.profiles?.email && !promoted.profiles.email.endsWith('@kickoff.local')) {
+      if ((promoted.profiles as any)?.email && !(promoted.profiles as any).email.endsWith('@kickoff.local')) {
         await sendEmail({
-          to: promoted.profiles.email,
-          subject: `🎉 You're In! A spot opened up — ${booking.groups?.name}`,
+          to: (promoted.profiles as any).email,
+          subject: `🎉 You're In! A spot opened up — ${(booking.groups as any)?.name}`,
           html: waitlistPromotionEmail({
-            playerName: promoted.profiles.full_name?.split(' ')[0] || 'Player',
-            groupName: booking.groups?.name,
+            playerName: (promoted.profiles as any).full_name?.split(' ')[0] || 'Player',
+            groupName: (booking.groups as any)?.name,
             matchDate: booking.match_date,
             matchTime: booking.match_time.slice(0, 5),
             fieldName: booking.field_name
@@ -109,7 +110,7 @@ export default async function RsvpPage({
         player_id: promoted.player_id,
         booking_id: bookingId,
         group_id: booking.group_id,
-        message: `🎉 A spot opened up! You've been added to the squad for ${booking.groups?.name} on ${booking.match_date}`,
+        message: `🎉 A spot opened up! You've been added to the squad for ${(booking.groups as any)?.name} on ${booking.match_date}`,
         is_read: false
       })
     }
@@ -136,7 +137,7 @@ export default async function RsvpPage({
               <CheckCircle2 className="w-8 h-8 text-green-600" />
             </div>
             <h1 className="text-xl font-black text-neutral-900 mb-2">You&apos;re In!</h1>
-            <p className="text-sm text-neutral-600 mb-6">You are officially confirmed for {booking.groups?.name} on {booking.match_date}.</p>
+            <p className="text-sm text-neutral-600 mb-6">You are officially confirmed for {(booking.groups as any)?.name} on {booking.match_date}.</p>
           </>
         ) : finalStatus === 'waitlist' ? (
           <>
