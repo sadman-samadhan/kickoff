@@ -137,36 +137,34 @@ export default function RegisterPage() {
       if (!authData.user) throw new Error('Failed to create user account')
 
       const userId = authData.user.id
+      let avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.fullName)}&background=16a34a&color=fff&size=200`
 
-      // 2. Upload Avatar and update profile if exists
+      // 2. Upload Avatar if provided
       if (avatar) {
         try {
           const compressed = await compressImage(avatar)
-          const fileName = `${userId}-${Math.random().toString(36).substring(2)}.jpg`
+          const uploadFormData = new FormData()
+          uploadFormData.append('file', compressed, 'avatar.jpg')
 
-          const { error: uploadError } = await supabase.storage
-            .from('avatars')
-            .upload(fileName, compressed, { contentType: 'image/jpeg' })
-
-          if (!uploadError) {
-            const { data: publicUrlData } = supabase.storage
-              .from('avatars')
-              .getPublicUrl(fileName)
-            const avatarUrl = publicUrlData.publicUrl
-
-            // Update the profile that was just created by the trigger
-            await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', userId)
-          } else {
-            console.error("Avatar upload error:", uploadError)
+          const uploadRes = await fetch('/api/upload/avatar', {
+            method: 'POST',
+            body: uploadFormData
+          })
+          const uploadData = await uploadRes.json()
+          if (uploadData.url) {
+            avatarUrl = uploadData.url
           }
-        } catch (compressErr) {
-          console.error("Image compression error:", compressErr)
+        } catch (uploadErr) {
+          console.error("Avatar upload error:", uploadErr)
         }
-      } else {
-        // Set default avatar using ui-avatars.com
-        const defaultUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.fullName)}&background=16a34a&color=fff&size=200`
-        await supabase.from('profiles').update({ avatar_url: defaultUrl }).eq('id', userId)
       }
+
+      // 3. Update profile via API (uses admin client)
+      await fetch(`/api/players/${userId}/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar_url: avatarUrl })
+      })
 
       // 4. Redirect on success
       router.push('/dashboard')

@@ -97,23 +97,23 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
     try {
       const compressed = await compressImage(file)
-      const fileName = `${userId}-${Math.random().toString(36).substring(2)}.jpg`
+      
+      const formData = new FormData()
+      formData.append('file', compressed, 'avatar.jpg')
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, compressed, { contentType: 'image/jpeg' })
+      const res = await fetch('/api/upload/avatar', {
+        method: 'POST',
+        body: formData
+      })
+      
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
 
-      if (uploadError) throw uploadError
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName)
-
-      await updateProfile({ avatar_url: publicUrl })
+      await updateProfile({ avatar_url: data.url })
       setToastMessage('✅ Avatar updated!')
-    } catch (err) {
+    } catch (err: any) {
       console.error('Avatar upload error:', err)
-      setToastMessage('❌ Error uploading avatar')
+      setToastMessage(`❌ Error: ${err.message || 'Upload failed'}`)
     }
   }
 

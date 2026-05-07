@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(req: Request, { params }: { params: { playerId: string } }) {
@@ -43,7 +43,8 @@ export async function PATCH(req: Request, { params }: { params: { playerId: stri
     return NextResponse.json({ error: 'No valid fields provided' }, { status: 400 })
   }
 
-  const { data, error } = await supabase
+  const admin = createAdminClient()
+  const { data, error } = await admin
     .from('profiles')
     .update(updates)
     .eq('id', params.playerId)

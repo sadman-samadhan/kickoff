@@ -45,7 +45,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased bg-slate-50 text-neutral-900">
         {children}
-        <InstallPrompt />
+        {/* <InstallPrompt /> */}
       </body>
     </html>
   );
