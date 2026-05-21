@@ -60,8 +60,10 @@ export async function POST(req: Request, { params }: { params: { matchId: string
     .from('goal_events')
     .insert({
       match_schedule_id: params.matchId,
-      scorer_id: body.scorer_id,
-      assist_id: body.assist_id || null,
+      scorer_id: body.scorer_id?.startsWith('guest_') ? null : body.scorer_id,
+      guest_scorer_name: body.scorer_id?.startsWith('guest_') ? body.guest_scorer_name : null,
+      assist_id: body.assist_id?.startsWith('guest_') ? null : (body.assist_id || null),
+      guest_assist_name: body.assist_id?.startsWith('guest_') ? body.guest_assist_name : null,
       team_id: body.team_id,
       is_own_goal: body.is_own_goal || false,
       minute: body.minute || null

@@ -6,8 +6,8 @@ export async function DELETE(req: Request, { params }: { params: { matchId: stri
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Verify group membership implicitly via RLS or explicit check
-  const { error } = await supabase
+  const supabaseAdmin = require('@/lib/supabase/server').createAdminClient()
+  const { error } = await supabaseAdmin
     .from('goal_events')
     .delete()
     .eq('id', params.goalId)

@@ -18,6 +18,15 @@ export default async function MatchPage({ params }: { params: { groupId: string,
   if (!booking) redirect(`/groups/${params.groupId}`)
 
   const supabaseAdmin = createAdminClient()
+  
+  // Fetch User Role
+  const { data: member } = await supabaseAdmin
+    .from('group_members')
+    .select('role')
+    .eq('group_id', params.groupId)
+    .eq('player_id', user.id)
+    .single()
+
   // Fetch RSVPs
   const { data: rsvps } = await supabaseAdmin
     .from('rsvps')
@@ -53,6 +62,12 @@ export default async function MatchPage({ params }: { params: { groupId: string,
     goalEvents = ge || []
   }
 
+  // Fetch Group Members for Admin to add
+  const { data: groupMembers } = await supabaseAdmin
+    .from('group_members')
+    .select('*, profiles(*)')
+    .eq('group_id', params.groupId)
+
   return (
     <MatchClient 
       booking={booking}
@@ -62,6 +77,8 @@ export default async function MatchPage({ params }: { params: { groupId: string,
       goalEvents={goalEvents}
       currentUser={user}
       groupId={params.groupId}
+      userRole={member?.role || 'member'}
+      groupMembers={groupMembers || []}
     />
   )
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { Bell, X, Circle } from 'lucide-react'
 import { format, formatDistanceToNow, parseISO } from 'date-fns'
@@ -93,8 +94,8 @@ export function NotificationBell({ userId }: { userId: string }) {
         )}
       </button>
 
-      {isOpen && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4" onClick={() => setIsOpen(false)}>
+      {isOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4" onClick={() => setIsOpen(false)}>
           <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-0 shadow-2xl animate-in slide-in-from-bottom-full duration-200 flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-neutral-100 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg text-neutral-900">Notifications</h3>
@@ -110,7 +111,7 @@ export function NotificationBell({ userId }: { userId: string }) {
               </div>
             </div>
 
-            <div className="overflow-y-auto p-4 flex flex-col gap-3">
+            <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-3">
               {notifications.length === 0 ? (
                 <div className="text-center py-10 text-sm text-neutral-400 font-bold">No notifications yet.</div>
               ) : (
@@ -141,7 +142,8 @@ export function NotificationBell({ userId }: { userId: string }) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

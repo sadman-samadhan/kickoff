@@ -74,3 +74,20 @@ export function rsvpReminderEmail({ playerName, groupName, matchDate, matchTime,
     </div>
   `
 }
+
+export function matchCancellationEmail({ playerName, groupName, matchDate, matchTime, fieldName, reason }: EmailParams & { reason?: string }) {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #171717;">
+      <h2 style="color: #ef4444;">❌ Match Cancelled — ${groupName}</h2>
+      <p>Hey <strong>${playerName}</strong>!</p>
+      <p>Unfortunately, the upcoming match for <strong>${groupName}</strong> has been cancelled.</p>
+      <div style="background-color: #fef2f2; padding: 16px; border-radius: 8px; margin: 20px 0;">
+        <p style="margin: 0 0 8px 0;">📅 <strong>Date:</strong> ${matchDate}</p>
+        <p style="margin: 0 0 8px 0;">⏰ <strong>Time:</strong> ${matchTime}</p>
+        <p style="margin: 0 0 8px 0;">📍 <strong>Field:</strong> ${fieldName}</p>
+        ${reason ? `<p style="margin: 0; color: #dc2626;"><strong>Reason:</strong> ${reason}</p>` : ''}
+      </div>
+      <p>We hope to see you on the pitch next time!</p>
+    </div>
+  `
+}

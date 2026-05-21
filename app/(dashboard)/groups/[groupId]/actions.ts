@@ -24,22 +24,16 @@ export async function addBookingAction(groupId: string, data: any) {
   if (error) throw new Error(error.message)
 
   // Fetch all group members to notify
-  const { data: members } = await supabase.from('group_members').select('player_id').eq('group_id', groupId)
-  
-  if (members) {
-    const notifications = members
-      .filter(m => m.player_id !== user.id)
-      .map(m => ({
-        player_id: m.player_id,
-        booking_id: booking.id,
-        group_id: groupId,
-        message: `New match scheduled at ${data.fieldName} on ${data.matchDate}`
-      }))
-    
-    if (notifications.length > 0) {
-      await supabase.from('notifications').insert(notifications)
-    }
-  }
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  fetch(`${baseUrl}/api/notifications/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      group_id: groupId,
+      booking_id: booking.id,
+      exclude_player_id: user.id
+    })
+  }).catch(console.error)
 
   revalidatePath(`/groups/${groupId}`)
   return { success: true }

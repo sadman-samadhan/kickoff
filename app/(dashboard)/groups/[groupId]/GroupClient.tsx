@@ -70,6 +70,7 @@ export default function GroupClient({
     maxPlayers: 21
   })
   const [isBookingLoading, setIsBookingLoading] = useState(false)
+  const [bookingError, setBookingError] = useState('')
 
   // Member stats
   const [memberStats, setMemberStats] = useState<Record<string, { goals: number, assists: number, clean_sheets: number }>>({})
@@ -144,6 +145,25 @@ export default function GroupClient({
 
   const handleAddBooking = async (e: React.FormEvent) => {
     e.preventDefault()
+    setBookingError('')
+    
+    if (!bookingForm.fieldName.trim()) {
+      setBookingError('Please provide a field name to create the match.')
+      return
+    }
+
+    if (bookingForm.matchDate && bookingForm.matchTime) {
+      const matchDateTimeStr = `${bookingForm.matchDate}T${bookingForm.matchTime}`
+      const matchTimeMs = new Date(matchDateTimeStr).getTime()
+      const nowMs = Date.now()
+      const diffHours = (matchTimeMs - nowMs) / (1000 * 60 * 60)
+      
+      if (diffHours < 3) {
+        setBookingError('Matches must be scheduled at least 3 hours in advance.')
+        return
+      }
+    }
+
     setIsBookingLoading(true)
     try {
       await addBookingAction(group.id, bookingForm)
@@ -155,7 +175,9 @@ export default function GroupClient({
         googleMapsUrl: '',
         maxPlayers: 21
       })
-    } catch (e) {
+      setBookingError('')
+    } catch (e: any) {
+      setBookingError(e.message || 'Failed to schedule match')
       console.error(e)
     } finally {
       setIsBookingLoading(false)
@@ -166,6 +188,20 @@ export default function GroupClient({
     navigator.clipboard.writeText(group.invite_code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  let matchStatusLabel = 'Next Match'
+  let isMatchStarted = false
+  if (nextMatch) {
+    const matchDateTimeStr = `${nextMatch.match_date}T${nextMatch.match_time || '00:00:00'}`
+    const matchTimeMs = new Date(matchDateTimeStr).getTime()
+    const nowMs = Date.now()
+    if (nowMs >= matchTimeMs) {
+      matchStatusLabel = 'Match Started'
+      isMatchStarted = true
+    } else if (new Date(matchDateTimeStr).toDateString() === new Date().toDateString()) {
+      matchStatusLabel = 'Today\'s Match'
+    }
   }
 
   return (
@@ -205,7 +241,7 @@ export default function GroupClient({
           <Link href={`/groups/${group.id}/match/${nextMatch.id}`} className="block relative z-10 active:opacity-70 transition-opacity">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <div className="text-xs font-bold text-green-600 uppercase tracking-wider mb-1">Next Match</div>
+                <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${isMatchStarted ? 'text-red-500 animate-pulse' : 'text-green-600'}`}>{matchStatusLabel}</div>
                 <h3 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
                   {format(parseISO(nextMatch.match_date), 'EEEE, MMMM d')}
                   <ChevronRight className="w-5 h-5 text-neutral-400" />
@@ -234,24 +270,26 @@ export default function GroupClient({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mt-6 relative z-10">
-            <Button
-              onClick={() => handleRsvp('in')}
-              disabled={isRsvpLoading}
-              className={`h-12 rounded-xl text-base shadow-sm transition-all ${myRsvp === 'in' ? 'bg-green-600 hover:bg-green-700 text-white ring-2 ring-green-600 ring-offset-2' : 'bg-white text-green-700 border-2 border-green-200 hover:bg-green-50'}`}
-            >
-              <CheckCircle className={`w-5 h-5 mr-2 ${myRsvp === 'in' ? 'text-white' : 'text-green-600'}`} />
-              I&apos;m In
-            </Button>
-            <Button
-              onClick={() => handleRsvp('out')}
-              disabled={isRsvpLoading}
-              className={`h-12 rounded-xl text-base shadow-sm transition-all ${myRsvp === 'out' ? 'bg-red-500 hover:bg-red-600 text-white ring-2 ring-red-500 ring-offset-2' : 'bg-white text-red-600 border-2 border-red-100 hover:bg-red-50'}`}
-            >
-              <XCircle className={`w-5 h-5 mr-2 ${myRsvp === 'out' ? 'text-white' : 'text-red-500'}`} />
-              I&apos;m Out
-            </Button>
-          </div>
+          {!isMatchStarted && (
+            <div className="grid grid-cols-2 gap-3 mt-6 relative z-10">
+              <Button
+                onClick={() => handleRsvp('in')}
+                disabled={isRsvpLoading}
+                className={`h-12 rounded-xl text-base shadow-sm transition-all ${myRsvp === 'in' ? 'bg-green-600 hover:bg-green-700 text-white ring-2 ring-green-600 ring-offset-2' : 'bg-white text-green-700 border-2 border-green-200 hover:bg-green-50'}`}
+              >
+                <CheckCircle className={`w-5 h-5 mr-2 ${myRsvp === 'in' ? 'text-white' : 'text-green-600'}`} />
+                I&apos;m In
+              </Button>
+              <Button
+                onClick={() => handleRsvp('out')}
+                disabled={isRsvpLoading}
+                className={`h-12 rounded-xl text-base shadow-sm transition-all ${myRsvp === 'out' ? 'bg-red-500 hover:bg-red-600 text-white ring-2 ring-red-500 ring-offset-2' : 'bg-white text-red-600 border-2 border-red-100 hover:bg-red-50'}`}
+              >
+                <XCircle className={`w-5 h-5 mr-2 ${myRsvp === 'out' ? 'text-white' : 'text-red-500'}`} />
+                I&apos;m Out
+              </Button>
+            </div>
+          )}
           {myRsvp === 'waitlist' && (
             <div className="mt-4 p-3 bg-purple-50 text-purple-700 rounded-xl text-sm font-semibold text-center border border-purple-100 flex items-center justify-center gap-2">
               <Clock className="w-4 h-4" /> On Waitlist (Pos: {myRsvpObj?.waitlist_position})
@@ -394,8 +432,8 @@ export default function GroupClient({
                     {booking.field_name}
                   </div>
                   {/* Score stub */}
-                  <div className="mt-2 bg-neutral-50 rounded p-1.5 flex justify-center items-center text-xs font-black text-neutral-700 tracking-wider">
-                    - : -
+                  <div className="mt-2 bg-neutral-50 rounded p-1.5 flex justify-center items-center text-xs font-black tracking-wider">
+                    {booking.status === 'cancelled' ? <span className="text-red-500">CANCELLED</span> : <span className="text-neutral-700">- : -</span>}
                   </div>
                 </div>
               </Link>
@@ -418,9 +456,14 @@ export default function GroupClient({
       {/* FLOATING ACTION BUTTON */}
       <button
         onClick={() => setIsAddBookingOpen(true)}
-        className="fixed bottom-20 right-4 w-14 h-14 bg-green-600 text-white rounded-full shadow-lg shadow-green-600/30 flex items-center justify-center hover:bg-green-700 active:scale-95 transition-all z-40"
+        className="fixed bottom-20 right-4 h-14 bg-green-600 text-white rounded-full shadow-lg shadow-green-600/30 flex items-center hover:bg-green-700 active:scale-95 transition-all duration-300 z-40 group overflow-hidden"
       >
-        <Plus className="w-6 h-6" />
+        <div className="flex items-center pl-4 pr-4 gap-0 group-hover:gap-2 transition-all duration-300">
+          <Plus className="w-6 h-6 shrink-0" />
+          <span className="font-bold text-sm max-w-0 overflow-hidden opacity-0 group-hover:max-w-[100px] group-hover:opacity-100 transition-all duration-300 whitespace-nowrap">
+            Add booking
+          </span>
+        </div>
       </button>
 
       {/* MODALS */}
@@ -516,14 +559,15 @@ export default function GroupClient({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-neutral-700">Google Maps URL <span className="text-neutral-400 font-normal">(Optional)</span></label>
+                  <label className="text-sm font-semibold text-neutral-700">Map Location Link <span className="text-neutral-400 font-normal">(Optional)</span></label>
                   <input
                     type="url"
-                    placeholder="https://maps.google.com/..."
+                    placeholder="https://maps.app.goo.gl/..."
                     className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm"
                     value={bookingForm.googleMapsUrl}
                     onChange={e => setBookingForm({ ...bookingForm, googleMapsUrl: e.target.value })}
                   />
+                  <p className="text-[10px] text-neutral-500">Add a Google Maps link so players can easily find the field.</p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -542,6 +586,12 @@ export default function GroupClient({
             </div>
 
             <div className="p-5 border-t border-neutral-100 bg-white shrink-0 sm:rounded-b-3xl">
+              {bookingError && (
+                <div className="mb-3 p-3 bg-red-50 text-red-600 text-sm rounded-xl font-medium border border-red-100 flex items-center gap-2">
+                  <XCircle className="w-4 h-4 shrink-0" />
+                  {bookingError}
+                </div>
+              )}
               <Button form="booking-form" type="submit" disabled={isBookingLoading} className="w-full bg-green-600 hover:bg-green-700 text-white h-12 rounded-xl text-base shadow-sm">
                 {isBookingLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Schedule Match'}
               </Button>

@@ -68,7 +68,15 @@ export default async function DashboardPage() {
     allBookings = bData || []
   }
 
-  const upcomingBookings = allBookings.filter(b => b.status === 'upcoming')
+  const nowMs = Date.now()
+  const fiveHoursMs = 5 * 60 * 60 * 1000
+
+  const upcomingBookings = allBookings.filter(b => {
+    if (b.status !== 'upcoming') return false
+    const matchDateTimeStr = `${b.match_date}T${b.match_time || '00:00:00'}`
+    const matchTimeMs = new Date(matchDateTimeStr).getTime()
+    return nowMs <= matchTimeMs + fiveHoursMs
+  })
   await supabase
     .from('rsvps')
     .select('*')

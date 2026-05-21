@@ -228,8 +228,56 @@ END:VCALENDAR`
         </div>
       )}
 
-      {/* 3. MY GROUPS */}
-      <div className="-mx-4">
+      {/* 3. UPCOMING MATCHES */}
+      <div className="mb-6">
+        <h3 className="font-bold text-neutral-800 text-lg mb-3">Upcoming Matches</h3>
+        <div className="flex flex-col gap-3">
+          {upcomingBookings.length === 0 ? (
+            <div className="bg-white rounded-xl p-6 text-center border border-neutral-100 shadow-sm">
+              <p className="text-sm text-neutral-500">No upcoming matches scheduled.</p>
+            </div>
+          ) : (
+            upcomingBookings.map((booking: Booking) => {
+              const matchDateTimeStr = `${booking.match_date}T${booking.match_time || '00:00:00'}`
+              const isMatchStarted = Date.now() >= new Date(matchDateTimeStr).getTime()
+
+              return (
+              <Link href={`/groups/${booking.group_id}/match/${booking.id}`} key={booking.id}>
+                <div className="bg-white rounded-2xl p-4 border border-neutral-100 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-transform">
+                  <div className="flex flex-col items-center justify-center bg-green-50 text-green-800 rounded-xl w-14 h-14 shrink-0 border border-green-100">
+                    <span className="text-xs font-bold uppercase">{format(parseISO(booking.match_date), 'MMM')}</span>
+                    <span className="text-lg font-black leading-none">{format(parseISO(booking.match_date), 'dd')}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-neutral-900 truncate flex items-center gap-2">
+                      {booking.groups?.name}
+                      {isMatchStarted && (
+                        <span className="text-[9px] text-red-500 font-bold uppercase animate-pulse border border-red-200 bg-red-50 px-1.5 py-0.5 rounded">Started</span>
+                      )}
+                    </h4>
+                    <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1 truncate">
+                      <Clock className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{booking.match_time.slice(0, 5)}</span>
+                      <span className="mx-0.5">•</span>
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{booking.field_name}</span>
+                    </div>
+                  </div>
+                  <div>
+                    {booking.myRsvpStatus === 'in' && <div className="bg-green-100 text-green-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-green-200">IN</div>}
+                    {booking.myRsvpStatus === 'out' && <div className="bg-red-100 text-red-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-red-200">OUT</div>}
+                    {(booking.myRsvpStatus === 'pending' || booking.myRsvpStatus === 'none') && <div className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-amber-200">PENDING</div>}
+                    {booking.myRsvpStatus === 'waitlist' && <div className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-purple-200">WAITLIST</div>}
+                  </div>
+                </div>
+              </Link>
+            )})
+          )}
+        </div>
+      </div>
+
+      {/* 4. MY GROUPS */}
+      <div className="-mx-4 mb-6">
         <div className="px-4 mb-3 flex justify-between items-center">
           <h3 className="font-bold text-neutral-800 text-lg">My Squads</h3>
         </div>
@@ -260,45 +308,6 @@ END:VCALENDAR`
               <span className="text-xs font-bold text-center">Add / Join<br />Group</span>
             </div>
           </Link>
-        </div>
-      </div>
-
-      {/* 4. UPCOMING MATCHES */}
-      <div>
-        <h3 className="font-bold text-neutral-800 text-lg mb-3">Upcoming Matches</h3>
-        <div className="flex flex-col gap-3">
-          {upcomingBookings.length === 0 ? (
-            <div className="bg-white rounded-xl p-6 text-center border border-neutral-100 shadow-sm">
-              <p className="text-sm text-neutral-500">No upcoming matches scheduled.</p>
-            </div>
-          ) : (
-            upcomingBookings.map((booking: Booking) => (
-              <Link href={`/groups/${booking.group_id}/match/${booking.id}`} key={booking.id}>
-                <div className="bg-white rounded-2xl p-4 border border-neutral-100 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-transform">
-                  <div className="flex flex-col items-center justify-center bg-green-50 text-green-800 rounded-xl w-14 h-14 shrink-0 border border-green-100">
-                    <span className="text-xs font-bold uppercase">{format(parseISO(booking.match_date), 'MMM')}</span>
-                    <span className="text-lg font-black leading-none">{format(parseISO(booking.match_date), 'dd')}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-neutral-900 truncate">{booking.groups?.name}</h4>
-                    <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1 truncate">
-                      <Clock className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{booking.match_time.slice(0, 5)}</span>
-                      <span className="mx-0.5">•</span>
-                      <MapPin className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{booking.field_name}</span>
-                    </div>
-                  </div>
-                  <div>
-                    {booking.myRsvpStatus === 'in' && <div className="bg-green-100 text-green-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-green-200">IN</div>}
-                    {booking.myRsvpStatus === 'out' && <div className="bg-red-100 text-red-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-red-200">OUT</div>}
-                    {(booking.myRsvpStatus === 'pending' || booking.myRsvpStatus === 'none') && <div className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-amber-200">PENDING</div>}
-                    {booking.myRsvpStatus === 'waitlist' && <div className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-purple-200">WAITLIST</div>}
-                  </div>
-                </div>
-              </Link>
-            ))
-          )}
         </div>
       </div>
 

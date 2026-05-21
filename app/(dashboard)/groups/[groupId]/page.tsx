@@ -61,8 +61,14 @@ export default async function GroupPage({ params }: { params: { groupId: string 
   const pastBookings: Booking[] = []
   const upcomingBookings: Booking[] = []
 
+  const nowMs = Date.now()
+  const fiveHoursMs = 5 * 60 * 60 * 1000
+
   bookingsData?.forEach(b => {
-    const isPast = b.status === 'completed' || b.match_date < now.split('T')[0]
+    const matchDateTimeStr = `${b.match_date}T${b.match_time || '00:00:00'}`
+    const matchTimeMs = new Date(matchDateTimeStr).getTime()
+
+    const isPast = b.status === 'completed' || b.status === 'cancelled' || (nowMs > matchTimeMs + fiveHoursMs)
     if (isPast) {
       pastBookings.push(b)
     } else {
