@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function DELETE(req: Request, { params }: { params: { matchId: string, goalId: string } }) {
@@ -6,7 +6,7 @@ export async function DELETE(req: Request, { params }: { params: { matchId: stri
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const supabaseAdmin = require('@/lib/supabase/server').createAdminClient()
+  const supabaseAdmin = createAdminClient()
   const { error } = await supabaseAdmin
     .from('goal_events')
     .delete()

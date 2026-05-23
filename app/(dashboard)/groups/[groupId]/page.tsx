@@ -47,8 +47,6 @@ export default async function GroupPage({ params }: { params: { groupId: string 
     .eq('group_id', params.groupId)
     .order('match_date', { ascending: true })
 
-  const now = new Date().toISOString()
-
   interface Booking {
     id: string
     match_date: string
