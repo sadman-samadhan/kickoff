@@ -92,7 +92,7 @@ export default async function RsvpPage({
         .eq('booking_id', bookingId)
         .eq('player_id', promoted.player_id)
 
-      if ((promoted.profiles as any)?.email && !(promoted.profiles as any).email.endsWith('@kickoff.local')) {
+      if ((promoted.profiles as any)?.email && !(promoted.profiles as any).email.endsWith('@khelahobe.local')) {
         await sendEmail({
           to: (promoted.profiles as any).email,
           subject: `🎉 You're In! A spot opened up — ${(booking.groups as any)?.name}`,
@@ -162,7 +162,7 @@ export default async function RsvpPage({
             View Match Details
           </Link>
           <Link href="/login" className="w-full bg-white border border-neutral-200 text-neutral-700 rounded-xl py-3 font-bold hover:bg-neutral-50 block">
-            Login to KickOff
+            Login to KhelaHobe
           </Link>
         </div>
       </div>

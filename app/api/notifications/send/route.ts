@@ -65,7 +65,7 @@ export async function POST(req: Request) {
 
     if (profiles) {
       Promise.all(profiles.map(async (p) => {
-        if (p.email && !p.email.endsWith('@kickoff.local') && p.email_notifications !== false) {
+        if (p.email && !p.email.endsWith('@khelahobe.local') && p.email_notifications !== false) {
           const token = generateRsvpToken(p.id, booking_id)
           const inUrl = `${appUrl}/rsvp?booking=${booking_id}&player=${p.id}&status=in&token=${token}`
           const outUrl = `${appUrl}/rsvp?booking=${booking_id}&player=${p.id}&status=out&token=${token}`

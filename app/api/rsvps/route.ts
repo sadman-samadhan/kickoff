@@ -80,7 +80,7 @@ export async function POST(req: Request) {
         .eq('booking_id', booking_id)
         .eq('player_id', promoted.player_id)
 
-      if ((promoted.profiles as any)?.email && !(promoted.profiles as any).email.endsWith('@kickoff.local') && (promoted.profiles as any).email_notifications !== false) {
+      if ((promoted.profiles as any)?.email && !(promoted.profiles as any).email.endsWith('@khelahobe.local') && (promoted.profiles as any).email_notifications !== false) {
         await sendEmail({
           to: (promoted.profiles as any).email,
           subject: `🎉 You're In! A spot opened up — ${(booking.groups as any)?.name}`,

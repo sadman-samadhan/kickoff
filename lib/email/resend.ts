@@ -9,11 +9,11 @@ export interface EmailPayload {
 }
 
 export async function sendEmail({ to, subject, html }: EmailPayload): Promise<void> {
-  if (!to || to.endsWith('@kickoff.local')) return;
+  if (!to || to.endsWith('@khelahobe.local')) return;
   
   try {
     await resend.emails.send({
-      from: 'Kickoff App <onboarding@resend.dev>', 
+      from: 'KhelaHobe App <onboarding@resend.dev>', 
       to,
       subject,
       html

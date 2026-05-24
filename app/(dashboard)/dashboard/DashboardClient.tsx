@@ -3,6 +3,7 @@
 "use client"
 
 import React, { useState } from 'react'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Trophy, CheckCircle, XCircle, Plus, Calendar as CalendarIcon, MapPin, ChevronLeft, ChevronRight, Download, Users, X, Clock } from 'lucide-react'
 import Link from 'next/link'
@@ -106,7 +107,7 @@ export default function DashboardClient({
 
     const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//Kickoff App//EN
+PRODID:-//KhelaHobe App//EN
 BEGIN:VEVENT
 UID:${booking.id}
 DTSTAMP:${formatDate(new Date())}
@@ -114,7 +115,7 @@ DTSTART:${formatDate(start)}
 DTEND:${formatDate(end)}
 SUMMARY:Match - ${booking.groups?.name || 'Football Group'}
 LOCATION:${booking.field_name}
-DESCRIPTION:Kickoff match at ${booking.field_name}
+DESCRIPTION:KhelaHobe match at ${booking.field_name}
 END:VEVENT
 END:VCALENDAR`
 
@@ -148,7 +149,9 @@ END:VCALENDAR`
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100 flex flex-col items-center">
         <div className="relative mb-3">
           {profile?.avatar_url ? (
-            <img src={profile.avatar_url} alt="Profile" className="w-20 h-20 rounded-full object-cover border-4 border-green-50 shadow-sm" />
+            <div className="w-20 h-20 rounded-full border-4 border-green-50 shadow-sm relative overflow-hidden">
+              <Image src={profile.avatar_url} alt="Profile" fill sizes="80px" className="object-cover" />
+            </div>
           ) : (
             <div className="w-20 h-20 rounded-full bg-green-100 border-4 border-green-50 shadow-sm flex items-center justify-center text-green-700 font-bold text-2xl">
               {profile?.full_name?.charAt(0) || user?.email?.charAt(0) || 'P'}
