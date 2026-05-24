@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(req: Request, { params }: { params: { matchId: string } }) {
@@ -24,7 +24,8 @@ export async function GET(req: Request, { params }: { params: { matchId: string 
 
   if (!member) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { data: goals, error } = await supabase
+  const supabaseAdmin = createAdminClient()
+  const { data: goals, error } = await supabaseAdmin
     .from('goal_events')
     .select('*, scorer:profiles!scorer_id(*), assist:profiles!assist_id(*)')
     .eq('match_schedule_id', params.matchId)

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { generateLeagueSchedule, generateTournamentSchedule } from '@/lib/scheduleGenerator'
 
@@ -7,7 +7,8 @@ export async function GET(req: Request, { params }: { params: { bookingId: strin
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: schedule, error } = await supabase
+  const supabaseAdmin = createAdminClient()
+  const { data: schedule, error } = await supabaseAdmin
     .from('match_schedule')
     .select('*, home:teams!home_team_id(*), away:teams!away_team_id(*), goal_events(*, profiles!scorer_id(*), assist:profiles!assist_id(*))')
     .eq('booking_id', params.bookingId)

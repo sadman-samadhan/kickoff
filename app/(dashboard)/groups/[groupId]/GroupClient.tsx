@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, Shield, ChevronRight, X, Loader2, Copy, Trophy, UserMinus, ShieldCheck, LogOut, MessageCircle, Star } from 'lucide-react'
 import ChatTab from './ChatTab'
 import { Button } from '@/components/ui/button'
+import { useChatUnread } from '@/components/providers/ChatUnreadProvider'
 import { rsvpAction, addBookingAction, makeAdminAction, removeAdminAction, removeMemberAction, leaveGroupAction, deleteGroupAction } from './actions'
 
 interface Member {
@@ -61,6 +62,8 @@ export default function GroupClient({
   const [activeTab, setActiveTab] = useState<'matches' | 'chat' | 'squad'>(
     initialTab === 'chat' || initialTab === 'squad' ? initialTab : 'matches'
   )
+  const { unreadCounts, markAsRead } = useChatUnread()
+  const unreadCount = unreadCounts[group.id] || 0
 
   // Modals state
   const [isManageModalOpen, setIsManageModalOpen] = useState(false)
@@ -251,7 +254,7 @@ export default function GroupClient({
       <div className="flex bg-white rounded-2xl p-1 border border-neutral-100 shadow-sm">
         {[
           { key: 'matches' as const, label: 'Matches', icon: Calendar },
-          { key: 'chat' as const, label: 'Chat', icon: MessageCircle },
+          { key: 'chat' as const, label: 'Chat', icon: MessageCircle, badge: unreadCount },
           { key: 'squad' as const, label: 'Squad', icon: Users },
         ].map(tab => {
           const Icon = tab.icon
@@ -259,14 +262,26 @@ export default function GroupClient({
           return (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => {
+                setActiveTab(tab.key)
+                if (tab.key === 'chat') {
+                  markAsRead(group.id)
+                }
+              }}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all ${
                 isActive
                   ? 'bg-green-600 text-white shadow-sm'
                   : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-50'
               }`}
             >
-              <Icon className="w-4 h-4" />
+              <div className="relative">
+                <Icon className="w-4 h-4" />
+                {tab.badge ? (
+                  <span className="absolute -top-2 -right-3 bg-red-500 text-white text-[9px] font-bold px-1.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-full border-2 border-white">
+                    {tab.badge > 9 ? '9+' : tab.badge}
+                  </span>
+                ) : null}
+              </div>
               {tab.label}
             </button>
           )

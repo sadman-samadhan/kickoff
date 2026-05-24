@@ -7,22 +7,37 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Send, Loader2 } from 'lucide-react'
 
+import { useChatUnread } from '@/components/providers/ChatUnreadProvider'
+
 interface ChatMessage {
   id: string
   group_id: string
   sender_id: string
   content: string
   created_at: string
-  sender?: { full_name: string; avatar_url: string | null }
+  sender?: { full_name: string; username?: string; avatar_url: string | null }
 }
 
 export default function ChatTab({ groupId, userId }: { groupId: string; userId: string }) {
+  const { markAsRead } = useChatUnread()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
+
+  const [myProfile, setMyProfile] = useState<{ full_name: string; username?: string; avatar_url: string | null } | null>(null)
+  
+  useEffect(() => {
+    markAsRead(groupId)
+    // Fetch our own profile so we can inject it immediately when sending messages
+    const fetchMyProfile = async () => {
+      const { data } = await createClient().from('profiles').select('full_name, username, avatar_url').eq('id', userId).single()
+      if (data) setMyProfile(data)
+    }
+    fetchMyProfile()
+  }, [groupId, userId, markAsRead])
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -66,22 +81,26 @@ export default function ChatTab({ groupId, userId }: { groupId: string; userId: 
         },
         async (payload) => {
           const newMsg = payload.new as any
-          // Don't duplicate messages we just sent
+          
           setMessages(prev => {
             if (prev.some(m => m.id === newMsg.id)) return prev
-            // Fetch the sender profile inline
             return [...prev, {
               ...newMsg,
-              sender: newMsg.sender || { full_name: 'Player', avatar_url: null }
+              sender: { full_name: 'Loading...', avatar_url: null }
             }]
           })
           
-          // Fetch the sender info if we don't have it
-          if (!newMsg.sender && newMsg.sender_id !== userId) {
+          // Always fetch profile for Realtime events since they don't contain joins
+          if (newMsg.sender_id === userId && myProfile) {
+            // It's our own message, no need to fetch!
+            setMessages(prev => prev.map(m => 
+              m.id === newMsg.id ? { ...m, sender: myProfile } : m
+            ))
+          } else {
             try {
               const { data: profile } = await supabase
                 .from('profiles')
-                .select('full_name, avatar_url')
+                .select('full_name, username, avatar_url')
                 .eq('id', newMsg.sender_id)
                 .single()
               
@@ -89,11 +108,21 @@ export default function ChatTab({ groupId, userId }: { groupId: string; userId: 
                 setMessages(prev => prev.map(m => 
                   m.id === newMsg.id ? { ...m, sender: profile } : m
                 ))
+              } else {
+                setMessages(prev => prev.map(m => 
+                  m.id === newMsg.id ? { ...m, sender: { full_name: 'Player', avatar_url: null } } : m
+                ))
               }
             } catch (e) {
               console.error(e)
+              setMessages(prev => prev.map(m => 
+                m.id === newMsg.id ? { ...m, sender: { full_name: 'Player', avatar_url: null } } : m
+              ))
             }
           }
+          
+          // Since we are actively on the chat tab, mark as read immediately
+          markAsRead(groupId)
         }
       )
       .subscribe()
@@ -101,7 +130,7 @@ export default function ChatTab({ groupId, userId }: { groupId: string; userId: 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [groupId, userId])
+  }, [groupId, userId, myProfile, markAsRead])
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -119,10 +148,17 @@ export default function ChatTab({ groupId, userId }: { groupId: string; userId: 
       })
       const data = await res.json()
       if (data.id) {
+        if (!data.sender && myProfile) {
+          data.sender = myProfile
+        }
         setMessages(prev => {
-          if (prev.some(m => m.id === data.id)) return prev
+          const exists = prev.find(m => m.id === data.id)
+          if (exists) {
+            return prev.map(m => m.id === data.id ? data : m)
+          }
           return [...prev, data]
         })
+        markAsRead(groupId)
       }
     } catch (e) {
       console.error('Failed to send message', e)
@@ -168,19 +204,23 @@ export default function ChatTab({ groupId, userId }: { groupId: string; userId: 
             <p className="text-sm text-neutral-500">Be the first to say something!</p>
           </div>
         ) : (
-          messages.map((msg) => {
+          messages.map((msg: any) => {
             const isMe = msg.sender_id === userId
+            const senderInfo = msg.sender || msg.profiles
+            const displayName = senderInfo?.full_name || senderInfo?.username || 'Player'
+            const avatarUrl = senderInfo?.avatar_url
+            
             return (
               <div key={msg.id} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
                 {!isMe && (
                   <div className="shrink-0 mt-1">
-                    {msg.sender?.avatar_url ? (
+                    {avatarUrl ? (
                       <div className="w-8 h-8 rounded-full border border-neutral-100 overflow-hidden relative">
-                        <Image src={msg.sender.avatar_url} alt="" fill sizes="32px" className="object-cover" />
+                        <Image src={avatarUrl} alt="" fill sizes="32px" className="object-cover" />
                       </div>
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-xs border border-green-200">
-                        {msg.sender?.full_name?.charAt(0) || '?'}
+                      <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-xs border border-green-200 uppercase">
+                        {displayName.charAt(0)}
                       </div>
                     )}
                   </div>
@@ -188,7 +228,7 @@ export default function ChatTab({ groupId, userId }: { groupId: string; userId: 
                 <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
                   {!isMe && (
                     <p className="text-[10px] font-bold text-neutral-400 mb-0.5 ml-1">
-                      {msg.sender?.full_name || 'Player'}
+                      {displayName}
                     </p>
                   )}
                   <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${

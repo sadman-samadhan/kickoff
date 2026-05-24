@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request, { params }: { params: { groupId: string } }) {
   const supabase = createClient()
@@ -10,9 +12,10 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
   const limit = parseInt(searchParams.get('limit') || '50')
   const before = searchParams.get('before') // cursor-based pagination
 
-  let query = supabase
+  const supabaseAdmin = createAdminClient()
+  let query = supabaseAdmin
     .from('group_messages')
-    .select('*, sender:profiles!sender_id(full_name, avatar_url)')
+    .select('*, profiles(full_name, username, avatar_url)')
     .eq('group_id', params.groupId)
     .order('created_at', { ascending: false })
     .limit(limit)
@@ -25,7 +28,14 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json(data?.reverse() || [])
+  const formattedData = (data?.reverse() || []).map(msg => ({
+    ...msg,
+    sender: Array.isArray(msg.profiles) ? msg.profiles[0] : msg.profiles
+  }))
+
+  console.log("FORMATTED MESSAGES PREVIEW:", JSON.stringify(formattedData.slice(0,2), null, 2))
+
+  return NextResponse.json(formattedData)
 }
 
 export async function POST(req: Request, { params }: { params: { groupId: string } }) {
@@ -47,10 +57,15 @@ export async function POST(req: Request, { params }: { params: { groupId: string
       sender_id: user.id,
       content: content.trim()
     })
-    .select('*, sender:profiles!sender_id(full_name, avatar_url)')
+    .select('*, profiles(full_name, username, avatar_url)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  
+  const formattedData = {
+    ...data,
+    sender: data.profiles
+  }
 
-  return NextResponse.json(data)
+  return NextResponse.json(formattedData)
 }

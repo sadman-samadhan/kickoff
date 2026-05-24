@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 export async function GET(req: Request, { params }: { params: { postId: string } }) {
   const supabase = createClient()
@@ -7,18 +7,19 @@ export async function GET(req: Request, { params }: { params: { postId: string }
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // Get the post
-  const { data: post, error: postError } = await supabase
+  const supabaseAdmin = createAdminClient()
+  const { data: post, error: postError } = await supabaseAdmin
     .from('forum_posts')
-    .select('*, author:profiles!author_id(full_name, avatar_url)')
+    .select('*, author:profiles!author_id(full_name, username, avatar_url)')
     .eq('id', params.postId)
     .single()
 
   if (postError) return NextResponse.json({ error: postError.message }, { status: 404 })
 
   // Get comments
-  const { data: comments, error: commentsError } = await supabase
+  const { data: comments, error: commentsError } = await supabaseAdmin
     .from('forum_comments')
-    .select('*, author:profiles!author_id(full_name, avatar_url)')
+    .select('*, author:profiles!author_id(full_name, username, avatar_url)')
     .eq('post_id', params.postId)
     .order('created_at', { ascending: true })
 
