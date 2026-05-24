@@ -31,6 +31,7 @@ export const metadata: Metadata = {
 };
 
 import { TopLoaderProvider } from '@/components/providers/TopLoaderProvider';
+import { ChatUnreadProvider } from '@/components/providers/ChatUnreadProvider';
 import Image from 'next/image';
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -57,7 +58,9 @@ export default function RootLayout({
           />
         </div>
         <TopLoaderProvider>
-          {children}
+          <ChatUnreadProvider>
+            {children}
+          </ChatUnreadProvider>
         </TopLoaderProvider>
         <SpeedInsights />
       </body>

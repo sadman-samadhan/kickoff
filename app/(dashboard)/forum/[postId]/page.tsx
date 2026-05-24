@@ -118,7 +118,7 @@ export default function ForumPostPage({ params }: { params: { postId: string } }
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-neutral-900 text-sm">{post.author?.full_name || 'Player'}</p>
+            <p className="font-bold text-neutral-900 text-sm">{post.author?.full_name || post.author?.username || 'Player'}</p>
             <p className="text-[10px] text-neutral-400">{formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}</p>
           </div>
           <button onClick={() => setIsDeleteModalOpen(true)} className="p-2 rounded-lg hover:bg-red-50 text-neutral-400 hover:text-red-500 transition-colors">
@@ -159,7 +159,7 @@ export default function ForumPostPage({ params }: { params: { postId: string } }
                     </div>
                   )}
                   <div>
-                    <p className="font-bold text-neutral-800 text-xs leading-none">{comment.author?.full_name || 'Player'}</p>
+                    <p className="font-bold text-neutral-800 text-xs leading-none">{comment.author?.full_name || comment.author?.username || 'Player'}</p>
                     <p className="text-[9px] text-neutral-400 mt-0.5">{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</p>
                   </div>
                 </div>

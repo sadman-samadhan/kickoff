@@ -147,7 +147,7 @@ export default function ForumPage() {
                         {getCategoryLabel(post.category)}
                       </span>
                       <span className="text-[10px] text-neutral-400">
-                        {post.author?.full_name} · {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+                        {post.author?.full_name || post.author?.username || 'Player'} · {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
                       </span>
                       <span className="text-[10px] text-neutral-400 flex items-center gap-1 ml-auto">
                         <MessageSquare className="w-3 h-3" /> {post.comment_count || 0}

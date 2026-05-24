@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 export async function GET(req: Request) {
   const supabase = createClient()
@@ -12,9 +12,10 @@ export async function GET(req: Request) {
   const limit = parseInt(searchParams.get('limit') || '20')
   const offset = parseInt(searchParams.get('offset') || '0')
 
-  let query = supabase
+  const supabaseAdmin = createAdminClient()
+  let query = supabaseAdmin
     .from('forum_posts')
-    .select('*, author:profiles!author_id(full_name, avatar_url)')
+    .select('*, author:profiles!author_id(full_name, username, avatar_url)')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 

@@ -5,8 +5,10 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { MessageCircle, Loader2, Users } from 'lucide-react'
+import { useChatUnread } from '@/components/providers/ChatUnreadProvider'
 
 export default function MessagesPage() {
+  const { unreadCounts } = useChatUnread()
   const [groups, setGroups] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -47,23 +49,36 @@ export default function MessagesPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {groups.map((group: any) => (
-            <Link href={`/groups/${group.id}?tab=chat`} key={group.id}>
-              <div className="bg-white rounded-2xl p-4 border border-neutral-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow active:scale-[0.98]">
-                <div className="w-12 h-12 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-lg border border-green-200 shrink-0">
-                  {group.name?.charAt(0) || 'G'}
+          {groups.map((group: any) => {
+            const unread = unreadCounts[group.id] || 0
+            
+            return (
+              <Link href={`/groups/${group.id}?tab=chat`} key={group.id}>
+                <div className="bg-white rounded-2xl p-4 border border-neutral-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow active:scale-[0.98]">
+                  <div className="w-12 h-12 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-lg border border-green-200 shrink-0 relative">
+                    {group.name?.charAt(0) || 'G'}
+                    {unread > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full border-2 border-white">
+                        {unread > 9 ? '9+' : unread}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className={`text-sm truncate ${unread > 0 ? 'font-black text-neutral-900' : 'font-bold text-neutral-800'}`}>
+                      {group.name}
+                    </h3>
+                    <p className="text-xs text-neutral-500 flex items-center gap-1 mt-0.5">
+                      <Users className="w-3 h-3" />
+                      {group.member_count || 0} members
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center relative">
+                    <MessageCircle className={`w-5 h-5 ${unread > 0 ? 'text-green-600 fill-green-50' : 'text-neutral-400'}`} />
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-neutral-900 text-sm truncate">{group.name}</h3>
-                  <p className="text-xs text-neutral-500 flex items-center gap-1 mt-0.5">
-                    <Users className="w-3 h-3" />
-                    {group.member_count || 0} members
-                  </p>
-                </div>
-                <MessageCircle className="w-5 h-5 text-neutral-400 shrink-0" />
-              </div>
-            </Link>
-          ))}
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>
