@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Users, Clock, User } from 'lucide-react'
+import { Home, Users, MessageCircle, MessagesSquare, User } from 'lucide-react'
 
 const tabs = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home },
+  { name: 'Home', href: '/dashboard', icon: Home },
   { name: 'Groups', href: '/groups', icon: Users },
-  { name: 'History', href: '/match-history', icon: Clock },
+  { name: 'Messages', href: '/messages', icon: MessageCircle },
+  { name: 'Forum', href: '/forum', icon: MessagesSquare },
   { name: 'Profile', href: '/profile', icon: User },
 ]
 

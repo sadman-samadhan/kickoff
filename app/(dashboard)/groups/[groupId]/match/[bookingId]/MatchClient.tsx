@@ -5,12 +5,13 @@
 
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal } from 'lucide-react'
+import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { rsvpAction } from '../../actions'
 import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction } from './actions'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import ConfirmModal from '@/components/modals/ConfirmModal'
 
 const PRESET_COLORS = [
   { label: 'Red', value: '#ef4444' },
@@ -77,6 +78,15 @@ export default function MatchClient({
   const [editTeamForm, setEditTeamForm] = useState<{ name: string, jerseyColor: string, captainId: string, playerIds: string[] } | null>(null)
   const [isEditTeamLoading, setIsEditTeamLoading] = useState(false)
 
+  // Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    confirmText?: string
+    onConfirm: () => void
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} })
+
   const handleStartEditTeam = (team: any) => {
     setEditingTeamId(team.id)
     setEditTeamForm({
@@ -99,12 +109,19 @@ export default function MatchClient({
     finally { setIsEditTeamLoading(false) }
   }
 
-  const handleDeleteTeam = async (teamId: string) => {
-    if (!confirm('Delete this team?')) return
-    try {
-      await deleteTeamAction(teamId, booking.id, groupId)
-      router.refresh()
-    } catch (e) { console.error(e) }
+  const handleDeleteTeam = (teamId: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Team',
+      message: 'Are you sure you want to delete this team?',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          await deleteTeamAction(teamId, booking.id, groupId)
+          router.refresh()
+        } catch (e) { console.error(e) }
+      }
+    })
   }
 
   // Assign Player to Team State
@@ -218,6 +235,13 @@ export default function MatchClient({
   const [cancelReason, setCancelReason] = useState('Field flooded')
   const [cancelReasonOther, setCancelReasonOther] = useState('')
   
+  // Field Rating State
+  const [fieldRating, setFieldRating] = useState(0)
+  const [fieldReview, setFieldReview] = useState('')
+  const [isRatingLoading, setIsRatingLoading] = useState(false)
+  const [hasRated, setHasRated] = useState(false)
+  const [ratingHover, setRatingHover] = useState(0)
+  
   const canCancel = userRole === 'admin' || currentUser.id === booking.created_by
   const matchDateTimeStr = `${booking.match_date}T${booking.match_time || '00:00:00'}`
   const matchStartTime = new Date(matchDateTimeStr).getTime()
@@ -274,13 +298,20 @@ export default function MatchClient({
     }
   }
 
-  const handleReschedule = async () => {
-    if (!confirm('Are you sure you want to delete the current schedule and create a new one? All scores and goal events will be lost.')) return
-    try {
-      await rescheduleMatchesAction(booking.id, groupId)
-    } catch (e) {
-      console.error(e)
-    }
+  const handleReschedule = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Reschedule Matches',
+      message: 'Are you sure you want to delete the current schedule and create a new one? All scores and goal events will be lost.',
+      confirmText: 'Reschedule',
+      onConfirm: async () => {
+        try {
+          await rescheduleMatchesAction(booking.id, groupId)
+        } catch (e) {
+          console.error(e)
+        }
+      }
+    })
   }
 
   const handleExpandMatch = (match: any) => {
@@ -360,14 +391,21 @@ export default function MatchClient({
     }
   }
 
-  const handleDeleteGoal = async (goalId: string, matchId: string) => {
-    if (!confirm('Delete goal?')) return
-    try {
-      await fetch(`/api/matches/${matchId}/goals/${goalId}`, { method: 'DELETE' })
-      router.refresh()
-    } catch (e) {
-      console.error(e)
-    }
+  const handleDeleteGoal = (goalId: string, matchId: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Goal',
+      message: 'Are you sure you want to delete this goal?',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/matches/${matchId}/goals/${goalId}`, { method: 'DELETE' })
+          router.refresh()
+        } catch (e) {
+          console.error(e)
+        }
+      }
+    })
   }
 
   const handleCancelMatch = async () => {
@@ -956,6 +994,104 @@ export default function MatchClient({
         </div>
       )}
 
+      {/* 6. FIELD RATING (post-match) */}
+      {(displayStatus === 'history' || displayStatus === 'ongoing') && !hasRated && (
+        <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-neutral-100 bg-amber-50/50">
+            <h3 className="font-bold text-neutral-900 flex items-center gap-2">
+              <Star className="w-5 h-5 text-amber-500" />
+              Rate the Field
+            </h3>
+            <p className="text-xs text-neutral-500 mt-1">How was <strong>{booking.field_name}</strong>? Your rating helps others!</p>
+          </div>
+          <div className="p-5">
+            <div className="flex justify-center gap-2 mb-4">
+              {[1, 2, 3, 4, 5].map(star => (
+                <button
+                  key={star}
+                  type="button"
+                  onMouseEnter={() => setRatingHover(star)}
+                  onMouseLeave={() => setRatingHover(0)}
+                  onClick={() => setFieldRating(star)}
+                  className="transition-transform hover:scale-110 active:scale-95"
+                >
+                  <Star
+                    className={`w-10 h-10 transition-colors ${
+                      star <= (ratingHover || fieldRating)
+                        ? 'text-amber-400 fill-amber-400'
+                        : 'text-neutral-200'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+            {fieldRating > 0 && (
+              <p className="text-center text-sm font-bold text-amber-700 mb-4">
+                {fieldRating === 1 && '😞 Poor'}
+                {fieldRating === 2 && '😐 Below Average'}
+                {fieldRating === 3 && '🙂 Average'}
+                {fieldRating === 4 && '😊 Good'}
+                {fieldRating === 5 && '🤩 Excellent!'}
+              </p>
+            )}
+            <textarea
+              placeholder="Any comments about the field? (optional)"
+              className="w-full px-4 py-3 border border-neutral-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-sm resize-none min-h-[80px] mb-4"
+              value={fieldReview}
+              onChange={e => setFieldReview(e.target.value)}
+              maxLength={500}
+            />
+            <Button
+              disabled={fieldRating === 0 || isRatingLoading}
+              className="w-full h-12 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold"
+              onClick={async () => {
+                if (fieldRating === 0) return
+                setIsRatingLoading(true)
+                try {
+                  // First ensure field exists
+                  const fieldRes = await fetch('/api/fields', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name: booking.field_name,
+                      google_maps_url: booking.google_maps_url
+                    })
+                  })
+                  const fieldData = await fieldRes.json()
+                  const fieldId = fieldData.id
+
+                  if (fieldId) {
+                    await fetch(`/api/fields/${fieldId}/rate`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        booking_id: booking.id,
+                        rating: fieldRating,
+                        review: fieldReview.trim() || null
+                      })
+                    })
+                    setHasRated(true)
+                  }
+                } catch (e) {
+                  console.error(e)
+                } finally {
+                  setIsRatingLoading(false)
+                }
+              }}
+            >
+              {isRatingLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Submit Rating'}
+            </Button>
+          </div>
+        </div>
+      )}
+      {hasRated && (
+        <div className="bg-green-50 rounded-2xl p-5 border border-green-100 text-center">
+          <Star className="w-8 h-8 text-green-600 fill-green-600 mx-auto mb-2" />
+          <p className="font-bold text-green-800">Thanks for rating!</p>
+          <p className="text-xs text-green-600 mt-1">Your feedback helps the community.</p>
+        </div>
+      )}
+
       {/* ADD GOAL MODAL */}
       {isAddGoalOpen && expandedMatchId && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4">
@@ -1208,6 +1344,15 @@ export default function MatchClient({
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   )
 }

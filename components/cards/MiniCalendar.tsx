@@ -32,11 +32,11 @@ function generateIcs(b: Booking): string {
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//KickOff//EN',
+    'PRODID:-//KhelaHobe//EN',
     'BEGIN:VEVENT',
     `DTSTART:${dtStart}`,
     `DTEND:${dtEnd}`,
-    `SUMMARY:${b.group_name || 'KickOff'} Match`,
+    `SUMMARY:${b.group_name || 'KhelaHobe'} Match`,
     `LOCATION:${b.field_name}`,
     `DESCRIPTION:${b.google_maps_url || ''}`,
     'END:VEVENT',

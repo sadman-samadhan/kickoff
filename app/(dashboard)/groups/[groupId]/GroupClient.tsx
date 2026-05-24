@@ -3,10 +3,12 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { format, parseISO } from 'date-fns'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, Shield, ChevronRight, X, Loader2, Copy, Trophy, UserMinus, ShieldCheck, LogOut } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, Shield, ChevronRight, X, Loader2, Copy, Trophy, UserMinus, ShieldCheck, LogOut, MessageCircle, Star } from 'lucide-react'
+import ChatTab from './ChatTab'
 import { Button } from '@/components/ui/button'
 import { rsvpAction, addBookingAction, makeAdminAction, removeAdminAction, removeMemberAction, leaveGroupAction, deleteGroupAction } from './actions'
 
@@ -51,6 +53,15 @@ export default function GroupClient({
   pastBookings,
   userId
 }: GroupClientProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const initialTab = searchParams.get('tab') as 'matches' | 'chat' | 'squad' | null
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'matches' | 'chat' | 'squad'>(
+    initialTab === 'chat' || initialTab === 'squad' ? initialTab : 'matches'
+  )
+
   // Modals state
   const [isManageModalOpen, setIsManageModalOpen] = useState(false)
   const [isAddBookingOpen, setIsAddBookingOpen] = useState(false)
@@ -72,6 +83,11 @@ export default function GroupClient({
   const [isBookingLoading, setIsBookingLoading] = useState(false)
   const [bookingError, setBookingError] = useState('')
 
+  // Field autocomplete
+  const [fieldSuggestions, setFieldSuggestions] = useState<any[]>([])
+  const [showFieldDropdown, setShowFieldDropdown] = useState(false)
+  const [fieldSearchTimeout, setFieldSearchTimeout] = useState<NodeJS.Timeout | null>(null)
+
   // Member stats
   const [memberStats, setMemberStats] = useState<Record<string, { goals: number, assists: number, clean_sheets: number }>>({})
   const [statsLoading, setStatsLoading] = useState(true)
@@ -84,8 +100,6 @@ export default function GroupClient({
   const [isLeaveWarningOpen, setIsLeaveWarningOpen] = useState(false)
   const [isDeleteGroupModalOpen, setIsDeleteGroupModalOpen] = useState(false)
   const [adminActionLoading, setAdminActionLoading] = useState(false)
-
-  const router = useRouter()
 
   useEffect(() => {
     async function fetchStats() {
@@ -233,6 +247,39 @@ export default function GroupClient({
         </div>
       </div>
 
+      {/* TAB NAVIGATION */}
+      <div className="flex bg-white rounded-2xl p-1 border border-neutral-100 shadow-sm">
+        {[
+          { key: 'matches' as const, label: 'Matches', icon: Calendar },
+          { key: 'chat' as const, label: 'Chat', icon: MessageCircle },
+          { key: 'squad' as const, label: 'Squad', icon: Users },
+        ].map(tab => {
+          const Icon = tab.icon
+          const isActive = activeTab === tab.key
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                isActive
+                  ? 'bg-green-600 text-white shadow-sm'
+                  : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-50'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* CHAT TAB */}
+      {activeTab === 'chat' && (
+        <ChatTab groupId={group.id} userId={userId} />
+      )}
+
+      {/* MATCHES TAB */}
+      {activeTab === 'matches' && (<>
       {/* 2. NEXT MATCH CARD */}
       {nextMatch ? (
         <div className="bg-white rounded-3xl p-5 shadow-lg shadow-neutral-200/50 border border-neutral-100 relative overflow-hidden">
@@ -310,78 +357,7 @@ export default function GroupClient({
         </div>
       )}
 
-      {/* 3. MEMBERS TABLE */}
-      <div>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="font-bold text-neutral-900 text-lg">Squad</h3>
-          <span className="text-xs font-bold text-neutral-400">{members.length} Total</span>
-        </div>
-        <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
-          {/* Table Header */}
-          <div className="grid grid-cols-[1fr_40px_40px_40px] gap-2 px-4 py-2.5 border-b border-neutral-100 bg-neutral-50">
-            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Player</span>
-            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider text-center" title="Goals">G</span>
-            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider text-center" title="Assists">A</span>
-            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider text-center" title="Clean Sheets">CS</span>
-          </div>
 
-          {/* Table Rows */}
-          {members.map((member: Member) => {
-            const stats = memberStats[member.id]
-            return (
-              <div
-                key={member.id}
-                onClick={() => {
-                  if (role === 'admin' && member.id !== userId) {
-                    setSelectedMember(member)
-                    setIsAdminActionOpen(true)
-                  }
-                }}
-                className={`grid grid-cols-[1fr_40px_40px_40px] gap-2 px-4 py-3 border-b border-neutral-50 last:border-b-0 items-center ${
-                  role === 'admin' && member.id !== userId ? 'cursor-pointer active:bg-neutral-50 transition-colors' : ''
-                }`}
-              >
-                {/* Player Info */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="relative shrink-0">
-                    {member.avatar_url ? (
-                      <img src={member.avatar_url} alt={member.full_name} className="w-9 h-9 rounded-full object-cover border border-neutral-200" />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-sm border border-green-200">
-                        {member.full_name?.charAt(0) || 'P'}
-                      </div>
-                    )}
-                    {member.role === 'admin' && (
-                      <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-[1px] shadow-sm">
-                        <Shield className="w-3 h-3 text-green-600 fill-green-50" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-sm font-bold text-neutral-800 truncate block">{member.full_name?.split(' ')[0] || 'Player'}</span>
-                    <span className="text-[10px] font-semibold text-neutral-400">{member.preferred_position || 'N/A'}</span>
-                  </div>
-                </div>
-
-                {/* Stats */}
-                {statsLoading ? (
-                  <>
-                    <span className="text-center text-xs text-neutral-300">-</span>
-                    <span className="text-center text-xs text-neutral-300">-</span>
-                    <span className="text-center text-xs text-neutral-300">-</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-center text-sm font-bold text-neutral-700">{stats?.goals ?? 0}</span>
-                    <span className="text-center text-sm font-bold text-neutral-700">{stats?.assists ?? 0}</span>
-                    <span className="text-center text-sm font-bold text-neutral-700">{stats?.clean_sheets ?? 0}</span>
-                  </>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
 
       {/* 4 & 5. FUTURE BOOKINGS */}
       {futureBookings.length > 0 && (
@@ -440,6 +416,87 @@ export default function GroupClient({
             ))}
           </div>
         </div>
+      )}
+      </>)}
+
+      {/* SQUAD TAB */}
+      {activeTab === 'squad' && (
+      <>
+      {/* 3. MEMBERS TABLE */}
+      <div>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="font-bold text-neutral-900 text-lg">Squad</h3>
+          <span className="text-xs font-bold text-neutral-400">{members.length} Total</span>
+        </div>
+        <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+          {/* Table Header */}
+          <div className="grid grid-cols-[1fr_40px_40px_40px] gap-2 px-4 py-2.5 border-b border-neutral-100 bg-neutral-50">
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Player</span>
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider text-center" title="Goals">G</span>
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider text-center" title="Assists">A</span>
+            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider text-center" title="Clean Sheets">CS</span>
+          </div>
+
+          {/* Table Rows */}
+          {members.map((member: Member) => {
+            const stats = memberStats[member.id]
+            return (
+              <div
+                key={member.id}
+                onClick={() => {
+                  if (role === 'admin' && member.id !== userId) {
+                    setSelectedMember(member)
+                    setIsAdminActionOpen(true)
+                  }
+                }}
+                className={`grid grid-cols-[1fr_40px_40px_40px] gap-2 px-4 py-3 border-b border-neutral-50 last:border-b-0 items-center ${
+                  role === 'admin' && member.id !== userId ? 'cursor-pointer active:bg-neutral-50 transition-colors' : ''
+                }`}
+              >
+                {/* Player Info */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative shrink-0">
+                    {member.avatar_url ? (
+                      <div className="w-9 h-9 rounded-full border border-neutral-200 overflow-hidden relative">
+                        <Image src={member.avatar_url} alt={member.full_name || "Player"} fill sizes="36px" className="object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-sm border border-green-200">
+                        {member.full_name?.charAt(0) || 'P'}
+                      </div>
+                    )}
+                    {member.role === 'admin' && (
+                      <div className="absolute -bottom-0.5 -right-0.5 bg-white rounded-full p-[1px] shadow-sm">
+                        <Shield className="w-3 h-3 text-green-600 fill-green-50" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-sm font-bold text-neutral-800 truncate block">{member.full_name?.split(' ')[0] || 'Player'}</span>
+                    <span className="text-[10px] font-semibold text-neutral-400">{member.preferred_position || 'N/A'}</span>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                {statsLoading ? (
+                  <>
+                    <span className="text-center text-xs text-neutral-300">-</span>
+                    <span className="text-center text-xs text-neutral-300">-</span>
+                    <span className="text-center text-xs text-neutral-300">-</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-center text-sm font-bold text-neutral-700">{stats?.goals ?? 0}</span>
+                    <span className="text-center text-sm font-bold text-neutral-700">{stats?.assists ?? 0}</span>
+                    <span className="text-center text-sm font-bold text-neutral-700">{stats?.clean_sheets ?? 0}</span>
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      </>
       )}
 
       {/* LEAVE GROUP BUTTON */}
@@ -546,7 +603,7 @@ export default function GroupClient({
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 relative">
                   <label className="text-sm font-semibold text-neutral-700">Field Name</label>
                   <input
                     type="text"
@@ -554,8 +611,66 @@ export default function GroupClient({
                     placeholder="e.g. Wembley Arena"
                     className="w-full px-4 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm"
                     value={bookingForm.fieldName}
-                    onChange={e => setBookingForm({ ...bookingForm, fieldName: e.target.value })}
+                    onChange={e => {
+                      const val = e.target.value
+                      setBookingForm({ ...bookingForm, fieldName: val })
+                      if (fieldSearchTimeout) clearTimeout(fieldSearchTimeout)
+                      if (val.trim().length >= 2) {
+                        const timeout = setTimeout(async () => {
+                          try {
+                            const res = await fetch(`/api/fields?q=${encodeURIComponent(val.trim())}`)
+                            const data = await res.json()
+                            if (Array.isArray(data)) {
+                              setFieldSuggestions(data)
+                              setShowFieldDropdown(data.length > 0)
+                            }
+                          } catch (err) { console.error(err) }
+                        }, 300)
+                        setFieldSearchTimeout(timeout)
+                      } else {
+                        setFieldSuggestions([])
+                        setShowFieldDropdown(false)
+                      }
+                    }}
+                    onFocus={() => fieldSuggestions.length > 0 && setShowFieldDropdown(true)}
+                    autoComplete="off"
                   />
+                  {/* Field autocomplete dropdown */}
+                  {showFieldDropdown && fieldSuggestions.length > 0 && (
+                    <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {fieldSuggestions.map((field: any) => (
+                        <button
+                          key={field.id}
+                          type="button"
+                          onClick={() => {
+                            setBookingForm({
+                              ...bookingForm,
+                              fieldName: field.name,
+                              googleMapsUrl: field.google_maps_url || bookingForm.googleMapsUrl
+                            })
+                            setShowFieldDropdown(false)
+                          }}
+                          className="w-full text-left px-4 py-3 hover:bg-green-50 transition-colors border-b border-neutral-50 last:border-b-0 flex items-center justify-between"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-bold text-neutral-800 truncate">{field.name}</div>
+                            {field.google_maps_url && (
+                              <div className="text-[10px] text-neutral-400 flex items-center gap-1 mt-0.5">
+                                <MapPin className="w-3 h-3" /> Map location available
+                              </div>
+                            )}
+                          </div>
+                          {field.avg_rating && (
+                            <div className="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-lg border border-amber-100 shrink-0 ml-2">
+                              <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                              <span className="text-xs font-bold text-amber-700">{field.avg_rating}</span>
+                              <span className="text-[9px] text-amber-500">({field.rating_count})</span>
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">

@@ -79,7 +79,7 @@ export async function POST(req: Request, { params }: { params: { bookingId: stri
 
   if (profiles) {
     Promise.all(profiles.map(async (p) => {
-      if (p.email && !p.email.endsWith('@kickoff.local') && p.email_notifications !== false) {
+      if (p.email && !p.email.endsWith('@khelahobe.local') && p.email_notifications !== false) {
         await sendEmail({
           to: p.email,
           subject: `❌ Match Cancelled — ${groupName}`,

@@ -3,17 +3,19 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Goal, Target, Shield, Activity, Camera, ChevronDown, ChevronUp, Loader2, X, Edit3, Settings, Trophy, LogOut, BellOff, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { Toast } from '@/components/ui/Toast'
+import StatShareCard from '@/components/cards/StatShareCard'
 
 const MAX_AVATAR_SIZE = 300
 
 function compressImage(file: File, maxSize = MAX_AVATAR_SIZE): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const img = new Image()
+    const img = new window.Image()
     img.onload = () => {
       const canvas = document.createElement('canvas')
       let width = img.width
@@ -170,7 +172,9 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
         <div className="relative mb-4">
           {profile.avatar_url ? (
-            <img src={profile.avatar_url} alt="Avatar" className="w-24 h-24 rounded-full object-cover shadow-md border-4 border-white z-10 relative" />
+            <div className="w-24 h-24 rounded-full shadow-md border-4 border-white z-10 relative overflow-hidden bg-white">
+              <Image src={profile.avatar_url} alt="Avatar" fill sizes="96px" className="object-cover" />
+            </div>
           ) : (
             <div className="w-24 h-24 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-4xl shadow-md border-4 border-white z-10 relative">
               {profile.full_name?.charAt(0)}
@@ -251,6 +255,17 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
               </div>
             </div>
             <p className="text-[10px] text-center text-neutral-400 font-bold uppercase tracking-wider">Across all groups</p>
+
+            {/* Share Stats Button */}
+            <StatShareCard
+              playerName={profile.full_name}
+              position={profile.preferred_position}
+              avatarUrl={profile.avatar_url}
+              goals={stats.goals}
+              assists={stats.assists}
+              cleanSheets={stats.clean_sheets}
+              matchesPlayed={stats.matches_played}
+            />
           </>
         ) : (
           <div className="text-center text-sm text-neutral-400 py-4">No stats available</div>

@@ -24,11 +24,11 @@ export default async function DashboardLayout({
 
   return (
     <Providers profile={profile}>
-      <div className="min-h-screen min-h-[100dvh] bg-slate-50">
+      <div className="min-h-screen min-h-[100dvh] bg-transparent">
         {/* ── Top Header Bar ── */}
         <header className="fixed top-0 left-0 right-0 h-14 bg-white/95 backdrop-blur-lg border-b border-neutral-100 flex items-center justify-between px-4 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <Link href="/dashboard" className="flex items-center">
-            <Image src="/icons/logo.png" alt="KickOff" width={40} height={40} className="rounded-lg" />
+            <Image src="/icons/logo.png" alt="KhelaHobe" width={40} height={40} className="rounded-lg" />
           </Link>
           <NotificationBell userId={user.id} />
         </header>

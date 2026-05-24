@@ -17,7 +17,7 @@ export function InstallPrompt() {
     if (window.matchMedia('(display-mode: standalone)').matches) return
 
     // Check if dismissed recently
-    const dismissed = localStorage.getItem('kickoff-install-dismissed')
+    const dismissed = localStorage.getItem('khelahobe-install-dismissed')
     if (dismissed) {
       const dismissedAt = parseInt(dismissed, 10)
       if (Date.now() - dismissedAt < 7 * 24 * 60 * 60 * 1000) return
@@ -44,7 +44,7 @@ export function InstallPrompt() {
   }
 
   const handleDismiss = () => {
-    localStorage.setItem('kickoff-install-dismissed', Date.now().toString())
+    localStorage.setItem('khelahobe-install-dismissed', Date.now().toString())
     setVisible(false)
   }
 
@@ -56,7 +56,7 @@ export function InstallPrompt() {
         <Download className="w-5 h-5 text-green-600" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold text-neutral-900">📲 Add KickOff to your home screen</p>
+        <p className="text-sm font-bold text-neutral-900">📲 Add KhelaHobe to your home screen</p>
         <p className="text-[11px] text-neutral-500">Get the best experience as a native app</p>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">

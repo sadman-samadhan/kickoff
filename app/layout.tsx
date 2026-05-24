@@ -17,18 +17,22 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "KickOff — Football Match Manager",
+  title: "KhelaHobe — Football Match Manager",
   description:
-    "Organize matches, track stats, and manage your football groups. KickOff is the ultimate tool for recreational football players.",
+    "Organize matches, track stats, and manage your football groups. KhelaHobe is the ultimate tool for recreational football players.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "KickOff",
+    title: "KhelaHobe",
   },
   other: {
     "apple-mobile-web-app-capable": "yes",
   },
 };
+
+import { TopLoaderProvider } from '@/components/providers/TopLoaderProvider';
+import Image from 'next/image';
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export default function RootLayout({
   children,
@@ -42,8 +46,20 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/logo.png" />
       </head>
-      <body className="font-sans antialiased bg-slate-50 text-neutral-900">
-        {children}
+      <body className="font-sans antialiased bg-slate-50 text-neutral-900 relative">
+        <div className="fixed inset-0 z-[-1] pointer-events-none opacity-[0.05] mix-blend-multiply">
+          <Image
+            src="/images/bg-stadium.png"
+            alt="Stadium Background"
+            fill
+            className="object-cover"
+            priority
+          />
+        </div>
+        <TopLoaderProvider>
+          {children}
+        </TopLoaderProvider>
+        <SpeedInsights />
       </body>
     </html>
   );

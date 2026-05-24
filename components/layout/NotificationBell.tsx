@@ -125,7 +125,7 @@ export function NotificationBell({ userId }: { userId: string }) {
                     
                     <div className="flex flex-col gap-1 pr-6">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-green-700 bg-green-100 px-1.5 py-0.5 rounded w-max mb-1">
-                        {n.group_name || 'Kickoff'}
+                        {n.group_name || 'KhelaHobe'}
                       </span>
                       <p className={`text-sm ${n.is_read ? 'text-neutral-600' : 'text-neutral-900 font-bold'}`}>
                         {n.message}

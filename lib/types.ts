@@ -156,3 +156,59 @@ export interface TopPerformers {
   top_playmaker: { player: Pick<Profile, 'full_name' | 'avatar_url'>; assists: number } | null
   top_defender: { player: Pick<Profile, 'full_name' | 'avatar_url'>; clean_sheets: number } | null
 }
+
+// ─── Group Message ───
+export interface GroupMessage {
+  id: string
+  group_id: string
+  sender_id: string
+  content: string
+  created_at: string
+  // Joined
+  sender?: Pick<Profile, 'full_name' | 'avatar_url'>
+}
+
+// ─── Forum ───
+export interface ForumPost {
+  id: string
+  author_id: string
+  title: string
+  content: string
+  category: 'general' | 'looking_for_players' | 'match_invite' | 'question' | 'announcement'
+  created_at: string
+  // Joined
+  author?: Pick<Profile, 'full_name' | 'avatar_url'>
+  comment_count?: number
+}
+
+export interface ForumComment {
+  id: string
+  post_id: string
+  author_id: string
+  content: string
+  created_at: string
+  // Joined
+  author?: Pick<Profile, 'full_name' | 'avatar_url'>
+}
+
+// ─── Field ───
+export interface Field {
+  id: string
+  name: string
+  google_maps_url: string | null
+  created_by: string | null
+  created_at: string
+  avg_rating?: number
+  rating_count?: number
+}
+
+// ─── Field Rating ───
+export interface FieldRating {
+  id: string
+  field_id: string
+  booking_id: string
+  user_id: string
+  rating: number
+  review: string | null
+  created_at: string
+}
