@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
   if (bookingData) {
     const groupName = (bookingData.groups as any)?.name || 'Group'
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://khelahbe.vercel.app/'
 
     const playerIds = insertData.map(d => d.player_id)
     const { data: profiles } = await supabaseAdmin

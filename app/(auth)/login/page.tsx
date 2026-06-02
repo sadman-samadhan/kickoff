@@ -5,7 +5,8 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Trophy } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import Image from 'next/image'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -43,12 +44,12 @@ export default function LoginPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: emailToLogin })
         })
-        
+
         const data = await res.json()
         if (data.error || !data.email) {
           throw new Error('Incorrect username/email or password')
         }
-        
+
         emailToLogin = data.email
       }
 
@@ -75,9 +76,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-neutral-50 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md">
         <div className="flex justify-center mb-6">
-          <div className="bg-green-600 p-4 rounded-full shadow-lg shadow-green-600/20">
-            <Trophy className="w-8 h-8 text-white" />
-          </div>
+          <Image src="/icons/logo-removebg-preview.png" alt="Logo" width={160} height={160} className="object-contain" priority />
         </div>
 
         <Card className="border-0 shadow-xl shadow-neutral-200/50">

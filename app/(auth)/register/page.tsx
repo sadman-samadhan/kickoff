@@ -7,7 +7,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Upload, Trophy } from 'lucide-react'
+import { Loader2, Upload } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -182,9 +182,7 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-neutral-50 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md">
         <div className="flex justify-center mb-6">
-          <div className="bg-green-600 p-4 rounded-full shadow-lg shadow-green-600/20">
-            <Trophy className="w-8 h-8 text-white" />
-          </div>
+          <img src="/icons/logo-removebg-preview.png" alt="Logo" className="w-40 h-40 object-contain" />
         </div>
 
         <Card className="border-0 shadow-xl shadow-neutral-200/50">

@@ -141,6 +141,7 @@ END:VCALENDAR`
   }
 
   const selectedDateBookings = selectedDate ? getBookingsForDate(selectedDate) : []
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 max-w-xl mx-auto">
@@ -348,22 +349,43 @@ END:VCALENDAR`
             const isSelected = selectedDate && isSameDay(day, selectedDate)
             const isCurrentMonth = isSameMonth(day, currentMonth)
             const isTodayDate = isToday(day)
+            const dayKey = format(day, 'yyyy-MM-dd')
+            const isPast = dayKey < todayStr
+
+            let cellClass = 'aspect-square flex flex-col justify-center items-center rounded-xl text-sm relative cursor-pointer transition-colors '
+            if (!isCurrentMonth) {
+              cellClass += 'text-neutral-300 '
+            } else if (isSelected) {
+              cellClass += 'text-white font-bold '
+            } else if (isTodayDate) {
+              cellClass += 'text-green-600 font-bold '
+            } else {
+              cellClass += 'text-neutral-700 font-medium '
+            }
+
+            if (isSelected) {
+              cellClass += 'bg-green-600 shadow-md '
+            } else if (hasBooking) {
+              if (isPast) {
+                cellClass += 'bg-neutral-100 border border-neutral-200/60 hover:bg-neutral-200 text-neutral-600 font-medium '
+              } else {
+                cellClass += 'bg-amber-100 border border-amber-200 hover:bg-amber-200 text-amber-900 font-semibold '
+              }
+            } else if (isTodayDate) {
+              cellClass += 'bg-neutral-100 '
+            } else {
+              cellClass += 'hover:bg-neutral-50 '
+            }
 
             return (
               <div
                 key={i}
                 onClick={() => hasBooking && setSelectedDate(isSelected ? null : day)}
-                className={`
-                  aspect-square flex flex-col justify-center items-center rounded-xl text-sm relative cursor-pointer
-                  ${!isCurrentMonth ? 'text-neutral-300' : 'text-neutral-700 font-medium'}
-                  ${isSelected ? 'bg-green-600 text-white font-bold shadow-md' : ''}
-                  ${isTodayDate && !isSelected ? 'bg-neutral-100 text-green-600 font-bold' : ''}
-                  ${!isSelected && hasBooking ? 'hover:bg-green-50' : ''}
-                `}
+                className={cellClass}
               >
                 <span>{format(day, dateFormat)}</span>
                 {hasBooking && (
-                  <div className={`w-1.5 h-1.5 rounded-full absolute bottom-1.5 ${isSelected ? 'bg-white' : 'bg-green-500'}`}></div>
+                  <div className={`w-1.5 h-1.5 rounded-full absolute bottom-1.5 ${isSelected ? 'bg-white' : isPast ? 'bg-neutral-400' : 'bg-amber-500'}`}></div>
                 )}
               </div>
             )
@@ -385,33 +407,36 @@ END:VCALENDAR`
             </div>
 
             <div className="p-5 flex flex-col gap-4 max-h-[60vh] overflow-y-auto">
-              {selectedDateBookings.map((booking: Booking) => (
-                <div key={booking.id} className="border border-neutral-100 rounded-xl p-4 bg-white shadow-sm relative overflow-hidden">
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>
-                  <h4 className="font-bold text-neutral-900 mb-1">{booking.groups?.name}</h4>
-                  <div className="space-y-1 mb-4">
-                    <div className="flex items-center text-sm text-neutral-600">
-                      <Clock className="w-4 h-4 mr-2 text-neutral-400" />
-                      {booking.match_time.slice(0, 5)}
+              {selectedDateBookings.map((booking: Booking) => {
+                const isPastBooking = booking.match_date < todayStr
+                return (
+                  <div key={booking.id} className="border border-neutral-100 rounded-xl p-4 bg-white shadow-sm relative overflow-hidden">
+                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${isPastBooking ? 'bg-neutral-400' : 'bg-amber-500'}`}></div>
+                    <h4 className="font-bold text-neutral-900 mb-1">{booking.groups?.name}</h4>
+                    <div className="space-y-1 mb-4">
+                      <div className="flex items-center text-sm text-neutral-600">
+                        <Clock className="w-4 h-4 mr-2 text-neutral-400" />
+                        {booking.match_time.slice(0, 5)}
+                      </div>
+                      <div className="flex items-center text-sm text-neutral-600">
+                        <MapPin className="w-4 h-4 mr-2 text-neutral-400" />
+                        {booking.field_name}
+                      </div>
                     </div>
-                    <div className="flex items-center text-sm text-neutral-600">
-                      <MapPin className="w-4 h-4 mr-2 text-neutral-400" />
-                      {booking.field_name}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1 text-xs h-9 border-neutral-200" onClick={() => generateICS(booking)}>
-                      <Download className="w-3.5 h-3.5 mr-1.5" />
-                      Add to Calendar
-                    </Button>
-                    <Link href={`/groups/${booking.group_id}/match/${booking.id}`} className="flex-1">
-                      <Button className="w-full text-xs h-9 bg-green-600 hover:bg-green-700 text-white shadow-sm">
-                        View Match
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1 text-xs h-9 border-neutral-200" onClick={() => generateICS(booking)}>
+                        <Download className="w-3.5 h-3.5 mr-1.5" />
+                        Add to Calendar
                       </Button>
-                    </Link>
+                      <Link href={`/groups/${booking.group_id}/match/${booking.id}`} className="flex-1">
+                        <Button className={`w-full text-xs h-9 text-white shadow-sm ${isPastBooking ? 'bg-neutral-600 hover:bg-neutral-700' : 'bg-amber-600 hover:bg-amber-700'}`}>
+                          View Match
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>

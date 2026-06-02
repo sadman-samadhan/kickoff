@@ -65,6 +65,11 @@ export default function StatShareCard({
 
   const theme = position ? (POSITION_THEMES[position] || DEFAULT_THEME) : DEFAULT_THEME
 
+  const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://khelahbe.vercel.app/'
+  const displayDomain = siteUrl
+    .replace(/https?:\/\//, '')
+    .replace(/\/$/, '')
+
   const handleShare = async () => {
     if (!cardRef.current) return
     setIsGenerating(true)
@@ -250,7 +255,7 @@ export default function StatShareCard({
                   {/* Project URL */}
                   <div className="text-center mt-3">
                     <span className="text-[9px] font-bold uppercase tracking-widest text-white/20">
-                      khelahobe.vercel.app
+                      {displayDomain}
                     </span>
                   </div>
 

@@ -24,7 +24,7 @@ export async function addBookingAction(groupId: string, data: any) {
   if (error) throw new Error(error.message)
 
   // Fetch all group members to notify
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://khelahbe.vercel.app/'
   fetch(`${baseUrl}/api/notifications/send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
