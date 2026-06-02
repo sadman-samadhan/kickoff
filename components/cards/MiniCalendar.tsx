@@ -64,6 +64,9 @@ export function MiniCalendar({ bookings }: MiniCalendarProps) {
     return map
   }, [bookings])
 
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const isPastBooking = selectedBooking ? selectedBooking.match_date < todayStr : false
+
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(currentMonth)
   const calStart = startOfWeek(monthStart)
@@ -97,20 +100,35 @@ export function MiniCalendar({ bookings }: MiniCalendarProps) {
           const booking = bookingDates.get(key)
           const inMonth = isSameMonth(day, currentMonth)
           const isToday = isSameDay(day, new Date())
+          const isPast = key < todayStr
+
+          let buttonClass = 'relative flex flex-col items-center justify-center py-1.5 rounded-lg transition-colors '
+          if (booking) {
+            buttonClass += 'cursor-pointer '
+            if (isPast) {
+              buttonClass += 'bg-neutral-100 border border-neutral-200/60 hover:bg-neutral-200 text-neutral-600 font-medium '
+            } else {
+              buttonClass += 'bg-amber-100 text-amber-900 border border-amber-200 hover:bg-amber-200 font-semibold '
+            }
+          } else {
+            buttonClass += 'cursor-default '
+            if (isToday) {
+              buttonClass += 'bg-green-50 text-green-700 font-bold border border-green-200/50 '
+            } else {
+              buttonClass += inMonth ? 'text-neutral-700 hover:bg-neutral-50 ' : 'text-neutral-300 '
+            }
+          }
 
           return (
             <button
               key={key}
               onClick={() => booking && setSelectedBooking(booking)}
-              className={`
-                relative flex flex-col items-center justify-center py-1.5 rounded-lg transition-colors
-                ${inMonth ? 'text-neutral-700' : 'text-neutral-300'}
-                ${isToday ? 'bg-green-50 font-bold' : ''}
-                ${booking ? 'cursor-pointer hover:bg-green-50' : 'cursor-default'}
-              `}
+              className={buttonClass}
             >
               <span className="text-xs">{format(day, 'd')}</span>
-              {booking && <span className="absolute bottom-0.5 w-1 h-1 bg-green-500 rounded-full" />}
+              {booking && (
+                <span className={`absolute bottom-0.5 w-1 h-1 rounded-full ${isPast ? 'bg-neutral-400' : 'bg-amber-500'}`} />
+              )}
             </button>
           )
         })}
@@ -118,10 +136,10 @@ export function MiniCalendar({ bookings }: MiniCalendarProps) {
 
       {/* Popup */}
       {selectedBooking && (
-        <div className="absolute inset-x-3 bottom-3 bg-white rounded-xl border border-green-200 shadow-lg p-3 z-10">
+        <div className={`absolute inset-x-3 bottom-3 bg-white rounded-xl shadow-lg p-3 z-10 border ${isPastBooking ? 'border-neutral-200' : 'border-amber-200'}`}>
           <div className="flex justify-between items-start mb-2">
             <div>
-              <span className="text-[10px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded">
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isPastBooking ? 'text-neutral-600 bg-neutral-100' : 'text-amber-700 bg-amber-50'}`}>
                 {selectedBooking.group_name || 'Match'}
               </span>
               <p className="text-sm font-bold text-neutral-900 mt-1">
@@ -135,7 +153,7 @@ export function MiniCalendar({ bookings }: MiniCalendarProps) {
           </div>
           <button
             onClick={() => downloadIcs(selectedBooking)}
-            className="w-full bg-green-600 text-white text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1.5 hover:bg-green-700 active:scale-95 transition-all"
+            className={`w-full text-white text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all ${isPastBooking ? 'bg-neutral-600 hover:bg-neutral-700' : 'bg-amber-600 hover:bg-amber-700'}`}
           >
             <Download className="w-3.5 h-3.5" /> Add to Calendar
           </button>

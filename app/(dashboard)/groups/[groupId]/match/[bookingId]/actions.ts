@@ -325,3 +325,78 @@ export async function rescheduleMatchesAction(bookingId: string, groupId: string
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
   return { success: true }
 }
+
+export async function adminRemoveRsvpAction(bookingId: string, groupId: string, rsvpId: string) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { data: callerMembership } = await admin
+    .from('group_members')
+    .select('role')
+    .eq('group_id', groupId)
+    .eq('player_id', user.id)
+    .single()
+
+  if (callerMembership?.role !== 'admin') throw new Error('Only admins can remove players')
+
+  const { data: targetRsvp } = await admin.from('rsvps').select('*').eq('id', rsvpId).single()
+  if (!targetRsvp) throw new Error('RSVP not found')
+
+  const wasStatus = targetRsvp.status
+
+  // Remove player/guest from any existing teams for this booking
+  const { data: teams } = await admin.from('teams').select('id, guest_members').eq('booking_id', bookingId)
+  
+  if (targetRsvp.player_id) {
+    const teamIds = teams?.map(t => t.id) || []
+    if (teamIds.length > 0) {
+      await admin.from('team_players').delete().eq('player_id', targetRsvp.player_id).in('team_id', teamIds)
+    }
+  } else if (targetRsvp.guest_name) {
+    for (const t of teams || []) {
+      const guests = t.guest_members || []
+      const updatedGuests = guests.filter((g: string) => g !== rsvpId && !g.includes(rsvpId))
+      if (guests.length !== updatedGuests.length) {
+        await admin.from('teams').update({ guest_members: updatedGuests.length > 0 ? updatedGuests : null }).eq('id', t.id)
+      }
+    }
+  }
+
+  // Delete guest or update registered player to 'out'
+  if (targetRsvp.player_id === null) {
+    await admin.from('rsvps').delete().eq('id', rsvpId)
+  } else {
+    await admin.from('rsvps').update({
+      status: 'out',
+      waitlist_position: null,
+      responded_at: new Date().toISOString()
+    }).eq('id', rsvpId)
+  }
+
+  // Promote from waitlist if needed
+  if (wasStatus === 'in') {
+    const { data: currentRsvps } = await admin.from('rsvps').select('*').eq('booking_id', bookingId)
+    const waitlisters = currentRsvps?.filter((r: any) => r.status === 'waitlist').sort((a: any, b: any) => (a.waitlist_position || 0) - (b.waitlist_position || 0))
+    if (waitlisters && waitlisters.length > 0) {
+      const nextInLine = waitlisters[0]
+      await admin.from('rsvps').update({ status: 'in', waitlist_position: null }).eq('id', nextInLine.id)
+      
+      const { data: remainingRsvps } = await admin.from('rsvps').select('*').eq('booking_id', bookingId)
+      const remainingWaitlisters = remainingRsvps?.filter((r: any) => r.status === 'waitlist').sort((a: any, b: any) => (a.waitlist_position || 0) - (b.waitlist_position || 0)) || []
+      for (let i = 0; i < remainingWaitlisters.length; i++) {
+        await admin.from('rsvps').update({ waitlist_position: i + 1 }).eq('id', remainingWaitlisters[i].id)
+      }
+    }
+  } else if (wasStatus === 'waitlist') {
+    const { data: currentRsvps } = await admin.from('rsvps').select('*').eq('booking_id', bookingId)
+    const waitlisters = currentRsvps?.filter((r: any) => r.status === 'waitlist').sort((a: any, b: any) => (a.waitlist_position || 0) - (b.waitlist_position || 0)) || []
+    for (let i = 0; i < waitlisters.length; i++) {
+      await admin.from('rsvps').update({ waitlist_position: i + 1 }).eq('id', waitlisters[i].id)
+    }
+  }
+
+  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  return { success: true }
+}

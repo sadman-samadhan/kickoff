@@ -5,13 +5,15 @@
 
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal, Star } from 'lucide-react'
+import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal, Star, MinusCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { rsvpAction } from '../../actions'
-import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction } from './actions'
+import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction } from './actions'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ConfirmModal from '@/components/modals/ConfirmModal'
+import MatchdayShareCard from '@/components/cards/MatchdayShareCard'
+import { CustomSelect } from '@/components/ui/select'
 
 const PRESET_COLORS = [
   { label: 'Red', value: '#ef4444' },
@@ -160,6 +162,19 @@ export default function MatchClient({
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false)
   const [selectedMemberToAdd, setSelectedMemberToAdd] = useState('')
   const [isAddingMember, setIsAddingMember] = useState(false)
+  const [removingPlayerId, setRemovingPlayerId] = useState<string | null>(null)
+
+  const handleRemovePlayer = async (rsvpId: string) => {
+    setRemovingPlayerId(rsvpId)
+    try {
+      await adminRemoveRsvpAction(booking.id, groupId, rsvpId)
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setRemovingPlayerId(null)
+    }
+  }
 
   const handleAdminAddMember = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -241,6 +256,9 @@ export default function MatchClient({
   const [isRatingLoading, setIsRatingLoading] = useState(false)
   const [hasRated, setHasRated] = useState(false)
   const [ratingHover, setRatingHover] = useState(0)
+
+  // Matchday Report Tab State
+  const [activeReportTab, setActiveReportTab] = useState<'points' | 'players'>('points')
   
   const canCancel = userRole === 'admin' || currentUser.id === booking.created_by
   const matchDateTimeStr = `${booking.match_date}T${booking.match_time || '00:00:00'}`
@@ -252,6 +270,199 @@ export default function MatchClient({
                         (booking.status === 'completed' || isMatchHistory) ? 'history' :
                         (isMatchStarted || booking.status === 'ongoing') ? 'ongoing' :
                         'upcoming'
+
+  // Matchday Report Calculations
+  // 1. Points Table
+  interface TeamStats {
+    id: string
+    name: string
+    jerseyColor: string
+    played: number
+    won: number
+    drawn: number
+    lost: number
+    goalsFor: number
+    goalsAgainst: number
+    goalDifference: number
+    points: number
+  }
+
+  const pointsTable: Record<string, TeamStats> = {}
+  
+  // Initialize with all teams
+  teams.forEach((t: any) => {
+    pointsTable[t.id] = {
+      id: t.id,
+      name: t.name || 'Team',
+      jerseyColor: t.jersey_color || '#ffffff',
+      played: 0,
+      won: 0,
+      drawn: 0,
+      lost: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalDifference: 0,
+      points: 0
+    }
+  })
+
+  // Calculate stats from completed matches
+  matchSchedule.forEach((match: any) => {
+    if (match.status === 'completed') {
+      const homeStats = pointsTable[match.home_team_id]
+      const awayStats = pointsTable[match.away_team_id]
+      
+      if (homeStats && awayStats) {
+        const homeScore = match.home_score || 0
+        const awayScore = match.away_score || 0
+        
+        homeStats.played += 1
+        awayStats.played += 1
+        
+        homeStats.goalsFor += homeScore
+        homeStats.goalsAgainst += awayScore
+        
+        awayStats.goalsFor += awayScore
+        awayStats.goalsAgainst += homeScore
+        
+        if (homeScore > awayScore) {
+          homeStats.won += 1
+          homeStats.points += 3
+          awayStats.lost += 1
+        } else if (awayScore > homeScore) {
+          awayStats.won += 1
+          awayStats.points += 3
+          homeStats.lost += 1
+        } else {
+          homeStats.drawn += 1
+          homeStats.points += 1
+          awayStats.drawn += 1
+          awayStats.points += 1
+        }
+      }
+    }
+  })
+
+  // Update Goal Difference and sort
+  const sortedPointsTable = Object.values(pointsTable).map(t => ({
+    ...t,
+    goalDifference: t.goalsFor - t.goalsAgainst
+  })).sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points
+    if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference
+    if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor
+    return a.name.localeCompare(b.name)
+  })
+
+  // 2. Top Players Table (Goals, Assists & Cleansheets)
+  interface PlayerStats {
+    id: string
+    name: string
+    isGuest: boolean
+    teamId: string
+    goals: number
+    assists: number
+    cleanSheets: number
+    teamPoints: number
+  }
+
+  const playerStatsMap: Record<string, PlayerStats> = {}
+
+  // Initialize with all players that participated (registered + guests)
+  allPlayersForTeam.forEach(p => {
+    const rsvpObj = rsvps.find((r: any) => r.id === p.rsvpId)
+    const teamId = rsvpObj ? getPlayerTeamId(rsvpObj) : ''
+    const teamStats = sortedPointsTable.find(t => t.id === teamId)
+    playerStatsMap[p.id] = {
+      id: p.id,
+      name: p.name,
+      isGuest: p.isGuest,
+      teamId: teamId,
+      goals: 0,
+      assists: 0,
+      cleanSheets: 0,
+      teamPoints: teamStats ? teamStats.points : 0
+    }
+  })
+
+  // Calculate goals and assists
+  goalEvents.forEach((g: any) => {
+    // Goals
+    if (!g.is_own_goal) {
+      let scorerKey = null
+      if (g.scorer_id) {
+        scorerKey = g.scorer_id
+      } else if (g.guest_scorer_name) {
+        const found = allPlayersForTeam.find(p => p.isGuest && p.name === g.guest_scorer_name)
+        if (found) scorerKey = found.id
+      }
+      if (scorerKey && playerStatsMap[scorerKey]) {
+        playerStatsMap[scorerKey].goals += 1
+      }
+    }
+
+    // Assists
+    let assistKey = null
+    if (g.assist_id) {
+      assistKey = g.assist_id
+    } else if (g.guest_assist_name) {
+      const found = allPlayersForTeam.find(p => p.isGuest && p.name === g.guest_assist_name)
+      if (found) assistKey = found.id
+    }
+    if (assistKey && playerStatsMap[assistKey]) {
+      playerStatsMap[assistKey].assists += 1
+    }
+  })
+
+  // Calculate clean sheets
+  matchSchedule.forEach((match: any) => {
+    if (match.status === 'completed') {
+      const homeScore = match.home_score || 0
+      const awayScore = match.away_score || 0
+
+      if (awayScore === 0) {
+        // Home team clean sheet
+        Object.values(playerStatsMap).forEach(p => {
+          if (p.teamId === match.home_team_id) {
+            p.cleanSheets += 1
+          }
+        })
+      }
+
+      if (homeScore === 0) {
+        // Away team clean sheet
+        Object.values(playerStatsMap).forEach(p => {
+          if (p.teamId === match.away_team_id) {
+            p.cleanSheets += 1
+          }
+        })
+      }
+    }
+  })
+
+  const sortedTopPlayers = Object.values(playerStatsMap)
+    .filter(p => p.goals > 0 || p.assists > 0 || p.cleanSheets > 0)
+    .sort((a, b) => {
+      if (b.goals !== a.goals) return b.goals - a.goals
+      if (b.assists !== a.assists) return b.assists - a.assists
+      if (b.cleanSheets !== a.cleanSheets) return b.cleanSheets - a.cleanSheets
+      if (b.teamPoints !== a.teamPoints) return b.teamPoints - a.teamPoints
+      return a.name.localeCompare(b.name)
+    })
+
+  // 3. Share Card Stats
+  const hasCompletedMatches = matchSchedule.some((m: any) => m.status === 'completed')
+  const championName = hasCompletedMatches && sortedPointsTable.length > 0 ? sortedPointsTable[0].name : 'TBD'
+  const runnersUpName = hasCompletedMatches && sortedPointsTable.length > 1 ? sortedPointsTable[1].name : 'TBD'
+  const championColor = hasCompletedMatches && sortedPointsTable.length > 0 ? sortedPointsTable[0].jerseyColor : undefined
+
+  // Top Scorer Name (absolute top player by tie-breakers)
+  let topScorerText = 'TBD'
+  const playersWithGoals = sortedTopPlayers.filter(p => p.goals > 0)
+  if (playersWithGoals.length > 0) {
+    const topPlayer = playersWithGoals[0]
+    topScorerText = `${topPlayer.name} (${topPlayer.goals} Goal${topPlayer.goals > 1 ? 's' : ''})`
+  }
 
   const handleRsvp = async (status: string) => {
     if (status === 'out' && myRsvp === 'in' && waitlistPlayers.length > 0) {
@@ -582,20 +793,35 @@ export default function MatchClient({
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {teams.length > 0 && userRole === 'admin' ? (
-                    assigningPlayerId === rsvp.id ? (
+                  {userRole === 'admin' ? (
+                    assigningPlayerId === rsvp.id || removingPlayerId === rsvp.id ? (
                       <Loader2 className="w-4 h-4 animate-spin text-neutral-400 mx-2" />
                     ) : (
-                      <select 
-                        className="text-xs border border-neutral-200 rounded bg-white shadow-sm py-1 px-2 focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 max-w-[100px]"
-                        value={getPlayerTeamId(rsvp)}
-                        onChange={(e) => handleAssignPlayer(rsvp, e.target.value)}
-                      >
-                        <option value="">No Team</option>
-                        {teams.map((t: any) => (
-                          <option key={t.id} value={t.id} className="truncate">{t.name}</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2">
+                        {teams.length > 0 && (
+                          <CustomSelect
+                            value={getPlayerTeamId(rsvp)}
+                            onChange={(val) => handleAssignPlayer(rsvp, val)}
+                            placeholder="No Team"
+                            buttonClassName="text-xs border border-neutral-200 rounded bg-white shadow-sm py-1 px-2 focus:ring-1 focus:ring-green-600 focus:border-green-600 outline-none w-[100px] h-[28px]"
+                            dropdownClassName="w-[120px] right-0"
+                            options={[
+                              { value: '', label: 'No Team' },
+                              ...teams.map((t: any) => ({ value: t.id, label: t.name }))
+                            ]}
+                          />
+                        )}
+                        {!getPlayerTeamId(rsvp) && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePlayer(rsvp.id)}
+                            className="p-1 rounded-full text-red-600 hover:bg-red-50 transition-colors"
+                            title="Remove player"
+                          >
+                            <MinusCircle className="w-5 h-5" />
+                          </button>
+                        )}
+                      </div>
                     )
                   ) : (
                     <>
@@ -711,24 +937,26 @@ export default function MatchClient({
                           <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center bg-gradient-to-tr from-red-500 via-green-500 to-blue-500 transition-all ${!PRESET_COLORS.some(c => c.value === t.jerseyColor) ? 'ring-2 ring-offset-2 ring-neutral-900 scale-110' : 'border-neutral-200 hover:scale-105'}`} />
                         </div>
                       </div>
-                      <select 
-                        className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
+                      <CustomSelect
                         value={t.captainId}
-                        onChange={e => {
+                        onChange={val => {
                           const newForm = [...teamForm]
                           const prevCaptain = newForm[idx].captainId
-                          newForm[idx].captainId = e.target.value
-                          // Remove old captain, add new captain to playerIds
+                          newForm[idx].captainId = val
                           newForm[idx].playerIds = newForm[idx].playerIds.filter((id: string) => id !== prevCaptain)
-                          if (e.target.value) newForm[idx].playerIds = Array.from(new Set([...newForm[idx].playerIds, e.target.value]))
+                          if (val) newForm[idx].playerIds = Array.from(new Set([...newForm[idx].playerIds, val]))
                           setTeamForm(newForm)
                         }}
-                      >
-                        <option value="">Select Captain...</option>
-                        {allPlayersForTeam.map((p: any) => (
-                          <option key={p.id} value={p.id}>{p.name}{p.isGuest ? ' (Guest)' : ''}</option>
-                        ))}
-                      </select>
+                        placeholder="Select Captain..."
+                        buttonClassName="w-full px-3 py-2 text-sm border border-neutral-300 rounded-lg bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                        options={[
+                          { value: '', label: 'Select Captain...' },
+                          ...allPlayersForTeam.map((p: any) => ({
+                            value: p.id,
+                            label: `${p.name}${p.isGuest ? ' (Guest)' : ''}`
+                          }))
+                        ]}
+                      />
                     </div>
                   ))}
                   <div className="flex gap-2">
@@ -772,17 +1000,24 @@ export default function MatchClient({
                           style={{ backgroundColor: c.value }} title={c.label} />
                       ))}
                     </div>
-                      <select className="w-full px-3 py-2 text-sm border rounded-lg bg-white" value={teamForm[0]?.captainId || ''}
-                      onChange={e => {
-                        const prev = teamForm[0]?.captainId || ''
-                        const ids = (teamForm[0]?.playerIds || []).filter((id: string) => id !== prev)
-                        const next = e.target.value ? Array.from(new Set([...ids, e.target.value])) : ids
-                        setTeamForm([{ ...teamForm[0], captainId: e.target.value, playerIds: next }])
-                      }}>
-                      <option value="">Select Captain...</option>
-                      {allPlayersForTeam
-                        .map((p: any) => <option key={p.id} value={p.id}>{p.name}{p.isGuest ? ' (Guest)' : ''}</option>)}
-                    </select>
+                      <CustomSelect
+                        value={teamForm[0]?.captainId || ''}
+                        onChange={val => {
+                          const prev = teamForm[0]?.captainId || ''
+                          const ids = (teamForm[0]?.playerIds || []).filter((id: string) => id !== prev)
+                          const next = val ? Array.from(new Set([...ids, val])) : ids
+                          setTeamForm([{ ...teamForm[0], captainId: val, playerIds: next }])
+                        }}
+                        placeholder="Select Captain..."
+                        buttonClassName="w-full px-3 py-2 text-sm border border-neutral-300 rounded-lg bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                        options={[
+                          { value: '', label: 'Select Captain...' },
+                          ...allPlayersForTeam.map((p: any) => ({
+                            value: p.id,
+                            label: `${p.name}${p.isGuest ? ' (Guest)' : ''}`
+                          }))
+                        ]}
+                      />
                     <div className="flex gap-2">
                       <Button variant="outline" className="flex-1" onClick={() => setIsAddingTeams(false)}>Cancel</Button>
                       <Button className="flex-1 bg-neutral-900 text-white" onClick={handleSaveTeams} disabled={isTeamsLoading}>
@@ -811,16 +1046,24 @@ export default function MatchClient({
                           <div className={`w-8 h-8 rounded-full border-2 bg-gradient-to-tr from-red-500 via-green-500 to-blue-500 transition-all ${!PRESET_COLORS.some(c => c.value === editTeamForm.jerseyColor) ? 'ring-2 ring-offset-2 ring-neutral-900 scale-110' : 'border-neutral-200'}`} />
                         </div>
                       </div>
-                      <select className="w-full px-3 py-2 text-sm border rounded-lg bg-white" value={editTeamForm.captainId}
-                        onChange={e => {
+                      <CustomSelect
+                        value={editTeamForm.captainId}
+                        onChange={val => {
                           const prev = editTeamForm.captainId
                           const ids = editTeamForm.playerIds.filter(id => id !== prev)
-                          const next = e.target.value ? Array.from(new Set([...ids, e.target.value])) : ids
-                          setEditTeamForm({ ...editTeamForm, captainId: e.target.value, playerIds: next })
-                        }}>
-                        <option value="">Select Captain...</option>
-                        {allPlayersForTeam.map((p: any) => <option key={p.id} value={p.id}>{p.name}{p.isGuest ? ' (Guest)' : ''}</option>)}
-                      </select>
+                          const next = val ? Array.from(new Set([...ids, val])) : ids
+                          setEditTeamForm({ ...editTeamForm, captainId: val, playerIds: next })
+                        }}
+                        placeholder="Select Captain..."
+                        buttonClassName="w-full px-3 py-2 text-sm border border-neutral-300 rounded-lg bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                        options={[
+                          { value: '', label: 'Select Captain...' },
+                          ...allPlayersForTeam.map((p: any) => ({
+                            value: p.id,
+                            label: `${p.name}${p.isGuest ? ' (Guest)' : ''}`
+                          }))
+                        ]}
+                      />
                       <div className="flex gap-2">
                         <Button variant="outline" className="flex-1" onClick={() => { setEditingTeamId(null); setEditTeamForm(null) }}>Cancel</Button>
                         <Button className="flex-1 bg-neutral-900 text-white" onClick={handleSaveEditTeam} disabled={isEditTeamLoading}>
@@ -876,14 +1119,16 @@ export default function MatchClient({
           <div className="p-4">
             {matchSchedule.length === 0 ? (
               <div className="space-y-3">
-                <select 
-                  className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
+                <CustomSelect
                   value={scheduleType}
-                  onChange={e => setScheduleType(e.target.value)}
-                >
-                  <option>1-Leg League</option>
-                  <option>2-Leg League</option>
-                </select>
+                  onChange={val => setScheduleType(val)}
+                  placeholder="Select schedule type..."
+                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                  options={[
+                    { value: '1-Leg League', label: '1-Leg League' },
+                    { value: '2-Leg League', label: '2-Leg League' }
+                  ]}
+                />
                 <Button className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl" onClick={handleGenerateSchedule} disabled={isGeneratingSchedule}>
                   {isGeneratingSchedule ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trophy className="w-4 h-4 mr-2" />}
                   Generate Schedule
@@ -990,6 +1235,130 @@ export default function MatchClient({
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MATCHDAY REPORT SECTION */}
+      {teams.length > 0 && (
+        <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center">
+            <h3 className="font-bold text-neutral-900 flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-neutral-500" />
+              Matchday Report
+            </h3>
+          </div>
+          <div className="p-4">
+            <div className="flex bg-neutral-100 p-1 rounded-xl mb-4">
+              <button 
+                type="button"
+                onClick={() => setActiveReportTab('points')}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeReportTab === 'points' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'}`}
+              >
+                📊 Points Table
+              </button>
+              <button 
+                type="button"
+                onClick={() => setActiveReportTab('players')}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeReportTab === 'players' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'}`}
+              >
+                ⚽ Top Players
+              </button>
+            </div>
+
+            {activeReportTab === 'points' ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-neutral-100 text-neutral-400 font-bold uppercase tracking-wider">
+                      <th className="py-2.5 px-1 text-center w-8">#</th>
+                      <th className="py-2.5 px-2">Team</th>
+                      <th className="py-2.5 px-2 text-center w-8">P</th>
+                      <th className="py-2.5 px-2 text-center w-8">W</th>
+                      <th className="py-2.5 px-2 text-center w-8">D</th>
+                      <th className="py-2.5 px-2 text-center w-8">L</th>
+                      <th className="py-2.5 px-2 text-center w-8">GD</th>
+                      <th className="py-2.5 px-2 text-center w-8 font-black text-neutral-900">PTS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-50">
+                    {sortedPointsTable.map((team, idx) => (
+                      <tr key={team.id} className="hover:bg-neutral-50/50 transition-colors">
+                        <td className="py-3 px-1 text-center font-bold text-neutral-500">{idx + 1}</td>
+                        <td className="py-3 px-2 font-bold text-neutral-800">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-neutral-200" style={{ backgroundColor: team.jerseyColor }} />
+                            <span className="truncate">{team.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-2 text-center text-neutral-600">{team.played}</td>
+                        <td className="py-3 px-2 text-center text-neutral-600">{team.won}</td>
+                        <td className="py-3 px-2 text-center text-neutral-600">{team.drawn}</td>
+                        <td className="py-3 px-2 text-center text-neutral-600">{team.lost}</td>
+                        <td className="py-3 px-2 text-center text-neutral-600 font-medium">
+                          {team.goalDifference > 0 ? `+${team.goalDifference}` : team.goalDifference}
+                        </td>
+                        <td className="py-3 px-2 text-center font-black text-neutral-900">{team.points}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                {sortedTopPlayers.length > 0 ? (
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-neutral-100 text-neutral-400 font-bold uppercase tracking-wider">
+                        <th className="py-2.5 px-2">Player</th>
+                        <th className="py-2.5 px-2">Team</th>
+                        <th className="py-2.5 px-2 text-center w-12">⚽ G</th>
+                        <th className="py-2.5 px-2 text-center w-12">👟 A</th>
+                        <th className="py-2.5 px-2 text-center w-12">🛡️ CS</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-50">
+                      {sortedTopPlayers.map((player) => (
+                        <tr key={player.id} className="hover:bg-neutral-50/50 transition-colors">
+                          <td className="py-3 px-2 font-bold text-neutral-800">
+                            <div className="flex flex-col">
+                              <span className="flex items-center gap-1">
+                                {player.name}
+                                {player.isGuest && (
+                                  <span className="text-[8px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase tracking-wider">
+                                    Guest
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-2 text-neutral-500 truncate max-w-[100px]">
+                            {getTeamName(player.teamId)}
+                          </td>
+                          <td className="py-3 px-2 text-center font-black text-neutral-900">{player.goals}</td>
+                          <td className="py-3 px-2 text-center font-bold text-neutral-600">{player.assists}</td>
+                          <td className="py-3 px-2 text-center font-bold text-neutral-600">{player.cleanSheets}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="text-center py-6 text-neutral-400 text-xs italic">
+                    No goals, assists or clean sheets recorded yet.
+                  </div>
+                )}
+              </div>
+            )}
+
+            <MatchdayShareCard
+              groupName={(booking.groups as any).name}
+              matchDate={format(parseISO(booking.match_date), 'MMM d, yyyy')}
+              fieldName={booking.field_name}
+              champion={championName}
+              runnersUp={runnersUpName}
+              topScorer={topScorerText}
+              winningColor={championColor}
+            />
           </div>
         </div>
       )}
@@ -1104,70 +1473,84 @@ export default function MatchClient({
             <form onSubmit={handleAddGoal} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Team</label>
-                <select 
-                  required
-                  className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
+                <CustomSelect
                   value={goalForm.teamId}
-                  onChange={e => setGoalForm({...goalForm, teamId: e.target.value, scorerId: '', assistId: ''})}
-                >
-                  <option value="">Select Team...</option>
-                  <option value={matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.home_team_id || ''}>{getTeamName(matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.home_team_id)}</option>
-                  <option value={matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.away_team_id || ''}>{getTeamName(matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.away_team_id)}</option>
-                </select>
+                  onChange={val => setGoalForm({...goalForm, teamId: val, scorerId: '', assistId: ''})}
+                  placeholder="Select Team..."
+                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                  options={[
+                    { value: '', label: 'Select Team...' },
+                    ...(matchSchedule.find((m: { id: string }) => m.id === expandedMatchId) ? [
+                      { 
+                        value: matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.home_team_id || '', 
+                        label: getTeamName(matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.home_team_id) || ''
+                      },
+                      { 
+                        value: matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.away_team_id || '', 
+                        label: getTeamName(matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.away_team_id) || ''
+                      }
+                    ] : [])
+                  ]}
+                />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Scorer</label>
-                <select 
-                  required
-                  className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
+                <CustomSelect
                   value={goalForm.scorerId}
-                  onChange={e => setGoalForm({...goalForm, scorerId: e.target.value})}
-                >
-                  <option value="">Select Player...</option>
-                  {(() => {
-                    const selectedTeam = teams.find((t: any) => t.id === goalForm.teamId)
-                    if (!selectedTeam) return null
-                    const players: {id: string, name: string}[] = []
-                    selectedTeam.team_players?.forEach((tp: any) => {
-                      players.push({ id: tp.player_id, name: tp.profiles?.full_name || 'Player' })
-                    })
-                    selectedTeam.guest_members?.forEach((gId: string) => {
-                      const rsvp = rsvps.find((r: any) => r.id === gId)
-                      if (rsvp) players.push({ id: `guest_${rsvp.id}`, name: rsvp.guest_name + ' (Guest)' })
-                    })
-                    return players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)
-                  })()}
-                </select>
+                  onChange={val => setGoalForm({...goalForm, scorerId: val})}
+                  placeholder="Select Player..."
+                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                  disabled={!goalForm.teamId}
+                  options={[
+                    { value: '', label: 'Select Player...' },
+                    ...(() => {
+                      const selectedTeam = teams.find((t: any) => t.id === goalForm.teamId)
+                      if (!selectedTeam) return []
+                      const players: {value: string, label: string}[] = []
+                      selectedTeam.team_players?.forEach((tp: any) => {
+                        players.push({ value: tp.player_id, label: tp.profiles?.full_name || 'Player' })
+                      })
+                      selectedTeam.guest_members?.forEach((gId: string) => {
+                        const rsvp = rsvps.find((r: any) => r.id === gId)
+                        if (rsvp) players.push({ value: `guest_${rsvp.id}`, label: rsvp.guest_name + ' (Guest)' })
+                      })
+                      return players
+                    })()
+                  ]}
+                />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Assist (Optional)</label>
-                <select 
-                  className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
+                <CustomSelect
                   value={goalForm.assistId}
-                  onChange={e => setGoalForm({...goalForm, assistId: e.target.value})}
-                >
-                  <option value="">None</option>
-                  {(() => {
-                    const selectedTeam = teams.find((t: any) => t.id === goalForm.teamId)
-                    if (!selectedTeam) return null
-                    const players: {id: string, name: string}[] = []
-                    selectedTeam.team_players?.forEach((tp: any) => {
-                      if (tp.player_id !== goalForm.scorerId) {
-                        players.push({ id: tp.player_id, name: tp.profiles?.full_name || 'Player' })
-                      }
-                    })
-                    selectedTeam.guest_members?.forEach((gId: string) => {
-                      const rsvp = rsvps.find((r: any) => r.id === gId)
-                      const gidStr = `guest_${rsvp?.id}`
-                      if (rsvp && gidStr !== goalForm.scorerId) {
-                        players.push({ id: gidStr, name: rsvp.guest_name + ' (Guest)' })
-                      }
-                    })
-                    return players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)
-                  })()}
-                </select>
+                  onChange={val => setGoalForm({...goalForm, assistId: val})}
+                  placeholder="None"
+                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                  disabled={!goalForm.teamId}
+                  options={[
+                    { value: '', label: 'None' },
+                    ...(() => {
+                      const selectedTeam = teams.find((t: any) => t.id === goalForm.teamId)
+                      if (!selectedTeam) return []
+                      const players: {value: string, label: string}[] = []
+                      selectedTeam.team_players?.forEach((tp: any) => {
+                        if (tp.player_id !== goalForm.scorerId) {
+                          players.push({ value: tp.player_id, label: tp.profiles?.full_name || 'Player' })
+                        }
+                      })
+                      selectedTeam.guest_members?.forEach((gId: string) => {
+                        const rsvp = rsvps.find((r: any) => r.id === gId)
+                        const gidStr = `guest_${rsvp?.id}`
+                        if (rsvp && gidStr !== goalForm.scorerId) {
+                          players.push({ value: gidStr, label: rsvp.guest_name + ' (Guest)' })
+                        }
+                      })
+                      return players
+                    })()
+                  ]}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1232,16 +1615,18 @@ export default function MatchClient({
             </p>
             <div className="mb-6 space-y-2">
               <label className="text-sm font-bold text-neutral-700">Cancellation Reason</label>
-              <select 
-                className="w-full px-3 py-3 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white"
+              <CustomSelect
                 value={cancelReason}
-                onChange={e => setCancelReason(e.target.value)}
-              >
-                <option value="Field flooded">Field flooded</option>
-                <option value="Not enough players">Not enough players</option>
-                <option value="Transportation issue">Transportation issue</option>
-                <option value="Other">Other</option>
-              </select>
+                onChange={val => setCancelReason(val)}
+                placeholder="Select a reason..."
+                buttonClassName="w-full px-3 py-3 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                options={[
+                  { value: 'Field flooded', label: 'Field flooded' },
+                  { value: 'Not enough players', label: 'Not enough players' },
+                  { value: 'Transportation issue', label: 'Transportation issue' },
+                  { value: 'Other', label: 'Other' }
+                ]}
+              />
               {cancelReason === 'Other' && (
                 <textarea 
                   className="w-full mt-2 px-3 py-2 border border-neutral-300 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-sm min-h-[80px]"
@@ -1277,19 +1662,21 @@ export default function MatchClient({
             <form onSubmit={handleAdminAddMember} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Select Member</label>
-                <select 
-                  required
-                  className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
+                <CustomSelect
                   value={selectedMemberToAdd}
-                  onChange={e => setSelectedMemberToAdd(e.target.value)}
-                >
-                  <option value="">Select a group member...</option>
-                  {groupMembers
-                    .filter((m: any) => !inPlayers.some((ip: any) => ip.player_id === m.player_id))
-                    .map((m: any) => (
-                      <option key={m.player_id} value={m.player_id}>{(m.profiles as any).full_name}</option>
-                  ))}
-                </select>
+                  onChange={val => setSelectedMemberToAdd(val)}
+                  placeholder="Select a group member..."
+                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                  options={[
+                    { value: '', label: 'Select a group member...' },
+                    ...groupMembers
+                      .filter((m: any) => !inPlayers.some((ip: any) => ip.player_id === m.player_id))
+                      .map((m: any) => ({
+                        value: m.player_id,
+                        label: (m.profiles as any).full_name || 'Player'
+                      }))
+                  ]}
+                />
                 {groupMembers.filter((m: any) => !inPlayers.some((ip: any) => ip.player_id === m.player_id)).length === 0 && (
                   <p className="text-xs text-neutral-400 mt-1">All members have been added.</p>
                 )}
@@ -1325,17 +1712,19 @@ export default function MatchClient({
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Position</label>
-                <select
-                  className="w-full px-3 py-2 border rounded-xl text-sm bg-white"
+                <CustomSelect
                   value={guestForm.position}
-                  onChange={e => setGuestForm({ ...guestForm, position: e.target.value })}
-                >
-                  <option>GK</option>
-                  <option>DEF</option>
-                  <option>MID</option>
-                  <option>ATT</option>
-                  <option>Field Player</option>
-                </select>
+                  onChange={val => setGuestForm({ ...guestForm, position: val })}
+                  placeholder="Select position..."
+                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                  options={[
+                    { value: 'GK', label: 'GK' },
+                    { value: 'DEF', label: 'DEF' },
+                    { value: 'MID', label: 'MID' },
+                    { value: 'ATT', label: 'ATT' },
+                    { value: 'Field Player', label: 'Field Player' }
+                  ]}
+                />
               </div>
               <Button type="submit" className="w-full h-12 bg-amber-500 hover:bg-amber-600 text-white rounded-xl mt-2" disabled={isAddingGuest}>
                 {isAddingGuest ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Add Guest'}
