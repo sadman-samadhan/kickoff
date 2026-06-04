@@ -21,13 +21,13 @@ function getDarkGradientFromHex(hexColor: string) {
   if (hex.length === 3) {
     hex = hex.split('').map(c => c + c).join('')
   }
-  
+
   const r = parseInt(hex.substring(0, 2), 16) || 0
   const g = parseInt(hex.substring(2, 4), 16) || 0
   const b = parseInt(hex.substring(4, 6), 16) || 0
 
   const brightness = (r * 299 + g * 587 + b * 114) / 1000
-  
+
   // If the color is too dark (like black #000000), fall back to the emerald green theme
   if (brightness < 30) {
     return {
@@ -77,10 +77,10 @@ export default function MatchdayShareCard({
   const theme = winningColor
     ? getDarkGradientFromHex(winningColor)
     : {
-        accent: '#10b981', // Emerald green
-        gradient: 'linear-gradient(135deg, #022c22 0%, #064e3b 40%, #022c22 100%)', // Pitch theme
-        glow: 'rgba(16, 185, 129, 0.25)',
-      }
+      accent: '#10b981', // Emerald green
+      gradient: 'linear-gradient(135deg, #022c22 0%, #064e3b 40%, #022c22 100%)', // Pitch theme
+      glow: 'rgba(16, 185, 129, 0.25)',
+    }
 
   const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://khelahbe.vercel.app/'
   const displayDomain = siteUrl
@@ -174,32 +174,27 @@ export default function MatchdayShareCard({
                 ref={cardRef}
                 className="rounded-2xl overflow-hidden relative"
                 style={{
-                  background: theme.gradient,
+                  backgroundImage: "url('/images/match-card.jpeg')",
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundColor: '#022c22',
                   padding: '32px 24px',
                 }}
               >
-                {/* Background glows */}
-                <div
-                  className="absolute top-0 right-0 w-44 h-44 rounded-full blur-[80px] pointer-events-none"
-                  style={{ background: theme.glow }}
-                />
-                <div
-                  className="absolute bottom-0 left-0 w-36 h-36 rounded-full blur-[60px] pointer-events-none"
-                  style={{ background: `${theme.accent}15` }}
-                />
-
-                {/* Pitch Grid lines overlay */}
-                <div className="absolute inset-0 opacity-[0.03]" style={{
-                  backgroundImage: `linear-gradient(${theme.accent}40 1px, transparent 1px), linear-gradient(90deg, ${theme.accent}40 1px, transparent 1px)`,
-                  backgroundSize: '24px 24px'
-                }} />
+                {/* Dark overlay for readability */}
+                <div className="absolute inset-0 bg-black/25 pointer-events-none" />
 
                 {/* Content */}
                 <div className="relative z-10">
                   {/* Branding */}
                   <div className="flex justify-between items-center mb-6">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">KhelaHobe</span>
-                    <span 
+                    <span
+                      className="text-[10px] font-black uppercase tracking-[0.2em]"
+                      style={{ color: theme.accent }}
+                    >
+                      KhelaHobe
+                    </span>
+                    <span
                       className="text-[10px] font-black uppercase tracking-[0.15em]"
                       style={{ color: theme.accent }}
                     >
@@ -215,7 +210,7 @@ export default function MatchdayShareCard({
 
                   {/* Central Trophy Graphics */}
                   <div className="flex justify-center mb-6 relative">
-                    <div 
+                    <div
                       className="w-20 h-20 rounded-full flex items-center justify-center border shadow-lg"
                       style={{ backgroundColor: `${theme.accent}15`, borderColor: `${theme.accent}30` }}
                     >
@@ -249,14 +244,14 @@ export default function MatchdayShareCard({
 
                     {/* Top Scorer */}
                     <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
-                      <div 
+                      <div
                         className="w-10 h-10 rounded-lg flex items-center justify-center text-lg border flex-shrink-0"
                         style={{ backgroundColor: `${theme.accent}15`, borderColor: `${theme.accent}30` }}
                       >
                         ⚽
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div 
+                        <div
                           className="text-[9px] font-black uppercase tracking-widest leading-none mb-1"
                           style={{ color: theme.accent }}
                         >
@@ -269,7 +264,10 @@ export default function MatchdayShareCard({
 
                   {/* Footer website */}
                   <div className="text-center">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-white/20">
+                    <span
+                      className="text-[9px] font-bold uppercase tracking-widest"
+                      style={{ color: theme.accent }}
+                    >
                       {displayDomain}
                     </span>
                   </div>
