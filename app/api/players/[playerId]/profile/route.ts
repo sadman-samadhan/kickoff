@@ -30,7 +30,7 @@ export async function PATCH(req: Request, { params }: { params: { playerId: stri
   }
 
   const body = await req.json()
-  const allowedUpdates = ['full_name', 'preferred_position', 'secondary_position', 'email', 'avatar_url', 'email_notifications']
+  const allowedUpdates = ['full_name', 'preferred_position', 'secondary_position', 'email', 'avatar_url', 'email_notifications', 'security_question', 'security_answer']
   const updates: any = {}
 
   for (const key of allowedUpdates) {

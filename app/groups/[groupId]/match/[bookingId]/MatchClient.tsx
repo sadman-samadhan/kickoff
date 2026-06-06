@@ -531,8 +531,8 @@ export default function MatchClient({
 
       {/* ADD GOAL MODAL */}
       {isAddGoalOpen && expandedMatchId && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4">
-          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold text-lg flex items-center gap-2"><Goal className="w-5 h-5" /> Add Goal</h3>
               <button onClick={() => setIsAddGoalOpen(false)}><X className="w-5 h-5 text-neutral-500" /></button>
