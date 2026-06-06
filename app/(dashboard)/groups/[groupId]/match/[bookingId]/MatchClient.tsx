@@ -150,6 +150,27 @@ export default function MatchClient({
     }
   }
 
+  const getPlayerTeam = (rsvp: any) => {
+    if (rsvp.player_id) {
+      return teams.find((t: any) => t.team_players?.some((tp: any) => tp.player_id === rsvp.player_id))
+    } else {
+      return teams.find((t: any) => t.guest_members?.includes(rsvp.id))
+    }
+  }
+
+  const hexToRgba = (hex: string, opacity: number) => {
+    let c = hex.replace('#', '')
+    if (c.length === 3) {
+      c = c.split('').map(x => x + x).join('')
+    }
+    const r = parseInt(c.substring(0, 2), 16) || 0
+    const g = parseInt(c.substring(2, 4), 16) || 0
+    const b = parseInt(c.substring(4, 6), 16) || 0
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`
+  }
+
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null)
+
   const getPositionColor = (pos: string) => {
     if (pos === 'GK') return 'bg-orange-100 text-orange-700 border-orange-200'
     if (pos === 'DEF') return 'bg-blue-100 text-blue-700 border-blue-200'
@@ -160,7 +181,8 @@ export default function MatchClient({
 
   // Add Member State
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false)
-  const [selectedMemberToAdd, setSelectedMemberToAdd] = useState('')
+  const [selectedMembersToAdd, setSelectedMembersToAdd] = useState<string[]>([])
+  const [memberSearchQuery, setMemberSearchQuery] = useState('')
   const [isAddingMember, setIsAddingMember] = useState(false)
   const [removingPlayerId, setRemovingPlayerId] = useState<string | null>(null)
 
@@ -178,12 +200,13 @@ export default function MatchClient({
 
   const handleAdminAddMember = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedMemberToAdd) return
+    if (selectedMembersToAdd.length === 0) return
     setIsAddingMember(true)
     try {
-      await adminAddRsvpAction(booking.id, groupId, selectedMemberToAdd, booking.max_players)
+      await adminAddRsvpAction(booking.id, groupId, selectedMembersToAdd, booking.max_players)
       setIsAddMemberOpen(false)
-      setSelectedMemberToAdd('')
+      setSelectedMembersToAdd([])
+      setMemberSearchQuery('')
       router.refresh()
     } catch (e) {
       console.error(e)
@@ -455,6 +478,12 @@ export default function MatchClient({
   const championName = hasCompletedMatches && sortedPointsTable.length > 0 ? sortedPointsTable[0].name : 'TBD'
   const runnersUpName = hasCompletedMatches && sortedPointsTable.length > 1 ? sortedPointsTable[1].name : 'TBD'
   const championColor = hasCompletedMatches && sortedPointsTable.length > 0 ? sortedPointsTable[0].jerseyColor : undefined
+  const championStats = hasCompletedMatches && sortedPointsTable.length > 0
+    ? { points: sortedPointsTable[0].points, gd: sortedPointsTable[0].goalDifference }
+    : undefined
+  const runnersUpStats = hasCompletedMatches && sortedPointsTable.length > 1
+    ? { points: sortedPointsTable[1].points, gd: sortedPointsTable[1].goalDifference }
+    : undefined
 
   // Top Scorer Name (absolute top player by tie-breakers)
   let topScorerText = 'TBD'
@@ -732,8 +761,8 @@ export default function MatchClient({
       )}
 
       {/* 2. PLAYER LIST CARD */}
-      <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50">
+      <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm">
+        <div className="p-4 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50 rounded-t-2xl">
           <h3 className="font-bold text-neutral-900 flex items-center gap-2">
             <Users className="w-5 h-5 text-neutral-500" />
             Confirmed Players
@@ -769,9 +798,13 @@ export default function MatchClient({
         
         <div className="divide-y divide-neutral-50">
           {sortedInPlayers.map((rsvp: any) => {
+            const playerTeam = getPlayerTeam(rsvp)
             const playerPos = rsvp.profiles?.preferred_position || rsvp.guest_position || 'Field Player'
+            const rowStyle = playerTeam?.jersey_color
+              ? { backgroundColor: hexToRgba(playerTeam.jersey_color, 0.25) }
+              : undefined
             return (
-              <div key={rsvp.id} className="p-3.5 flex items-center justify-between hover:bg-neutral-50 transition-colors">
+              <div key={rsvp.id} style={rowStyle} className="p-3.5 flex items-center justify-between hover:bg-neutral-50/50 transition-colors">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   {rsvp.profiles?.avatar_url ? (
                     <img src={(rsvp.profiles as any).avatar_url} className="w-11 h-11 rounded-full object-cover border border-neutral-100 shadow-sm flex-shrink-0" alt={(rsvp.profiles as any)?.full_name || 'Player'} />
@@ -839,7 +872,7 @@ export default function MatchClient({
         </div>
 
         {userRole === 'admin' && displayStatus === 'upcoming' && (
-          <div className="p-3 border-t border-neutral-100 bg-neutral-50 flex gap-2">
+          <div className={`p-3 border-t border-neutral-100 bg-neutral-50 flex gap-2 ${waitlistPlayers.length === 0 ? 'rounded-b-2xl' : ''}`}>
             <Button variant="outline" className="flex-1 h-10 border-dashed border-neutral-300 text-neutral-600 hover:bg-neutral-100" onClick={() => setIsAddMemberOpen(true)}>
               <Plus className="w-4 h-4 mr-1" /> Add Member
             </Button>
@@ -859,9 +892,9 @@ export default function MatchClient({
               </h4>
               <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">{waitlistPlayers.length} waiting</span>
             </div>
-            <div className="divide-y divide-neutral-50 bg-purple-50/30">
+            <div className="divide-y divide-neutral-50 bg-purple-50/30 rounded-b-2xl">
               {waitlistPlayers.map((rsvp: any, index: number) => (
-                <div key={rsvp.id} className="p-3 flex items-center gap-3 opacity-80">
+                <div key={rsvp.id} className="p-3 flex items-center gap-3 opacity-80 last:rounded-b-2xl">
                   <span className="text-xs font-bold text-neutral-400 w-4">{index + 1}.</span>
                   {(rsvp.profiles as any).avatar_url ? (
                     <img src={(rsvp.profiles as any).avatar_url} className="w-8 h-8 rounded-full object-cover grayscale" alt={(rsvp.profiles as any).full_name || 'Waitlist player'} />
@@ -880,8 +913,8 @@ export default function MatchClient({
 
       {/* 4. TEAMS SECTION */}
       {displayStatus !== 'cancelled' && (
-        <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center">
+        <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm">
+          <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center rounded-t-2xl">
             <h3 className="font-bold text-neutral-900 flex items-center gap-2">
               <Shield className="w-5 h-5 text-neutral-500" />
               Teams
@@ -1072,24 +1105,77 @@ export default function MatchClient({
                       </div>
                     </div>
                   ) : (
-                    <div key={team.id} className="p-3 border rounded-xl flex items-center justify-between" style={{ borderColor: team.jersey_color }}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.jersey_color }} />
-                        <div>
-                          <h4 className="font-bold text-sm">{team.name}</h4>
-                          <div className="text-[10px] text-neutral-400">
-                            {team.team_players?.length || 0} players{team.guest_members?.length > 0 ? ` + ${team.guest_members.length} guest(s)` : ''}
+                    <div key={team.id} className="border rounded-xl" style={{ borderColor: team.jersey_color }}>
+                      <div 
+                        onClick={() => setExpandedTeamId(expandedTeamId === team.id ? null : team.id)}
+                        className="p-3 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 transition-colors rounded-xl"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.jersey_color }} />
+                          <div>
+                            <h4 className="font-bold text-sm flex items-center gap-1.5">
+                              {team.name}
+                              {expandedTeamId === team.id ? (
+                                <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              )}
+                            </h4>
+                            <div className="text-[10px] text-neutral-400">
+                              {team.team_players?.length || 0} players{team.guest_members?.length > 0 ? ` + ${team.guest_members.length} guest(s)` : ''}
+                            </div>
                           </div>
                         </div>
+                        {userRole === 'admin' && (
+                          <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => handleStartEditTeam(team)} className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 transition-colors">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            </button>
+                            <button onClick={() => handleDeleteTeam(team.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-neutral-400 hover:text-red-500 transition-colors">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      {userRole === 'admin' && (
-                        <div className="flex gap-1">
-                          <button onClick={() => handleStartEditTeam(team)} className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 transition-colors">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                          </button>
-                          <button onClick={() => handleDeleteTeam(team.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-neutral-400 hover:text-red-500 transition-colors">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
+
+                      {expandedTeamId === team.id && (
+                        <div className="border-t px-3 py-2 bg-neutral-50/50 rounded-b-xl space-y-1.5 text-xs text-neutral-700">
+                          {team.team_players?.length === 0 && (!team.guest_members || team.guest_members.length === 0) && (
+                            <div className="text-neutral-400 italic py-1">No players assigned yet.</div>
+                          )}
+                          {team.team_players?.map((tp: any) => {
+                            const isCaptain = team.captain_id === tp.player_id
+                            const rsvp = rsvps.find((r: any) => r.player_id === tp.player_id)
+                            const pos = rsvp?.profiles?.preferred_position || 'Field Player'
+                            return (
+                              <div key={tp.player_id} className="flex justify-between items-center py-1 border-b border-neutral-100/50 last:border-0">
+                                <span className="font-semibold flex items-center gap-1">
+                                  {tp.profiles?.full_name || 'Player'}
+                                  {isCaptain && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase">C</span>}
+                                </span>
+                                <span className={`text-[9px] font-bold px-1 py-0.5 rounded border uppercase tracking-wider ${getPositionColor(pos)}`}>
+                                  {pos}
+                                </span>
+                              </div>
+                            )
+                          })}
+                          {team.guest_members?.map((gId: string) => {
+                            const rsvp = rsvps.find((r: any) => r.id === gId)
+                            if (!rsvp) return null
+                            const isCaptain = team.captain_id === `guest_${rsvp.id}`
+                            const pos = rsvp.guest_position || 'Field Player'
+                            return (
+                              <div key={gId} className="flex justify-between items-center py-1 border-b border-neutral-100/50 last:border-0">
+                                <span className="font-semibold text-neutral-600 flex items-center gap-1">
+                                  {rsvp.guest_name} <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded">Guest</span>
+                                  {isCaptain && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase">C</span>}
+                                </span>
+                                <span className={`text-[9px] font-bold px-1 py-0.5 rounded border uppercase tracking-wider ${getPositionColor(pos)}`}>
+                                  {pos}
+                                </span>
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
                     </div>
@@ -1358,6 +1444,8 @@ export default function MatchClient({
               runnersUp={runnersUpName}
               topScorer={topScorerText}
               winningColor={championColor}
+              championStats={championStats}
+              runnersUpStats={runnersUpStats}
             />
           </div>
         </div>
@@ -1463,8 +1551,8 @@ export default function MatchClient({
 
       {/* ADD GOAL MODAL */}
       {isAddGoalOpen && expandedMatchId && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4">
-          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold text-lg flex items-center gap-2"><Goal className="w-5 h-5"/> Add Goal</h3>
               <button onClick={() => setIsAddGoalOpen(false)}><X className="w-5 h-5 text-neutral-500" /></button>
@@ -1651,49 +1739,77 @@ export default function MatchClient({
       )}
 
       {/* Admin Add Member Modal */}
-      {isAddMemberOpen && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4">
-          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-lg flex items-center gap-2"><Users className="w-5 h-5"/> Add Player</h3>
-              <button onClick={() => setIsAddMemberOpen(false)}><X className="w-5 h-5 text-neutral-500" /></button>
-            </div>
-            
-            <form onSubmit={handleAdminAddMember} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-neutral-500 uppercase">Select Member</label>
-                <CustomSelect
-                  value={selectedMemberToAdd}
-                  onChange={val => setSelectedMemberToAdd(val)}
-                  placeholder="Select a group member..."
-                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
-                  options={[
-                    { value: '', label: 'Select a group member...' },
-                    ...groupMembers
-                      .filter((m: any) => !inPlayers.some((ip: any) => ip.player_id === m.player_id))
-                      .map((m: any) => ({
-                        value: m.player_id,
-                        label: (m.profiles as any).full_name || 'Player'
-                      }))
-                  ]}
-                />
-                {groupMembers.filter((m: any) => !inPlayers.some((ip: any) => ip.player_id === m.player_id)).length === 0 && (
-                  <p className="text-xs text-neutral-400 mt-1">All members have been added.</p>
-                )}
+      {isAddMemberOpen && (() => {
+        const filteredMembers = groupMembers
+          .filter((m: any) => !inPlayers.some((ip: any) => ip.player_id === m.player_id))
+          .filter((m: any) => {
+            const name = ((m.profiles as any)?.full_name || '').toLowerCase()
+            const search = memberSearchQuery.toLowerCase()
+            return name.includes(search)
+          })
+
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4">
+            <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-lg flex items-center gap-2"><Users className="w-5 h-5"/> Add Players</h3>
+                <button onClick={() => { setIsAddMemberOpen(false); setSelectedMembersToAdd([]); setMemberSearchQuery('') }}><X className="w-5 h-5 text-neutral-500" /></button>
               </div>
 
-              <Button type="submit" className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl mt-2" disabled={isAddingMember}>
-                {isAddingMember ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Add to Confirmed List'}
-              </Button>
-            </form>
+              <input 
+                type="text" 
+                placeholder="Search group members..." 
+                className="w-full px-3 py-2 border rounded-xl text-sm mb-3 focus:ring-2 focus:ring-green-500 outline-none" 
+                value={memberSearchQuery}
+                onChange={e => setMemberSearchQuery(e.target.value)}
+              />
+              
+              <form onSubmit={handleAdminAddMember} className="space-y-4">
+                <div className="space-y-1.5">
+                  <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                    {filteredMembers.map((m: any) => {
+                      const isSelected = selectedMembersToAdd.includes(m.player_id)
+                      const handleToggle = () => {
+                        if (isSelected) {
+                          setSelectedMembersToAdd(prev => prev.filter(id => id !== m.player_id))
+                        } else {
+                          setSelectedMembersToAdd(prev => [...prev, m.player_id])
+                        }
+                      }
+                      return (
+                        <div 
+                          key={m.player_id}
+                          onClick={handleToggle}
+                          className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-green-50 border-green-200 text-green-800' : 'bg-neutral-50 border-neutral-100 hover:bg-neutral-100/50 text-neutral-800'}`}
+                        >
+                          <span className="font-semibold text-sm">{(m.profiles as any).full_name || 'Player'}</span>
+                          {isSelected && <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />}
+                        </div>
+                      )
+                    })}
+                    {filteredMembers.length === 0 && (
+                      <p className="text-center text-xs text-neutral-400 italic py-4">No members found.</p>
+                    )}
+                  </div>
+                </div>
+
+                <Button type="submit" className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl mt-2 flex items-center justify-center gap-1.5" disabled={isAddingMember || selectedMembersToAdd.length === 0}>
+                  {isAddingMember ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>Add {selectedMembersToAdd.length > 0 ? `${selectedMembersToAdd.length} ` : ''}to Confirmed List</>
+                  )}
+                </Button>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Add Guest Modal */}
       {isAddGuestOpen && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4">
-          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full duration-200">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold text-lg flex items-center gap-2"><Users className="w-5 h-5 text-amber-500"/> Add Guest</h3>
               <button onClick={() => setIsAddGuestOpen(false)}><X className="w-5 h-5 text-neutral-500" /></button>

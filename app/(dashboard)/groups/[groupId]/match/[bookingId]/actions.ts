@@ -176,7 +176,7 @@ export async function updateMatchScoreAction(groupId: string, bookingId: string,
   return { success: true }
 }
 
-export async function adminAddRsvpAction(bookingId: string, groupId: string, playerId: string, maxPlayers: number) {
+export async function adminAddRsvpAction(bookingId: string, groupId: string, playerIdOrIds: string | string[], maxPlayers: number) {
   const supabase = createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -192,36 +192,40 @@ export async function adminAddRsvpAction(bookingId: string, groupId: string, pla
 
   if (callerMembership?.role !== 'admin') throw new Error('Only admins can add players')
 
-  // Fetch current RSVPs
-  const { data: currentRsvps } = await admin.from('rsvps').select('*').eq('booking_id', bookingId)
-  const inCount = currentRsvps?.filter((r: any) => r.status === 'in').length || 0
-  const existingRsvp = currentRsvps?.find((r: any) => r.player_id === playerId)
+  const playerIds = Array.isArray(playerIdOrIds) ? playerIdOrIds : [playerIdOrIds]
 
-  let finalStatus = 'in'
-  let waitlistPosition = null
+  for (const playerId of playerIds) {
+    // Fetch current RSVPs
+    const { data: currentRsvps } = await admin.from('rsvps').select('*').eq('booking_id', bookingId)
+    const inCount = currentRsvps?.filter((r: any) => r.status === 'in').length || 0
+    const existingRsvp = currentRsvps?.find((r: any) => r.player_id === playerId)
 
-  if (inCount >= maxPlayers) {
-    if (!existingRsvp || existingRsvp.status !== 'in') {
-      finalStatus = 'waitlist'
-      const waitlistCount = currentRsvps?.filter((r: any) => r.status === 'waitlist').length || 0
-      waitlistPosition = waitlistCount + 1
+    let finalStatus = 'in'
+    let waitlistPosition = null
+
+    if (inCount >= maxPlayers) {
+      if (!existingRsvp || existingRsvp.status !== 'in') {
+        finalStatus = 'waitlist'
+        const waitlistCount = currentRsvps?.filter((r: any) => r.status === 'waitlist').length || 0
+        waitlistPosition = waitlistCount + 1
+      }
     }
-  }
 
-  if (existingRsvp) {
-    await admin.from('rsvps').update({ 
-      status: finalStatus, 
-      waitlist_position: waitlistPosition, 
-      responded_at: new Date().toISOString() 
-    }).eq('id', existingRsvp.id)
-  } else {
-    await admin.from('rsvps').insert({
-      booking_id: bookingId,
-      player_id: playerId,
-      status: finalStatus,
-      waitlist_position: waitlistPosition,
-      responded_at: new Date().toISOString()
-    })
+    if (existingRsvp) {
+      await admin.from('rsvps').update({ 
+        status: finalStatus, 
+        waitlist_position: waitlistPosition, 
+        responded_at: new Date().toISOString() 
+      }).eq('id', existingRsvp.id)
+    } else {
+      await admin.from('rsvps').insert({
+        booking_id: bookingId,
+        player_id: playerId,
+        status: finalStatus,
+        waitlist_position: waitlistPosition,
+        responded_at: new Date().toISOString()
+      })
+    }
   }
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)

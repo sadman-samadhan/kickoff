@@ -68,8 +68,20 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
   const [editForm, setEditForm] = useState({
     preferred_position: profile.preferred_position || '',
     secondary_position: profile.secondary_position || '',
-    email: profile.email || ''
+    email: profile.email || '',
+    security_question: profile.security_question || '',
+    security_answer: profile.security_answer || ''
   })
+
+  useEffect(() => {
+    setEditForm({
+      preferred_position: profile.preferred_position || '',
+      secondary_position: profile.secondary_position || '',
+      email: profile.email || '',
+      security_question: profile.security_question || '',
+      security_answer: profile.security_answer || ''
+    })
+  }, [profile])
 
   const [isSaving, setIsSaving] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
@@ -413,6 +425,34 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
                   placeholder="name@example.com"
                 />
                 <p className="text-[10px] text-neutral-400 font-medium">Used for match notifications.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-neutral-500 uppercase">Security Question (Password Recovery)</label>
+                <select
+                  className="w-full px-3 py-3 border border-neutral-200 rounded-xl text-sm font-medium bg-white outline-none focus:ring-2 focus:ring-green-500"
+                  value={editForm.security_question}
+                  onChange={e => setEditForm({ ...editForm, security_question: e.target.value })}
+                >
+                  <option value="">Select a security question...</option>
+                  <option value="Who is your all-time favorite football player?">Who is your all-time favorite football player?</option>
+                  <option value="Which football club do you support?">Which football club do you support?</option>
+                  <option value="What was the first football jersey you owned?">What was the first football jersey you owned?</option>
+                  <option value="Who is your favorite football manager?">Who is your favorite football manager?</option>
+                  <option value="In which stadium would you most love to watch a match?">In which stadium would you most love to watch a match?</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-neutral-500 uppercase">Security Answer</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-3 border border-neutral-200 rounded-xl text-sm font-medium bg-white outline-none focus:ring-2 focus:ring-green-500"
+                  value={editForm.security_answer}
+                  onChange={e => setEditForm({ ...editForm, security_answer: e.target.value })}
+                  placeholder="Your secret answer (case-insensitive)"
+                />
+                <p className="text-[10px] text-neutral-400 font-medium">This will be used to recover your account if you forget your password.</p>
               </div>
 
               <Button

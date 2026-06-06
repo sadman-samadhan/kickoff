@@ -29,6 +29,7 @@ interface Booking {
   max_players: number
   status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled'
   rsvps?: { player_id: string; status: string; waitlist_position?: number }[]
+  champion?: string
 }
 
 interface GroupClientProps {
@@ -422,9 +423,18 @@ export default function GroupClient({
                   <div className="font-bold text-neutral-800 text-sm truncate">
                     {booking.field_name}
                   </div>
-                  {/* Score stub */}
-                  <div className="mt-2 bg-neutral-50 rounded p-1.5 flex justify-center items-center text-xs font-black tracking-wider">
-                    {booking.status === 'cancelled' ? <span className="text-red-500">CANCELLED</span> : <span className="text-neutral-700">- : -</span>}
+                  {/* Champion/Winner display */}
+                  <div className="mt-2 bg-neutral-50 rounded p-1.5 flex justify-center items-center text-xs font-bold tracking-wide truncate">
+                    {booking.status === 'cancelled' ? (
+                      <span className="text-red-500 font-black tracking-wider text-[10px]">CANCELLED</span>
+                    ) : booking.champion ? (
+                      <span className="text-amber-700 flex items-center gap-1">
+                        <Trophy className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                        <span className="truncate max-w-[100px]">{booking.champion}</span>
+                      </span>
+                    ) : (
+                      <span className="text-neutral-500 italic text-[10px]">No Champion</span>
+                    )}
                   </div>
                 </div>
               </Link>

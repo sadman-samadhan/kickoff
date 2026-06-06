@@ -109,7 +109,12 @@ export default function LoginPage() {
 
               {/* Password */}
               <div className="space-y-1">
-                <label className="text-sm font-semibold text-neutral-700">Password</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-semibold text-neutral-700">Password</label>
+                  <Link href="/forgot-password" className="text-xs font-semibold text-green-600 hover:text-green-700 hover:underline">
+                    Forgot Password?
+                  </Link>
+                </div>
                 <input
                   type="password"
                   className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all text-sm"

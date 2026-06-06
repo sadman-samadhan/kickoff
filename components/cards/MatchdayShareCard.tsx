@@ -14,6 +14,8 @@ interface MatchdayShareCardProps {
   runnersUp: string
   topScorer: string
   winningColor?: string
+  championStats?: { points: number; gd: number }
+  runnersUpStats?: { points: number; gd: number }
 }
 
 function getDarkGradientFromHex(hexColor: string) {
@@ -69,6 +71,8 @@ export default function MatchdayShareCard({
   runnersUp,
   topScorer,
   winningColor,
+  championStats,
+  runnersUpStats,
 }: MatchdayShareCardProps) {
   const cardRef = useRef<HTMLDivElement>(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -102,9 +106,11 @@ export default function MatchdayShareCard({
       const file = new File([blob], `khelahobe-matchday-${groupName.replace(/\s+/g, '-').toLowerCase()}.png`, { type: 'image/png' })
 
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        const champText = champion + (championStats ? ` (${championStats.points} PTS, ${championStats.gd > 0 ? '+' : ''}${championStats.gd} GD)` : '')
+        const runnerText = runnersUp + (runnersUpStats ? ` (${runnersUpStats.points} PTS, ${runnersUpStats.gd > 0 ? '+' : ''}${runnersUpStats.gd} GD)` : '')
         await navigator.share({
           title: `${groupName} Matchday Summary`,
-          text: `Check out our matchday summary on KhelaHobe! 🏆 Champion: ${champion}, 🥈 Runner-up: ${runnersUp}, ⚽ Top Scorer: ${topScorer}`,
+          text: `Check out our matchday summary on KhelaHobe! 🏆 Champion: ${champText}, 🥈 Runner-up: ${runnerText}, ⚽ Top Scorer: ${topScorer}`,
           files: [file],
         })
       } else {
@@ -227,7 +233,14 @@ export default function MatchdayShareCard({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-[9px] font-black uppercase tracking-widest text-amber-500 leading-none mb-1">Champion</div>
-                        <div className="text-sm font-bold text-white truncate">{champion}</div>
+                        <div className="text-sm font-bold text-white truncate flex items-baseline gap-1.5 flex-wrap">
+                          <span>{champion}</span>
+                          {championStats && (
+                            <span className="text-[10px] font-medium text-white/75">
+                              ({championStats.points} PTS, {championStats.gd > 0 ? '+' : ''}{championStats.gd} GD)
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -238,7 +251,14 @@ export default function MatchdayShareCard({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="text-[9px] font-black uppercase tracking-widest text-slate-300 leading-none mb-1">Runners-up</div>
-                        <div className="text-sm font-bold text-white truncate">{runnersUp}</div>
+                        <div className="text-sm font-bold text-white truncate flex items-baseline gap-1.5 flex-wrap">
+                          <span>{runnersUp}</span>
+                          {runnersUpStats && (
+                            <span className="text-[10px] font-medium text-white/75">
+                              ({runnersUpStats.points} PTS, {runnersUpStats.gd > 0 ? '+' : ''}{runnersUpStats.gd} GD)
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
