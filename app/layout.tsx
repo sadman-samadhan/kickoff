@@ -43,7 +43,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <head>
-        <link rel="icon" href="/icons/logo-mini.png" type="image/png" />
+        <link rel="icon" href="/icons/logo-mini.png?v=1" type="image/png" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/logo.png" />
       </head>
