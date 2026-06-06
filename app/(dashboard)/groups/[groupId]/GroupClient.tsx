@@ -552,8 +552,8 @@ export default function GroupClient({
 
       {/* Manage Group Modal */}
       {isManageModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-neutral-900/40 p-4 pb-0 sm:pb-4">
-          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-full duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-neutral-100 flex justify-between items-center">
               <h3 className="font-bold text-lg text-neutral-900">Manage Group</h3>
               <button onClick={() => setIsManageModalOpen(false)} className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500">
@@ -594,8 +594,8 @@ export default function GroupClient({
 
       {/* Add Booking Modal */}
       {isAddBookingOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-neutral-900/50 p-0 sm:p-4">
-          <div className="bg-white w-full max-w-md h-[90vh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col animate-in slide-in-from-bottom-full duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/50 p-4">
+          <div className="bg-white w-full max-w-md max-h-[90vh] rounded-3xl shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-neutral-100 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg text-neutral-900">Schedule Match</h3>
               <button onClick={() => setIsAddBookingOpen(false)} className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500">
@@ -774,8 +774,8 @@ export default function GroupClient({
 
       {/* Admin Action Sheet */}
       {isAdminActionOpen && selectedMember && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-neutral-900/50 p-4 pb-0 sm:pb-4" onClick={() => { setIsAdminActionOpen(false); setSelectedMember(null) }}>
-          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-full duration-200" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/50 p-4" onClick={() => { setIsAdminActionOpen(false); setSelectedMember(null) }}>
+          <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-neutral-100 flex justify-between items-center">
               <div>
                 <h3 className="font-bold text-lg text-neutral-900">{selectedMember.full_name}</h3>

@@ -124,6 +124,7 @@ export default function GroupsClient({ initialGroups }: { initialGroups: any[] }
                         {group.nextMatch.rsvp === 'out' && <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase">OUT</span>}
                         {group.nextMatch.rsvp === 'pending' && <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase">PENDING</span>}
                         {group.nextMatch.rsvp === 'none' && <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase">ACTION REQ</span>}
+                        {group.nextMatch.rsvp === 'waitlist' && <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase">WAITLIST</span>}
                       </div>
                     </div>
                   ) : (
@@ -155,8 +156,8 @@ export default function GroupsClient({ initialGroups }: { initialGroups: any[] }
 
       {/* CREATE MODAL / SHEET */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-neutral-900/40 p-4 pb-0 sm:pb-4">
-          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-neutral-100 flex justify-between items-center">
               <h3 className="font-bold text-lg text-neutral-900">Create New Group</h3>
               <button onClick={closeCreateModal} className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500">
@@ -219,8 +220,8 @@ export default function GroupsClient({ initialGroups }: { initialGroups: any[] }
 
       {/* JOIN MODAL / SHEET */}
       {isJoinModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-neutral-900/40 p-4 pb-0 sm:pb-4">
-          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-neutral-100 flex justify-between items-center">
               <h3 className="font-bold text-lg text-neutral-900">Join a Group</h3>
               <button onClick={() => { setIsJoinModalOpen(false); setError(''); setJoinCode('') }} className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500">
