@@ -11,6 +11,7 @@ import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, S
 import ChatTab from './ChatTab'
 import { Button } from '@/components/ui/button'
 import { useChatUnread } from '@/components/providers/ChatUnreadProvider'
+import { TourGuide } from '@/components/ui/TourGuide'
 import { rsvpAction, addBookingAction, makeAdminAction, removeAdminAction, removeMemberAction, leaveGroupAction, deleteGroupAction } from './actions'
 
 interface Member {
@@ -224,8 +225,9 @@ export default function GroupClient({
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 max-w-xl mx-auto min-h-screen pb-24">
+      <TourGuide page="group" />
       {/* 1. HEADER */}
-      <div className="flex justify-between items-start">
+      <div data-tour="group-header" className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-black text-neutral-900 tracking-tight leading-none mb-2">{group.name}</h1>
           <div className="flex items-center gap-3 text-sm font-medium">
@@ -252,7 +254,7 @@ export default function GroupClient({
       </div>
 
       {/* TAB NAVIGATION */}
-      <div className="flex bg-white rounded-2xl p-1 border border-neutral-100 shadow-sm">
+      <div data-tour="group-tabs" className="flex bg-white rounded-2xl p-1 border border-neutral-100 shadow-sm">
         {[
           { key: 'matches' as const, label: 'Matches', icon: Calendar },
           { key: 'chat' as const, label: 'Chat', icon: MessageCircle, badge: unreadCount },
@@ -537,6 +539,7 @@ export default function GroupClient({
 
       {/* FLOATING ACTION BUTTON */}
       <button
+        data-tour="add-booking-fab"
         onClick={() => setIsAddBookingOpen(true)}
         className="fixed bottom-20 right-4 h-14 bg-green-600 text-white rounded-full shadow-lg shadow-green-600/30 flex items-center hover:bg-green-700 active:scale-95 transition-all duration-300 z-40 group overflow-hidden"
       >

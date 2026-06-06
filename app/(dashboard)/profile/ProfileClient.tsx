@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { Toast } from '@/components/ui/Toast'
 import StatShareCard from '@/components/cards/StatShareCard'
+import { TourGuide } from '@/components/ui/TourGuide'
 
 const MAX_AVATAR_SIZE = 300
 
@@ -288,10 +289,11 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-8 max-w-xl mx-auto min-h-screen pb-24">
+      <TourGuide page="profile" />
       {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
 
       {/* 1. PROFILE HEADER CARD */}
-      <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100 flex flex-col items-center text-center relative overflow-hidden">
+      <div data-tour="profile-header" className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100 flex flex-col items-center text-center relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-green-50 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
 
         <div className="relative mb-4">
@@ -351,7 +353,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
       </div>
 
       {/* 2. PERSONAL STATS CARD */}
-      <div className="bg-white rounded-3xl p-5 shadow-sm border border-neutral-100">
+      <div data-tour="profile-stats" className="bg-white rounded-3xl p-5 shadow-sm border border-neutral-100">
         <h2 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
           <Activity className="w-5 h-5 text-neutral-400" /> My Stats
         </h2>
@@ -397,7 +399,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
       </div>
 
       {/* 3. STATS BY GROUP */}
-      <div className="bg-white rounded-3xl p-5 shadow-sm border border-neutral-100">
+      <div data-tour="profile-group-stats" className="bg-white rounded-3xl p-5 shadow-sm border border-neutral-100">
         <h2 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
           <Trophy className="w-5 h-5 text-neutral-400" /> Stats by Group
         </h2>
@@ -450,7 +452,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
       </div>
 
       {/* 4. PREFERENCES CARD */}
-      <div className="bg-white rounded-3xl p-5 shadow-sm border border-neutral-100">
+      <div data-tour="profile-preferences" className="bg-white rounded-3xl p-5 shadow-sm border border-neutral-100">
         <h2 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
           <Settings className="w-5 h-5 text-neutral-400" /> Preferences
         </h2>

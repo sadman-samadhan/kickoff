@@ -20,6 +20,7 @@ export function BottomNav() {
 
   return (
     <nav
+      data-tour="bottom-nav"
       className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-lg border-t border-neutral-200/80"
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
     >
