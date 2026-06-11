@@ -34,6 +34,7 @@ import { TopLoaderProvider } from '@/components/providers/TopLoaderProvider';
 import { ChatUnreadProvider } from '@/components/providers/ChatUnreadProvider';
 import Image from 'next/image';
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { InstallPrompt } from '@/components/ui/InstallPrompt';
 
 export default function RootLayout({
   children,
@@ -62,6 +63,7 @@ export default function RootLayout({
             {children}
           </ChatUnreadProvider>
         </TopLoaderProvider>
+        <InstallPrompt />
         <SpeedInsights />
       </body>
     </html>

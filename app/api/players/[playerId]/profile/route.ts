@@ -39,6 +39,21 @@ export async function PATCH(req: Request, { params }: { params: { playerId: stri
     }
   }
 
+  // Handle username specifically with validation
+  if (body.username !== undefined) {
+    const username = body.username.trim().toLowerCase()
+    if (!username) {
+      return NextResponse.json({ error: 'Username cannot be empty' }, { status: 400 })
+    }
+    if (username.includes(' ')) {
+      return NextResponse.json({ error: 'Username cannot contain spaces' }, { status: 400 })
+    }
+    if (!/^[a-zA-Z0-9_.]+$/.test(username)) {
+      return NextResponse.json({ error: 'Username can only contain letters, numbers, underscores, and periods' }, { status: 400 })
+    }
+    updates.username = username
+  }
+
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields provided' }, { status: 400 })
   }
@@ -51,7 +66,12 @@ export async function PATCH(req: Request, { params }: { params: { playerId: stri
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    if (error.message.includes('profiles_username_key') || error.code === '23505') {
+      return NextResponse.json({ error: 'This username is already taken' }, { status: 409 })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   return NextResponse.json({ success: true, profile: data })
 }
