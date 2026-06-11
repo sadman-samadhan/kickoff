@@ -66,6 +66,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
   const [tempName, setTempName] = useState(profile.full_name)
 
   const [editForm, setEditForm] = useState({
+    username: profile.username || '',
     preferred_position: profile.preferred_position || '',
     secondary_position: profile.secondary_position || '',
     email: profile.email || '',
@@ -75,6 +76,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
   useEffect(() => {
     setEditForm({
+      username: profile.username || '',
       preferred_position: profile.preferred_position || '',
       secondary_position: profile.secondary_position || '',
       email: profile.email || '',
@@ -141,14 +143,20 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
         body: JSON.stringify(updates)
       })
       const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update profile')
+      }
       if (data.profile) {
         setProfile(data.profile)
       }
       setIsEditModalOpen(false)
       setIsEditingName(false)
       router.refresh()
-    } catch (e) {
-      console.error(e)
+      return true
+    } catch (err: any) {
+      console.error(err)
+      setToastMessage(`❌ Error: ${err.message || 'Update failed'}`)
+      return false
     } finally {
       setIsSaving(false)
     }
@@ -384,7 +392,21 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto max-h-[70vh] pr-1">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-neutral-500 uppercase">Username</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 text-sm font-bold">@</span>
+                  <input
+                    type="text"
+                    className="w-full pl-8 pr-3 py-3 border border-neutral-200 rounded-xl text-sm font-medium bg-white outline-none focus:ring-2 focus:ring-green-500"
+                    value={editForm.username}
+                    onChange={e => setEditForm({ ...editForm, username: e.target.value.toLowerCase().replace(/\s+/g, '') })}
+                    placeholder="username"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-neutral-500 uppercase">Preferred Position</label>
                 <select
@@ -456,9 +478,11 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
               </div>
 
               <Button
-                onClick={() => {
-                  updateProfile(editForm)
-                  setToastMessage('✅ Profile updated!')
+                onClick={async () => {
+                  const success = await updateProfile(editForm)
+                  if (success) {
+                    setToastMessage('✅ Profile updated!')
+                  }
                 }}
                 disabled={isSaving}
                 className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl shadow-sm mt-4 text-base"
