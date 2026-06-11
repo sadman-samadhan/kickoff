@@ -36,6 +36,8 @@ export async function addBookingAction(groupId: string, data: any) {
   }).catch(console.error)
 
   revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/groups')
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
@@ -89,6 +91,8 @@ export async function rsvpAction(bookingId: string, groupId: string, status: str
   }
 
   revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/groups')
+  revalidatePath('/dashboard')
   return { status: finalStatus, waitlistPosition }
 }
 
@@ -117,6 +121,7 @@ export async function makeAdminAction(groupId: string, playerId: string) {
   if (error) throw new Error(error.message)
 
   revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/groups')
   return { success: true }
 }
 
@@ -148,6 +153,7 @@ export async function removeAdminAction(groupId: string, playerId: string) {
   if (error) throw new Error(error.message)
 
   revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/groups')
   return { success: true }
 }
 
@@ -179,6 +185,7 @@ export async function removeMemberAction(groupId: string, playerId: string) {
   if (error) throw new Error(error.message)
 
   revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/groups')
   return { success: true }
 }
 
@@ -213,6 +220,7 @@ export async function leaveGroupAction(groupId: string) {
   if (error) throw new Error(error.message)
 
   revalidatePath('/dashboard')
+  revalidatePath('/groups')
   return { success: true }
 }
 
@@ -245,5 +253,6 @@ export async function deleteGroupAction(groupId: string) {
   if (error) throw new Error(error.message)
 
   revalidatePath('/dashboard')
+  revalidatePath('/groups')
   return { success: true }
 }

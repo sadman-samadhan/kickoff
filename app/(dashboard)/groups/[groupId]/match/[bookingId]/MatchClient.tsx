@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation'
 import ConfirmModal from '@/components/modals/ConfirmModal'
 import MatchdayShareCard from '@/components/cards/MatchdayShareCard'
 import { CustomSelect } from '@/components/ui/select'
+import { TourGuide } from '@/components/ui/TourGuide'
 
 const PRESET_COLORS = [
   { label: 'Red', value: '#ef4444' },
@@ -672,6 +673,7 @@ export default function MatchClient({
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 max-w-xl mx-auto min-h-screen pb-24">
+      <TourGuide page="match" />
       {/* HEADER */}
       <div className="flex items-center gap-3 mb-2">
         <Link href={`/groups/${groupId}`} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-neutral-200 text-neutral-500">
@@ -681,7 +683,7 @@ export default function MatchClient({
       </div>
 
       {/* 1. MATCH INFO CARD */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100">
+      <div data-tour="match-info" className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100">
         <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-green-600 bg-green-50 px-2.5 py-1 rounded-md">
             <Calendar className="w-4 h-4" />
@@ -740,7 +742,7 @@ export default function MatchClient({
 
       {/* 3. RSVP WIDGET */}
       {displayStatus === 'upcoming' && (
-        <div className="grid grid-cols-2 gap-3">
+        <div data-tour="match-rsvp" className="grid grid-cols-2 gap-3">
           <Button 
             onClick={() => handleRsvp('in')}
             disabled={isRsvpLoading}
@@ -761,7 +763,7 @@ export default function MatchClient({
       )}
 
       {/* 2. PLAYER LIST CARD */}
-      <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm">
+      <div data-tour="match-players" className="bg-white rounded-2xl border border-neutral-100 shadow-sm">
         <div className="p-4 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50 rounded-t-2xl">
           <h3 className="font-bold text-neutral-900 flex items-center gap-2">
             <Users className="w-5 h-5 text-neutral-500" />
@@ -913,7 +915,7 @@ export default function MatchClient({
 
       {/* 4. TEAMS SECTION */}
       {displayStatus !== 'cancelled' && (
-        <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm">
+        <div data-tour="match-teams" className="bg-white rounded-2xl border border-neutral-100 shadow-sm">
           <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center rounded-t-2xl">
             <h3 className="font-bold text-neutral-900 flex items-center gap-2">
               <Shield className="w-5 h-5 text-neutral-500" />
@@ -1189,7 +1191,7 @@ export default function MatchClient({
 
       {/* 5. MATCH SCHEDULE */}
       {teams.length > 0 && (
-        <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+        <div data-tour="match-schedule" className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center">
             <h3 className="font-bold text-neutral-900 flex items-center gap-2">
               <Trophy className="w-5 h-5 text-neutral-500" />
@@ -1327,7 +1329,7 @@ export default function MatchClient({
 
       {/* MATCHDAY REPORT SECTION */}
       {teams.length > 0 && (
-        <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
+        <div data-tour="match-report" className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center">
             <h3 className="font-bold text-neutral-900 flex items-center gap-2">
               <Trophy className="w-5 h-5 text-neutral-500" />

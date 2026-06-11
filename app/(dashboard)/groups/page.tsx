@@ -37,7 +37,13 @@ export default async function GroupsPage() {
       .eq('status', 'upcoming')
       .order('match_date', { ascending: true })
       
-    allBookings = bData || []
+    const nowMs = Date.now()
+    const fiveHoursMs = 5 * 60 * 60 * 1000
+    allBookings = (bData || []).filter(b => {
+      const matchDateTimeStr = `${b.match_date}T${b.match_time || '00:00:00'}`
+      const matchTimeMs = new Date(matchDateTimeStr).getTime()
+      return nowMs <= matchTimeMs + fiveHoursMs
+    })
   }
 
   const groupsPayload = (userGroupsData || []).map((ug: any) => {

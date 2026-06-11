@@ -9,6 +9,7 @@ import { Trophy, CheckCircle, XCircle, Plus, Calendar as CalendarIcon, MapPin, C
 import Link from 'next/link'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, startOfWeek, endOfWeek } from 'date-fns'
 import { Button } from '@/components/ui/button'
+import { TourGuide } from '@/components/ui/TourGuide'
 
 interface Profile {
   full_name?: string
@@ -145,9 +146,10 @@ END:VCALENDAR`
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 max-w-xl mx-auto">
+      <TourGuide page="dashboard" />
 
       {/* 1. HEADER CARD */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100 flex flex-col items-center">
+      <div data-tour="profile-card" className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100 flex flex-col items-center">
         <div className="relative mb-3">
           {profile?.avatar_url ? (
             <div className="w-20 h-20 rounded-full border-4 border-green-50 shadow-sm relative overflow-hidden">
@@ -188,7 +190,7 @@ END:VCALENDAR`
 
       {/* 2. PENDING RSVP ALERT */}
       {localPending.length > 0 && (
-        <div className="bg-amber-50 rounded-2xl p-5 border border-amber-200 shadow-[0_0_15px_rgba(251,191,36,0.2)] animate-pulse-slow relative overflow-hidden">
+        <div data-tour="pending-rsvp" className="bg-amber-50 rounded-2xl p-5 border border-amber-200 shadow-[0_0_15px_rgba(251,191,36,0.2)] animate-pulse-slow relative overflow-hidden">
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-200/30 rounded-full -mr-12 -mt-12 blur-xl"></div>
 
           <div className="flex justify-between items-start mb-2">
@@ -233,7 +235,7 @@ END:VCALENDAR`
       )}
 
       {/* 3. UPCOMING MATCHES */}
-      <div className="mb-6">
+      <div data-tour="upcoming-matches" className="mb-6">
         <h3 className="font-bold text-neutral-800 text-lg mb-3">Upcoming Matches</h3>
         <div className="flex flex-col gap-3">
           {upcomingBookings.length === 0 ? (
@@ -281,7 +283,7 @@ END:VCALENDAR`
       </div>
 
       {/* 4. MY GROUPS */}
-      <div className="-mx-4 mb-6">
+      <div data-tour="my-squads" className="-mx-4 mb-6">
         <div className="px-4 mb-3 flex justify-between items-center">
           <h3 className="font-bold text-neutral-800 text-lg">My Squads</h3>
         </div>
@@ -316,7 +318,7 @@ END:VCALENDAR`
       </div>
 
       {/* 5. CALENDAR */}
-      <div className="bg-white rounded-2xl p-5 border border-neutral-100 shadow-sm mb-6">
+      <div data-tour="calendar" className="bg-white rounded-2xl p-5 border border-neutral-100 shadow-sm mb-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-bold text-neutral-800 text-lg flex items-center gap-2">
             <CalendarIcon className="w-5 h-5 text-green-600" />

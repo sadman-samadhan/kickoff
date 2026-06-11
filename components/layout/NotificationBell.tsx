@@ -95,8 +95,8 @@ export function NotificationBell({ userId }: { userId: string }) {
       </button>
 
       {isOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-neutral-900/60 p-4 pb-0 sm:pb-4" onClick={() => setIsOpen(false)}>
-          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-0 shadow-2xl animate-in slide-in-from-bottom-full duration-200 flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-neutral-900/60 p-4" onClick={() => setIsOpen(false)}>
+          <div className="bg-white w-full max-w-sm rounded-3xl p-0 shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-neutral-100 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg text-neutral-900">Notifications</h3>
               <div className="flex items-center gap-2">

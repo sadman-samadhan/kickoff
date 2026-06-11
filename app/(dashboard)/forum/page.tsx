@@ -163,8 +163,8 @@ export default function ForumPage() {
 
       {/* Create Post Modal */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-neutral-900/50 p-0 sm:p-4">
-          <div className="bg-white w-full max-w-md h-[85vh] sm:h-auto sm:max-h-[85vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col animate-in slide-in-from-bottom-full duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/50 p-4">
+          <div className="bg-white w-full max-w-md max-h-[85vh] rounded-3xl shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-neutral-100 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg text-neutral-900 flex items-center gap-2">
                 <Send className="w-5 h-5 text-green-600" /> New Post

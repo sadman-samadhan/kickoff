@@ -162,8 +162,10 @@ export default function StatShareCard({
                 ref={cardRef}
                 className="rounded-2xl overflow-hidden relative"
                 style={{
-                  background: theme.gradient,
-                  padding: '32px 24px',
+                  backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.7)), url('/images/match-card-green.jpeg')`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  padding: '24px 24px',
                 }}
               >
                 {/* Background decorations */}
@@ -185,7 +187,7 @@ export default function StatShareCard({
                 {/* Content */}
                 <div className="relative z-10">
                   {/* App branding */}
-                  <div className="flex justify-between items-center mb-6">
+                  <div className="flex justify-between items-center mb-6 relative -top-1">
                     <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">KhelaHobe</span>
                     <span className="text-[10px] font-bold uppercase tracking-[0.15em]" style={{ color: `${theme.accent}90` }}>
                       Season Recap
@@ -231,7 +233,7 @@ export default function StatShareCard({
                         className="rounded-xl py-4 px-2 text-center relative overflow-hidden"
                         style={{
                           border: `1px solid ${theme.accent}25`,
-                          background: `${theme.accent}08`,
+                          background: `${theme.accent}25`,
                         }}
                       >
                         <div className="text-lg mb-0.5">{stat.emoji}</div>
@@ -246,22 +248,22 @@ export default function StatShareCard({
                   </div>
 
                   {/* Matches played */}
-                  <div className="text-center">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/30">
+                  <div className="text-center mt-3 relative -top-2">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/40">
                       {matchesPlayed} Matches Played
                     </span>
                   </div>
 
                   {/* Project URL */}
-                  <div className="text-center mt-3">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-white/20">
+                  <div className="text-center mt-3 relative -top-6">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-white/50">
                       {displayDomain}
                     </span>
                   </div>
 
                   {/* Bottom accent line */}
                   <div
-                    className="mt-6 h-[2px] rounded-full mx-auto w-16"
+                    className="mt-4 h-[2px] rounded-full mx-auto w-16 relative -top-2"
                     style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}, transparent)` }}
                   />
                 </div>
