@@ -33,6 +33,9 @@ export async function saveTeamsAction(bookingId: string, groupId: string, teamsD
 
     if (playerIds.size > 0) {
       await admin.from('team_players').insert(Array.from(playerIds).map(pid => ({ team_id: newTeam.id, player_id: pid })))
+      for (const pid of Array.from(playerIds)) {
+        notifyPlayerOfTeamAssignment(admin, bookingId, groupId, pid, newTeam.id)
+      }
     }
   }
 
@@ -57,12 +60,20 @@ export async function updateTeamAction(teamId: string, bookingId: string, groupI
     guest_members: guestNames.length > 0 ? guestNames : null
   }).eq('id', teamId)
 
+  const { data: oldPlayers } = await admin.from('team_players').select('player_id').eq('team_id', teamId)
+  const oldPlayerIds = new Set(oldPlayers?.map(p => p.player_id) || [])
+
   await admin.from('team_players').delete().eq('team_id', teamId)
   const realPlayerIds = new Set<string>()
   if (realCaptainId) realPlayerIds.add(realCaptainId)
   ;(data.playerIds || []).filter((id: string) => !id.startsWith('guest_')).forEach((id: string) => realPlayerIds.add(id))
   if (realPlayerIds.size > 0) {
     await admin.from('team_players').insert(Array.from(realPlayerIds).map(pid => ({ team_id: teamId, player_id: pid })))
+    
+    const newlyAssigned = Array.from(realPlayerIds).filter(pid => !oldPlayerIds.has(pid))
+    for (const pid of newlyAssigned) {
+      notifyPlayerOfTeamAssignment(admin, bookingId, groupId, pid, teamId)
+    }
   }
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
   return { success: true }
@@ -173,6 +184,8 @@ export async function updateMatchScoreAction(groupId: string, bookingId: string,
   }
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
@@ -229,6 +242,8 @@ export async function adminAddRsvpAction(bookingId: string, groupId: string, pla
   }
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
@@ -253,6 +268,8 @@ export async function addGuestAction(bookingId: string, groupId: string, guestNa
   })
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
@@ -270,6 +287,8 @@ export async function updateMaxPlayersAction(bookingId: string, groupId: string,
   await admin.from('bookings').update({ max_players: maxPlayers }).eq('id', bookingId)
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
@@ -298,6 +317,7 @@ export async function assignPlayerToTeamAction(bookingId: string, groupId: strin
   if (newTeamId) {
     if (playerId) {
       await admin.from('team_players').insert({ team_id: newTeamId, player_id: playerId })
+      notifyPlayerOfTeamAssignment(admin, bookingId, groupId, playerId, newTeamId)
     } else if (guestName && rsvpId) {
       const { data: newTeamData } = await admin.from('teams').select('guest_members').eq('id', newTeamId).single()
       const currentGuests = newTeamData?.guest_members || []
@@ -327,6 +347,8 @@ export async function rescheduleMatchesAction(bookingId: string, groupId: string
   await admin.from('bookings').update({ status: 'upcoming' }).eq('id', bookingId)
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/dashboard')
   return { success: true }
 }
 
@@ -399,6 +421,76 @@ export async function adminRemoveRsvpAction(bookingId: string, groupId: string, 
     for (let i = 0; i < waitlisters.length; i++) {
       await admin.from('rsvps').update({ waitlist_position: i + 1 }).eq('id', waitlisters[i].id)
     }
+  }
+
+  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
+async function notifyPlayerOfTeamAssignment(
+  admin: any,
+  bookingId: string,
+  groupId: string,
+  playerId: string,
+  teamId: string
+) {
+  try {
+    const { data: teamData } = await admin.from('teams').select('name').eq('id', teamId).single()
+    const teamName = teamData?.name || 'a team'
+
+    const { data: bookingData } = await admin
+      .from('bookings')
+      .select('match_date, match_time, groups(name)')
+      .eq('id', bookingId)
+      .single()
+
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('push_notif_enabled')
+      .eq('id', playerId)
+      .single()
+
+    if (profile && profile.push_notif_enabled !== false) {
+      const { data: subs } = await admin
+        .from('push_subscriptions')
+        .select('id, subscription_json')
+        .eq('user_id', playerId)
+
+      if (subs && subs.length > 0) {
+        const { sendPushNotification } = await import('@/lib/push/send')
+        const { format, parseISO } = await import('date-fns')
+        const groupName = (bookingData?.groups as any)?.name || 'Match'
+        const dateStr = bookingData?.match_date ? format(parseISO(bookingData.match_date), 'MMM d') : ''
+        const timeStr = bookingData?.match_time ? bookingData.match_time.slice(0, 5) : ''
+        const matchTimeLabel = dateStr ? ` on ${dateStr} at ${timeStr}` : ''
+
+        await Promise.all(
+          subs.map((sub: any) =>
+            sendPushNotification(sub.id, sub.subscription_json, {
+              title: `👕 Squad Assignment — ${groupName}`,
+              body: `You've been assigned to ${teamName}${matchTimeLabel}! Check your lineup.`,
+              url: `/groups/${groupId}/match/${bookingId}`
+            })
+          )
+        )
+      }
+    }
+  } catch (err) {
+    console.error('Failed to notify player of team assignment:', err)
+  }
+}
+
+export async function reorderMatchesAction(bookingId: string, groupId: string, matchIdsInOrder: string[]) {
+  const admin = createAdminClient()
+  
+  for (let i = 0; i < matchIdsInOrder.length; i++) {
+    await admin
+      .from('match_schedule')
+      .update({ scheduled_order: i + 1 })
+      .eq('id', matchIdsInOrder[i])
+      .eq('booking_id', bookingId)
   }
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)

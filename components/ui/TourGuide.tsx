@@ -256,6 +256,7 @@ export function TourGuide({ page }: TourGuideProps) {
       window.removeEventListener("resize", updatePosition)
       window.removeEventListener("scroll", updatePosition)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, currentStepIndex])
 
   const handleNext = () => {

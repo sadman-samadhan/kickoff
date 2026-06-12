@@ -52,6 +52,7 @@ export default async function GroupPage({ params }: { params: { groupId: string 
     match_date: string
     match_time: string
     field_name: string
+    max_players: number
     status: string
     rsvps: { player_id: string; status: string }[]
     champion?: string
@@ -144,6 +145,7 @@ export default async function GroupPage({ params }: { params: { groupId: string 
       match_date: b.match_date,
       match_time: b.match_time,
       field_name: b.field_name,
+      max_players: b.max_players,
       status: b.status,
       rsvps: b.rsvps,
       champion: getChampionTeamName(b)

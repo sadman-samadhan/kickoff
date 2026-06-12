@@ -58,13 +58,18 @@ export function ChatUnreadProvider({ children }: { children: React.ReactNode }) 
     return () => clearInterval(interval)
   }, [refreshCounts])
 
-  const markAsRead = useCallback((groupId: string) => {
+  const markAsRead = useCallback(async (groupId: string) => {
     localStorage.setItem(`chat_last_read_${groupId}`, Date.now().toString())
     setUnreadCounts(prev => {
       const newCounts = { ...prev, [groupId]: 0 }
       setTotalUnread(Object.values(newCounts).reduce((a, b) => a + b, 0))
       return newCounts
     })
+    try {
+      await fetch(`/api/groups/${groupId}/read`, { method: 'POST' })
+    } catch (e) {
+      console.error('Failed to sync read status to database:', e)
+    }
   }, [])
 
   return (

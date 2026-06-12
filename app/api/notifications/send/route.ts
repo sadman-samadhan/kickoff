@@ -60,10 +60,11 @@ export async function POST(req: Request) {
     const playerIds = insertData.map(d => d.player_id)
     const { data: profiles } = await supabaseAdmin
       .from('profiles')
-      .select('id, full_name, email, email_notifications')
+      .select('id, full_name, email, email_notifications, push_notif_enabled')
       .in('id', playerIds)
 
     if (profiles) {
+      // 1. Send Email Notifications
       Promise.all(profiles.map(async (p) => {
         if (p.email && !p.email.endsWith('@khelahobe.local') && p.email_notifications !== false) {
           const token = generateRsvpToken(p.id, booking_id)
@@ -85,6 +86,35 @@ export async function POST(req: Request) {
           })
         }
       }))
+
+      // 2. Send Push Notifications
+      const pushRecipients = profiles.filter(p => p.push_notif_enabled !== false).map(p => p.id)
+      if (pushRecipients.length > 0) {
+        ;(async () => {
+          try {
+            const { data: subs } = await supabaseAdmin
+              .from('push_subscriptions')
+              .select('id, subscription_json')
+              .in('user_id', pushRecipients)
+
+            if (subs && subs.length > 0) {
+              const { sendPushNotification } = await import('@/lib/push/send')
+              const matchTimeStr = bookingData.match_time.slice(0, 5)
+              await Promise.all(
+                subs.map((sub: any) =>
+                  sendPushNotification(sub.id, sub.subscription_json, {
+                    title: `⚽ New Match — ${groupName}`,
+                    body: `Match scheduled on ${bookingData.match_date} at ${matchTimeStr} (${bookingData.field_name}). RSVP now!`,
+                    url: `/groups/${group_id}`
+                  })
+                )
+              )
+            }
+          } catch (e) {
+            console.error('Failed to trigger booking push notifications:', e)
+          }
+        })()
+      }
     }
   }
 

@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { Goal, Target, Shield, Activity, Camera, ChevronDown, ChevronUp, Loader2, X, Edit3, Settings, Trophy, LogOut, BellOff, Bell, KeyRound, Eye, EyeOff, HelpCircle } from 'lucide-react'
+import { Goal, Target, Shield, Activity, Camera, ChevronDown, ChevronUp, Loader2, X, Edit3, Settings, Trophy, LogOut, Bell, KeyRound, Eye, EyeOff, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { Toast } from '@/components/ui/Toast'
@@ -95,6 +95,8 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
   const [isSaving, setIsSaving] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false)
+  const [isRegisteringPush, setIsRegisteringPush] = useState(false)
 
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false)
   const [isVerified, setIsVerified] = useState(false)
@@ -199,11 +201,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
     }
   }
 
-  const toggleEmailNotifications = async () => {
-    const newVal = !profile.email_notifications
-    await updateProfile({ email_notifications: newVal })
-    setToastMessage(newVal ? '🔔 Email notifications enabled' : '🔕 Email notifications disabled')
-  }
+
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -467,22 +465,20 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
         <div className="flex items-center justify-between py-3 border-b border-neutral-100">
           <div className="flex items-center gap-3">
-            {profile.email_notifications !== false ? (
-              <Bell className="w-5 h-5 text-green-600" />
-            ) : (
-              <BellOff className="w-5 h-5 text-neutral-400" />
-            )}
+            <Bell className="w-5 h-5 text-neutral-600" />
             <div>
-              <p className="text-sm font-bold text-neutral-800">Email Notifications</p>
-              <p className="text-[11px] text-neutral-400">Receive match alerts via email</p>
+              <p className="text-sm font-bold text-neutral-800">Notification Settings</p>
+              <p className="text-[11px] text-neutral-400">Manage email & push notifications</p>
             </div>
           </div>
-          <button
-            onClick={toggleEmailNotifications}
-            className={`relative w-11 h-6 rounded-full transition-colors ${profile.email_notifications !== false ? 'bg-green-500' : 'bg-neutral-300'}`}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsNotificationModalOpen(true)}
+            className="rounded-xl border-neutral-200"
           >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${profile.email_notifications !== false ? 'translate-x-5' : 'translate-x-0'}`} />
-          </button>
+            Manage
+          </Button>
         </div>
 
         {/* Change Password Option */}
@@ -846,6 +842,129 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
               >
                 {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Save Changes'}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOTIFICATION SETTINGS MODAL */}
+      {isNotificationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/60 p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-6 pb-4 shrink-0">
+              <h3 className="font-bold text-lg text-neutral-900">Notification Settings</h3>
+              <button onClick={() => setIsNotificationModalOpen(false)} className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 pt-0 overflow-y-auto flex-1 space-y-5">
+              {/* Push notifications section */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">Push Alerts (PWA)</h4>
+                
+                {/* Toggle Chat Messages */}
+                <div className="flex items-center justify-between py-1">
+                  <div>
+                    <p className="text-sm font-bold text-neutral-800">Chat Messages</p>
+                    <p className="text-[11px] text-neutral-400">New messages in group chat</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const newVal = profile.push_msg_enabled !== false ? false : true
+                      await updateProfile({ push_msg_enabled: newVal })
+                    }}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${profile.push_msg_enabled !== false ? 'bg-green-500' : 'bg-neutral-300'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${profile.push_msg_enabled !== false ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+
+                {/* Toggle Match Updates */}
+                <div className="flex items-center justify-between py-1">
+                  <div>
+                    <p className="text-sm font-bold text-neutral-800">Match Bookings</p>
+                    <p className="text-[11px] text-neutral-400">Booking creations & alerts</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const newVal = profile.push_notif_enabled !== false ? false : true
+                      await updateProfile({ push_notif_enabled: newVal })
+                    }}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${profile.push_notif_enabled !== false ? 'bg-green-500' : 'bg-neutral-300'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${profile.push_notif_enabled !== false ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+
+                {/* Toggle Forum Activity */}
+                <div className="flex items-center justify-between py-1">
+                  <div>
+                    <p className="text-sm font-bold text-neutral-800">Forum Activity</p>
+                    <p className="text-[11px] text-neutral-400">Replies on threads you follow</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const newVal = profile.push_forum_enabled !== false ? false : true
+                      await updateProfile({ push_forum_enabled: newVal })
+                    }}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${profile.push_forum_enabled !== false ? 'bg-green-500' : 'bg-neutral-300'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${profile.push_forum_enabled !== false ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-neutral-100 my-2"></div>
+
+              {/* Email notifications section */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">Email Alerts</h4>
+
+                <div className="flex items-center justify-between py-1">
+                  <div>
+                    <p className="text-sm font-bold text-neutral-800">Match Invites & Reminders</p>
+                    <p className="text-[11px] text-neutral-400">Receive booking & schedule emails</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const newVal = profile.email_notifications !== false ? false : true
+                      await updateProfile({ email_notifications: newVal })
+                    }}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${profile.email_notifications !== false ? 'bg-green-500' : 'bg-neutral-300'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${profile.email_notifications !== false ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-neutral-100 my-2"></div>
+
+              {/* Push Registration Button */}
+              <div className="pt-2">
+                <Button
+                  onClick={async () => {
+                    setIsRegisteringPush(true)
+                    const { registerPushSubscription } = await import('@/lib/push/push')
+                    const res = await registerPushSubscription()
+                    setIsRegisteringPush(false)
+                    if (res.success) {
+                      setToastMessage('🔔 Push notifications registered on this device!')
+                    } else {
+                      setToastMessage(`❌ Push error: ${res.error}`)
+                    }
+                  }}
+                  disabled={isRegisteringPush}
+                  className="w-full h-11 bg-neutral-900 hover:bg-black text-white rounded-xl text-sm font-bold shadow-sm"
+                >
+                  {isRegisteringPush ? (
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  ) : (
+                    <Bell className="w-4 h-4 mr-2" />
+                  )}
+                  Enable Push Notifications
+                </Button>
+              </div>
             </div>
           </div>
         </div>

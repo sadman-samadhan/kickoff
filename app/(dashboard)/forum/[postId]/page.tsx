@@ -9,16 +9,22 @@ import { formatDistanceToNow } from 'date-fns'
 import Image from 'next/image'
 import Link from 'next/link'
 import ConfirmModal from '@/components/modals/ConfirmModal'
+import { useProfile } from '@/components/Providers'
+
+const SITE_ADMINS = ['sakib.samadhan@gmail.com', 'sadman.sakib0008@gmail.com']
 
 export default function ForumPostPage({ params }: { params: { postId: string } }) {
   const { postId } = params
   const router = useRouter()
+  const { profile } = useProfile()
   const [post, setPost] = useState<any>(null)
   const [comments, setComments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [isDeleteCommentModalOpen, setIsDeleteCommentModalOpen] = useState(false)
+  const [commentToDelete, setCommentToDelete] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchPost() {
@@ -66,6 +72,28 @@ export default function ForumPostPage({ params }: { params: { postId: string } }
       router.push('/forum')
     } catch (e) {
       console.error(e)
+    }
+  }
+
+  const handleOpenDeleteCommentModal = (commentId: string) => {
+    setCommentToDelete(commentId)
+    setIsDeleteCommentModalOpen(true)
+  }
+
+  const handleDeleteComment = async () => {
+    if (!commentToDelete) return
+    try {
+      const res = await fetch(`/api/forum/posts/${postId}/comments/${commentToDelete}`, {
+        method: 'DELETE'
+      })
+      if (res.ok) {
+        setComments(prev => prev.filter(c => c.id !== commentToDelete))
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsDeleteCommentModalOpen(false)
+      setCommentToDelete(null)
     }
   }
 
@@ -121,9 +149,11 @@ export default function ForumPostPage({ params }: { params: { postId: string } }
             <p className="font-bold text-neutral-900 text-sm">{post.author?.full_name || post.author?.username || 'Player'}</p>
             <p className="text-[10px] text-neutral-400">{formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}</p>
           </div>
-          <button onClick={() => setIsDeleteModalOpen(true)} className="p-2 rounded-lg hover:bg-red-50 text-neutral-400 hover:text-red-500 transition-colors">
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {((profile?.id === post.author_id) || (profile?.email && SITE_ADMINS.includes(profile.email))) && (
+            <button onClick={() => setIsDeleteModalOpen(true)} className="p-2 rounded-lg hover:bg-red-50 text-neutral-400 hover:text-red-500 transition-colors">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         <span className="inline-block text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-green-100 text-green-700 mb-3">
@@ -158,10 +188,18 @@ export default function ForumPostPage({ params }: { params: { postId: string } }
                       {comment.author?.full_name?.charAt(0) || '?'}
                     </div>
                   )}
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="font-bold text-neutral-800 text-xs leading-none">{comment.author?.full_name || comment.author?.username || 'Player'}</p>
                     <p className="text-[9px] text-neutral-400 mt-0.5">{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</p>
                   </div>
+                  {((profile?.id === comment.author_id) || (profile?.email && SITE_ADMINS.includes(profile.email))) && (
+                    <button
+                      onClick={() => handleOpenDeleteCommentModal(comment.id)}
+                      className="p-1 rounded-lg hover:bg-red-50 text-neutral-400 hover:text-red-500 transition-colors shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
                 <p className="text-sm text-neutral-700 leading-relaxed whitespace-pre-wrap">{comment.content}</p>
               </div>
@@ -198,6 +236,19 @@ export default function ForumPostPage({ params }: { params: { postId: string } }
         confirmText="Delete"
         onConfirm={handleDeletePost}
         onCancel={() => setIsDeleteModalOpen(false)}
+        isDestructive={true}
+      />
+
+      <ConfirmModal
+        isOpen={isDeleteCommentModalOpen}
+        title="Delete Reply"
+        message="Are you sure you want to delete this reply? This action cannot be undone."
+        confirmText="Delete"
+        onConfirm={handleDeleteComment}
+        onCancel={() => {
+          setIsDeleteCommentModalOpen(false)
+          setCommentToDelete(null)
+        }}
         isDestructive={true}
       />
     </div>

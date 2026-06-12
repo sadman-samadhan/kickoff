@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 
@@ -65,7 +66,64 @@ export async function POST(req: Request, { params }: { params: { groupId: string
   const formattedData = {
     ...data,
     sender: data.profiles
-  }
+  };
+
+  // Trigger push notifications in background
+  ;(async () => {
+    try {
+      const supabaseAdmin = createAdminClient()
+      const { data: group } = await supabaseAdmin
+        .from('groups')
+        .select('name')
+        .eq('id', params.groupId)
+        .single()
+
+      const groupName = group?.name || 'Group'
+      const senderName = formattedData.sender?.full_name || formattedData.sender?.username || 'Someone'
+
+      const { data: members } = await supabaseAdmin
+        .from('group_members')
+        .select(`
+          player_id,
+          profiles:profiles!player_id (
+            push_msg_enabled
+          )
+        `)
+        .eq('group_id', params.groupId)
+        .neq('player_id', user.id)
+
+      if (members && members.length > 0) {
+        const subscriberIds = members
+          .filter(m => {
+            const p = Array.isArray(m.profiles) ? m.profiles[0] : (m.profiles as any)
+            return p && p.push_msg_enabled !== false
+          })
+          .map(m => m.player_id)
+
+        if (subscriberIds.length > 0) {
+          const { data: subs } = await supabaseAdmin
+            .from('push_subscriptions')
+            .select('id, subscription_json')
+            .in('user_id', subscriberIds)
+
+          if (subs && subs.length > 0) {
+            const { sendPushNotification } = await import('@/lib/push/send')
+            await Promise.all(
+              subs.map((sub: any) =>
+                sendPushNotification(sub.id, sub.subscription_json, {
+                  title: `${groupName} Chat`,
+                  body: `${senderName}: ${content.trim()}`,
+                  url: `/groups/${params.groupId}?tab=chat`
+                })
+              )
+            )
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to trigger message push notification:', e)
+    }
+  })()
 
   return NextResponse.json(formattedData)
 }

@@ -3,18 +3,19 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { format, parseISO } from 'date-fns'
-import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal, Star, MinusCircle } from 'lucide-react'
+import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal, Star, MinusCircle, Share2, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { rsvpAction } from '../../actions'
-import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction } from './actions'
+import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction, reorderMatchesAction } from './actions'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ConfirmModal from '@/components/modals/ConfirmModal'
 import MatchdayShareCard from '@/components/cards/MatchdayShareCard'
 import { CustomSelect } from '@/components/ui/select'
 import { TourGuide } from '@/components/ui/TourGuide'
+import { toPng } from 'html-to-image'
 
 const PRESET_COLORS = [
   { label: 'Red', value: '#ef4444' },
@@ -129,6 +130,276 @@ export default function MatchClient({
 
   // Assign Player to Team State
   const [assigningPlayerId, setAssigningPlayerId] = useState<string | null>(null)
+  const [sharingTeam, setSharingTeam] = useState<any>(null)
+  const [isGeneratingTeamImage, setIsGeneratingTeamImage] = useState(false)
+  const teamCardRef = useRef<HTMLDivElement>(null)
+
+  // Schedule Share State
+  const [sharingSchedule, setSharingSchedule] = useState(false)
+  const [isGeneratingScheduleImage, setIsGeneratingScheduleImage] = useState(false)
+  const scheduleCardRef = useRef<HTMLDivElement>(null)
+
+  const [orderedSchedule, setOrderedSchedule] = useState<any[]>(matchSchedule)
+  const [isReordering, setIsReordering] = useState(false)
+
+  // Keep local state in sync with props
+  useEffect(() => {
+    setOrderedSchedule(matchSchedule)
+  }, [matchSchedule])
+
+  const handleMoveMatch = async (index: number, direction: 'up' | 'down') => {
+    if (isReordering) return
+    const newSchedule = [...orderedSchedule]
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    
+    // Swap items
+    const temp = newSchedule[index]
+    newSchedule[index] = newSchedule[targetIndex]
+    newSchedule[targetIndex] = temp
+    
+    setOrderedSchedule(newSchedule)
+    setIsReordering(true)
+    try {
+      const matchIds = newSchedule.map(m => m.id)
+      await reorderMatchesAction(booking.id, groupId, matchIds)
+    } catch (e) {
+      console.error('Failed to reorder matches:', e)
+      // Revert if error
+      setOrderedSchedule(orderedSchedule)
+    } finally {
+      setIsReordering(false)
+    }
+  }
+
+  const POSITION_ORDER: Record<string, number> = {
+    'GK': 1,
+    'DEF': 2,
+    'MID': 3,
+    'ATT': 4,
+    'Field Player': 5
+  }
+
+  const getTeamPlayersList = (team: any) => {
+    const list: any[] = []
+    
+    team.team_players?.forEach((tp: any) => {
+      const isCaptain = team.captain_id === tp.player_id
+      const rsvp = rsvps.find((r: any) => r.player_id === tp.player_id)
+      const pos = rsvp?.profiles?.preferred_position || 'Field Player'
+      list.push({
+        id: tp.player_id,
+        name: tp.profiles?.full_name || 'Player',
+        position: pos,
+        isCaptain,
+        isGuest: false
+      })
+    })
+
+    team.guest_members?.forEach((gId: string) => {
+      const rsvp = rsvps.find((r: any) => r.id === gId)
+      if (rsvp) {
+        const isCaptain = team.captain_id === `guest_${rsvp.id}`
+        const pos = rsvp.guest_position || 'Field Player'
+        list.push({
+          id: rsvp.id,
+          name: rsvp.guest_name || 'Guest Player',
+          position: pos,
+          isCaptain,
+          isGuest: true
+        })
+      }
+    })
+
+    return list.sort((a, b) => {
+      const weightA = POSITION_ORDER[a.position] || 99
+      const weightB = POSITION_ORDER[b.position] || 99
+      if (weightA !== weightB) return weightA - weightB
+      if (a.isCaptain !== b.isCaptain) return a.isCaptain ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+  }
+
+  const getTeamGradient = (hexColor: string) => {
+    let color = hexColor || '#16a34a'
+    if (!color.startsWith('#')) color = '#' + color
+    
+    let r = parseInt(color.slice(1, 3), 16)
+    let g = parseInt(color.slice(3, 5), 16)
+    let b = parseInt(color.slice(5, 7), 16)
+    
+    if (isNaN(r) || isNaN(g) || isNaN(b)) {
+      r = 22; g = 163; b = 74;
+      color = '#16a34a'
+    }
+
+    const contrastColor = getContrastColor(color)
+    const isLight = contrastColor === '#0f172a'
+
+    let startColor = ''
+    let endColor = color
+
+    if (isLight) {
+      // Light background: blend team color with white to make it soft
+      const rLight = Math.round(r * 0.3 + 255 * 0.7)
+      const gLight = Math.round(g * 0.3 + 255 * 0.7)
+      const bLight = Math.round(b * 0.3 + 255 * 0.7)
+      startColor = '#' + [rLight, gLight, bLight].map(x => x.toString(16).padStart(2, '0')).join('')
+      
+      if (color.toLowerCase() === '#ffffff') {
+        startColor = '#f8fafc'
+        endColor = '#e2e8f0'
+      }
+    } else {
+      // Dark background: blend team color with black for a rich dark shade
+      const rDark = Math.round(r * 0.15)
+      const gDark = Math.round(g * 0.15)
+      const bDark = Math.round(b * 0.15)
+      startColor = '#' + [rDark, gDark, bDark].map(x => x.toString(16).padStart(2, '0')).join('')
+
+      if (color.toLowerCase() === '#000000') {
+        startColor = '#090d16'
+        endColor = '#1e293b'
+      }
+    }
+
+    return {
+      gradient: `linear-gradient(135deg, ${startColor} 0%, ${endColor} 100%)`,
+      glow: `rgba(${r}, ${g}, ${b}, 0.35)`,
+      accent: color,
+      text: contrastColor,
+      isLight
+    }
+  }
+
+  const getContrastColor = (hexColor: string) => {
+    let color = hexColor || '#16a34a'
+    if (!color.startsWith('#')) color = '#' + color
+    const r = parseInt(color.slice(1, 3), 16)
+    const g = parseInt(color.slice(3, 5), 16)
+    const b = parseInt(color.slice(5, 7), 16)
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return '#ffffff'
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000
+    return (yiq >= 128) ? '#0f172a' : '#ffffff'
+  }
+
+  const handleOpenShareTeam = (team: any) => {
+    setSharingTeam(team)
+  }
+
+  const handleShareTeam = async () => {
+    if (!teamCardRef.current || !sharingTeam) return
+    setIsGeneratingTeamImage(true)
+    try {
+      const dataUrl = await toPng(teamCardRef.current, {
+        quality: 1,
+        pixelRatio: 3,
+        cacheBust: true,
+      })
+
+      const response = await fetch(dataUrl)
+      const blob = await response.blob()
+      const file = new File([blob], `khelahobe-team-${sharingTeam.name.replace(/\s+/g, '-').toLowerCase()}.png`, { type: 'image/png' })
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: `${sharingTeam.name} Squad — KhelaHobe`,
+          text: `Check out our squad ${sharingTeam.name} on KhelaHobe! ⚽`,
+          files: [file],
+        })
+      } else {
+        const link = document.createElement('a')
+        link.href = dataUrl
+        link.download = `khelahobe-team-${sharingTeam.name.replace(/\s+/g, '-').toLowerCase()}.png`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+    } catch (e) {
+      console.error('Share team failed:', e)
+    } finally {
+      setIsGeneratingTeamImage(false)
+    }
+  }
+
+  const handleDownloadTeam = async () => {
+    if (!teamCardRef.current || !sharingTeam) return
+    setIsGeneratingTeamImage(true)
+    try {
+      const dataUrl = await toPng(teamCardRef.current, {
+        quality: 1,
+        pixelRatio: 3,
+        cacheBust: true,
+      })
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = `khelahobe-team-${sharingTeam.name.replace(/\s+/g, '-').toLowerCase()}.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (e) {
+      console.error('Download team failed:', e)
+    } finally {
+      setIsGeneratingTeamImage(false)
+    }
+  }
+
+  const handleShareSchedule = async () => {
+    if (!scheduleCardRef.current) return
+    setIsGeneratingScheduleImage(true)
+    try {
+      const dataUrl = await toPng(scheduleCardRef.current, {
+        quality: 1,
+        pixelRatio: 3,
+        cacheBust: true,
+      })
+
+      const response = await fetch(dataUrl)
+      const blob = await response.blob()
+      const file = new File([blob], `khelahobe-schedule-${booking.id}.png`, { type: 'image/png' })
+
+      const groupName = (booking.groups as any).name || 'Match'
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: `${groupName} Schedule — KhelaHobe`,
+          text: `Check out the schedule & scores on KhelaHobe! ⚽`,
+          files: [file],
+        })
+      } else {
+        const link = document.createElement('a')
+        link.href = dataUrl
+        link.download = `khelahobe-schedule-${booking.id}.png`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+    } catch (e) {
+      console.error('Share schedule failed:', e)
+    } finally {
+      setIsGeneratingScheduleImage(false)
+    }
+  }
+
+  const handleDownloadSchedule = async () => {
+    if (!scheduleCardRef.current) return
+    setIsGeneratingScheduleImage(true)
+    try {
+      const dataUrl = await toPng(scheduleCardRef.current, {
+        quality: 1,
+        pixelRatio: 3,
+        cacheBust: true,
+      })
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = `khelahobe-schedule-${booking.id}.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (e) {
+      console.error('Download schedule failed:', e)
+    } finally {
+      setIsGeneratingScheduleImage(false)
+    }
+  }
   
   const handleAssignPlayer = async (rsvp: any, newTeamId: string) => {
     setAssigningPlayerId(rsvp.id)
@@ -1128,16 +1399,25 @@ export default function MatchClient({
                             </div>
                           </div>
                         </div>
-                        {userRole === 'admin' && (
-                          <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                            <button onClick={() => handleStartEditTeam(team)} className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 transition-colors">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                            </button>
-                            <button onClick={() => handleDeleteTeam(team.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-neutral-400 hover:text-red-500 transition-colors">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => handleOpenShareTeam(team)}
+                            className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 transition-colors"
+                            title="Share Team"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
+                          {userRole === 'admin' && (
+                            <>
+                              <button onClick={() => handleStartEditTeam(team)} className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 transition-colors">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                              </button>
+                              <button onClick={() => handleDeleteTeam(team.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-neutral-400 hover:text-red-500 transition-colors">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       {expandedTeamId === team.id && (
@@ -1191,17 +1471,29 @@ export default function MatchClient({
 
       {/* 5. MATCH SCHEDULE */}
       {teams.length > 0 && (
-        <div data-tour="match-schedule" className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center">
+        <div data-tour="match-schedule" className="bg-white rounded-2xl border border-neutral-100 shadow-sm">
+          <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center rounded-t-2xl">
             <h3 className="font-bold text-neutral-900 flex items-center gap-2">
               <Trophy className="w-5 h-5 text-neutral-500" />
               Schedule & Scores
             </h3>
-            {matchSchedule.length > 0 && userRole === 'admin' && (
-              <Button variant="outline" size="sm" onClick={handleReschedule} className="h-8 text-xs text-amber-700 border-amber-200 hover:bg-amber-50">
-                Reschedule
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {matchSchedule.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSharingSchedule(true)}
+                  className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 transition-colors"
+                  title="Share Schedule & Scores"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {matchSchedule.length > 0 && userRole === 'admin' && (
+                <Button variant="outline" size="sm" onClick={handleReschedule} className="h-8 text-xs text-amber-700 border-amber-200 hover:bg-amber-50">
+                  Reschedule
+                </Button>
+              )}
+            </div>
           </div>
           
           <div className="p-4">
@@ -1224,100 +1516,124 @@ export default function MatchClient({
               </div>
             ) : (
               <div className="space-y-3">
-                {matchSchedule.map((match: any) => {
+                {orderedSchedule.map((match: any, index: number) => {
                   const isCompleted = match.status === 'completed'
                   const isExpanded = expandedMatchId === match.id
                   const matchGoals = goalEvents.filter((g: any) => g.match_schedule_id === match.id)
                   
                   return (
-                    <div key={match.id} className={`rounded-xl border transition-colors overflow-hidden ${isCompleted ? 'bg-neutral-50 border-neutral-200' : 'bg-white border-green-100 hover:border-green-300 shadow-sm'}`}>
-                      <div 
-                        onClick={() => handleExpandMatch(match)}
-                        className="p-3 flex justify-between items-center cursor-pointer"
-                      >
-                        <div className="flex-1 flex justify-end items-center gap-2">
-                          <span className="font-bold text-sm text-neutral-800">{getTeamName(match.home_team_id)}</span>
-                          {isCompleted && <span className="text-lg font-black">{match.home_score}</span>}
-                        </div>
-                        
-                        <div className="px-3 py-1 bg-neutral-100 text-[10px] font-bold text-neutral-500 rounded mx-2">
-                          VS
-                        </div>
-                        
-                        <div className="flex-1 flex justify-start items-center gap-2">
-                          {isCompleted && <span className="text-lg font-black">{match.away_score}</span>}
-                          <span className="font-bold text-sm text-neutral-800">{getTeamName(match.away_team_id)}</span>
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="p-4 border-t border-neutral-100 bg-white">
-                          <div className="flex justify-between items-center gap-4 mb-6">
-                            <div className="flex-1 text-center">
-                              <div className="text-xs font-bold text-neutral-500 mb-2 uppercase truncate">{getTeamName(match.home_team_id)}</div>
-                              <input 
-                                type="number" min="0"
-                                className="w-16 h-16 text-center text-3xl font-black bg-neutral-100 rounded-2xl border-none focus:ring-2 focus:ring-green-500"
-                                value={scoreForms[match.id]?.homeScore ?? (match.home_score || 0)}
-                                onChange={e => setScoreForms({...scoreForms, [match.id]: {...scoreForms[match.id], homeScore: parseInt(e.target.value) || 0}})}
-                              />
-                            </div>
-                            <span className="text-xl font-black text-neutral-300">-</span>
-                            <div className="flex-1 text-center">
-                              <div className="text-xs font-bold text-neutral-500 mb-2 uppercase truncate">{getTeamName(match.away_team_id)}</div>
-                              <input 
-                                type="number" min="0"
-                                className="w-16 h-16 text-center text-3xl font-black bg-neutral-100 rounded-2xl border-none focus:ring-2 focus:ring-green-500"
-                                value={scoreForms[match.id]?.awayScore ?? (match.away_score || 0)}
-                                onChange={e => setScoreForms({...scoreForms, [match.id]: {...scoreForms[match.id], awayScore: parseInt(e.target.value) || 0}})}
-                              />
-                            </div>
-                          </div>
-                          <Button className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl text-sm font-bold mb-6" onClick={() => handleSaveScore(match.id)} disabled={isScoreLoading}>
-                            {isScoreLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Score & Complete'}
-                          </Button>
-
-                          <div className="border-t border-neutral-100 pt-4">
-                            <div className="flex justify-between items-center mb-3">
-                              <h4 className="text-xs font-bold text-neutral-800 uppercase tracking-wider flex items-center gap-1.5"><Goal className="w-3.5 h-3.5 text-neutral-500"/> Goals</h4>
-                              <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 rounded-lg" onClick={() => setIsAddGoalOpen(true)}>
-                                <Plus className="w-3 h-3 mr-1" /> Add
-                              </Button>
-                            </div>
-
-                            <div className="space-y-2">
-                              {matchGoals.map((g: any) => (
-                                <div key={g.id} className="flex justify-between items-center bg-neutral-50 p-2 rounded-lg border border-neutral-100">
-                                  <div className="flex items-center gap-2">
-                                    {g.profiles?.avatar_url ? (
-                                      <img src={(g.profiles as any).avatar_url} className="w-6 h-6 rounded-full" alt={(g.profiles as any)?.full_name || 'Scorer'} />
-                                    ) : (
-                                      <div className={`w-6 h-6 rounded-full font-bold flex items-center justify-center text-[10px] ${g.guest_scorer_name ? 'bg-amber-100 text-amber-700' : 'bg-neutral-200 text-neutral-600'}`}>
-                                        {(g.profiles?.full_name || g.scorer?.full_name || g.guest_scorer_name || 'G').charAt(0)}
-                                      </div>
-                                    )}
-                                    <div className="flex flex-col">
-                                      <span className="text-xs font-bold text-neutral-800 leading-none">
-                                        {g.profiles?.full_name || g.scorer?.full_name || g.guest_scorer_name || 'Guest Player'} {g.is_own_goal && <span className="text-red-500 text-[9px] ml-1">(OG)</span>}
-                                      </span>
-                                      {(g.assist || g.guest_assist_name) && <span className="text-[9px] text-neutral-500 mt-0.5">Assist: {g.assist?.full_name || g.guest_assist_name}</span>}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    {g.minute && <span className="text-[10px] font-bold text-neutral-400">{g.minute}&apos;</span>}
-                                    <button className="text-neutral-400 hover:text-red-500 p-1" onClick={() => handleDeleteGoal(g.id, match.id)}>
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                              {matchGoals.length === 0 && (
-                                <p className="text-[10px] text-neutral-400 text-center py-2">No goals added yet.</p>
-                              )}
-                            </div>
-                          </div>
+                    <div key={match.id} className="flex items-stretch gap-2">
+                      {userRole === 'admin' && (
+                        <div className="flex flex-col justify-center gap-1 flex-shrink-0 bg-neutral-50 rounded-xl px-1 border border-neutral-200 shadow-sm">
+                          <button
+                            type="button"
+                            disabled={index === 0 || isReordering}
+                            onClick={(e) => { e.stopPropagation(); handleMoveMatch(index, 'up') }}
+                            className={`p-1.5 rounded-lg transition-colors ${index === 0 || isReordering ? 'text-neutral-300 cursor-not-allowed' : 'text-neutral-500 hover:bg-neutral-200 active:scale-90 hover:text-neutral-800'}`}
+                            title="Move Up"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={index === orderedSchedule.length - 1 || isReordering}
+                            onClick={(e) => { e.stopPropagation(); handleMoveMatch(index, 'down') }}
+                            className={`p-1.5 rounded-lg transition-colors ${index === orderedSchedule.length - 1 || isReordering ? 'text-neutral-300 cursor-not-allowed' : 'text-neutral-500 hover:bg-neutral-200 active:scale-90 hover:text-neutral-800'}`}
+                            title="Move Down"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                          </button>
                         </div>
                       )}
+                      <div className={`flex-1 rounded-xl border transition-colors overflow-hidden ${isCompleted ? 'bg-neutral-50 border-neutral-200' : 'bg-white border-green-100 hover:border-green-300 shadow-sm'}`}>
+                        <div 
+                          onClick={() => handleExpandMatch(match)}
+                          className="p-3 flex justify-between items-center cursor-pointer"
+                        >
+                          <div className="flex-1 flex justify-end items-center gap-2">
+                            <span className="font-bold text-sm text-neutral-800">{getTeamName(match.home_team_id)}</span>
+                            {isCompleted && <span className="text-lg font-black">{match.home_score}</span>}
+                          </div>
+                          
+                          <div className="px-3 py-1 bg-neutral-100 text-[10px] font-bold text-neutral-500 rounded mx-2">
+                            VS
+                          </div>
+                          
+                          <div className="flex-1 flex justify-start items-center gap-2">
+                            {isCompleted && <span className="text-lg font-black">{match.away_score}</span>}
+                            <span className="font-bold text-sm text-neutral-800">{getTeamName(match.away_team_id)}</span>
+                          </div>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="p-4 border-t border-neutral-100 bg-white">
+                            <div className="flex justify-between items-center gap-4 mb-6">
+                              <div className="flex-1 text-center">
+                                <div className="text-xs font-bold text-neutral-500 mb-2 uppercase truncate">{getTeamName(match.home_team_id)}</div>
+                                <input 
+                                  type="number" min="0"
+                                  className="w-16 h-16 text-center text-3xl font-black bg-neutral-100 rounded-2xl border-none focus:ring-2 focus:ring-green-500"
+                                  value={scoreForms[match.id]?.homeScore ?? (match.home_score || 0)}
+                                  onChange={e => setScoreForms({...scoreForms, [match.id]: {...scoreForms[match.id], homeScore: parseInt(e.target.value) || 0}})}
+                                />
+                              </div>
+                              <span className="text-xl font-black text-neutral-300">-</span>
+                              <div className="flex-1 text-center">
+                                <div className="text-xs font-bold text-neutral-500 mb-2 uppercase truncate">{getTeamName(match.away_team_id)}</div>
+                                <input 
+                                  type="number" min="0"
+                                  className="w-16 h-16 text-center text-3xl font-black bg-neutral-100 rounded-2xl border-none focus:ring-2 focus:ring-green-500"
+                                  value={scoreForms[match.id]?.awayScore ?? (match.away_score || 0)}
+                                  onChange={e => setScoreForms({...scoreForms, [match.id]: {...scoreForms[match.id], awayScore: parseInt(e.target.value) || 0}})}
+                                />
+                              </div>
+                            </div>
+                            <Button className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl text-sm font-bold mb-6" onClick={() => handleSaveScore(match.id)} disabled={isScoreLoading}>
+                              {isScoreLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Score & Complete'}
+                            </Button>
+
+                            <div className="border-t border-neutral-100 pt-4">
+                              <div className="flex justify-between items-center mb-3">
+                                <h4 className="text-xs font-bold text-neutral-800 uppercase tracking-wider flex items-center gap-1.5"><Goal className="w-3.5 h-3.5 text-neutral-500"/> Goals</h4>
+                                <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 rounded-lg" onClick={() => setIsAddGoalOpen(true)}>
+                                  <Plus className="w-3 h-3 mr-1" /> Add
+                                </Button>
+                              </div>
+
+                              <div className="space-y-2">
+                                {matchGoals.map((g: any) => (
+                                  <div key={g.id} className="flex justify-between items-center bg-neutral-50 p-2 rounded-lg border border-neutral-100">
+                                    <div className="flex items-center gap-2">
+                                      {g.profiles?.avatar_url ? (
+                                        <img src={(g.profiles as any).avatar_url} className="w-6 h-6 rounded-full" alt={(g.profiles as any)?.full_name || 'Scorer'} />
+                                      ) : (
+                                        <div className={`w-6 h-6 rounded-full font-bold flex items-center justify-center text-[10px] ${g.guest_scorer_name ? 'bg-amber-100 text-amber-700' : 'bg-neutral-200 text-neutral-600'}`}>
+                                          {(g.profiles?.full_name || g.scorer?.full_name || g.guest_scorer_name || 'G').charAt(0)}
+                                        </div>
+                                      )}
+                                      <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-neutral-800 leading-none">
+                                          {g.profiles?.full_name || g.scorer?.full_name || g.guest_scorer_name || 'Guest Player'} {g.is_own_goal && <span className="text-red-500 text-[9px] ml-1">(OG)</span>}
+                                        </span>
+                                        {(g.assist || g.guest_assist_name) && <span className="text-[9px] text-neutral-500 mt-0.5">Assist: {g.assist?.full_name || g.guest_assist_name}</span>}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      {g.minute && <span className="text-[10px] font-bold text-neutral-400">{g.minute}&apos;</span>}
+                                      <button className="text-neutral-400 hover:text-red-500 p-1" onClick={() => handleDeleteGoal(g.id, match.id)}>
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                                {matchGoals.length === 0 && (
+                                  <p className="text-[10px] text-neutral-400 text-center py-2">No goals added yet.</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
@@ -1860,6 +2176,327 @@ export default function MatchClient({
         onConfirm={confirmModal.onConfirm}
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
       />
+
+      {/* Team Share Modal */}
+      {sharingTeam && (() => {
+        const teamTheme = getTeamGradient(sharingTeam.jersey_color)
+        const teamPlayers = getTeamPlayersList(sharingTeam)
+        const captainRsvp = rsvps.find((r: any) => 
+          r.player_id === sharingTeam.captain_id || `guest_${r.id}` === sharingTeam.captain_id
+        )
+        const captainName = captainRsvp
+          ? (captainRsvp.profiles?.full_name || captainRsvp.guest_name)
+          : 'Not Assigned'
+
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        const displayDomain = appUrl.replace(/https?:\/\//, '').replace(/\/$/, '')
+
+        return (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 overflow-y-auto">
+            <div className="bg-neutral-900 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
+              <div className="flex justify-between items-center px-5 py-4 shrink-0 border-b border-neutral-800">
+                <h3 className="font-bold text-white text-lg">Share Squad</h3>
+                <button onClick={() => setSharingTeam(null)} className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Card Container to Capture */}
+              <div className="p-4 overflow-y-auto max-h-[60vh] flex justify-center bg-neutral-900">
+                <div
+                  ref={teamCardRef}
+                  className="w-[320px] rounded-2xl overflow-hidden relative shadow-lg shrink-0"
+                  style={{
+                    background: teamTheme.gradient,
+                    padding: '24px 20px',
+                  }}
+                >
+                  {/* Decorative Background Orbs */}
+                  <div
+                    className="absolute -top-10 -right-10 w-36 h-36 rounded-full blur-[60px] pointer-events-none"
+                    style={{ background: teamTheme.glow }}
+                  />
+                  <div
+                    className="absolute -bottom-10 -left-10 w-28 h-28 rounded-full blur-[40px] pointer-events-none"
+                    style={{ background: `${teamTheme.accent}20` }}
+                  />
+                  
+                  {/* Grid Lines Overlay */}
+                  <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
+                    backgroundImage: `linear-gradient(${teamTheme.accent}40 1px, transparent 1px), linear-gradient(90deg, ${teamTheme.accent}40 1px, transparent 1px)`,
+                    backgroundSize: '20px 20px'
+                  }} />
+
+                  {/* Card Content */}
+                  <div 
+                    className="relative z-10 flex flex-col h-full"
+                    style={{ color: teamTheme.text }}
+                  >
+                    {/* Header Branding */}
+                    <div className="flex justify-between items-center mb-6">
+                      <span 
+                        className="text-[9px] font-black uppercase tracking-[0.2em]"
+                        style={{ color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.4)' : 'rgba(255, 255, 255, 0.4)' }}
+                      >
+                        KhelaHobe
+                      </span>
+                      <span 
+                        className="text-[9px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded"
+                        style={{ 
+                          backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.15)', 
+                          color: teamTheme.text 
+                        }}
+                      >
+                        Match Squad
+                      </span>
+                    </div>
+
+                    {/* Team Name Title */}
+                    <div className="text-center mb-5">
+                      <h2 
+                        className="text-2xl font-black tracking-tight uppercase leading-none drop-shadow-sm mb-1"
+                        style={{ color: teamTheme.text }}
+                      >
+                        {sharingTeam.name}
+                      </h2>
+                      <div 
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold mt-1.5" 
+                        style={{
+                          backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.1)' : 'rgba(255, 255, 255, 0.2)',
+                          color: teamTheme.text
+                        }}
+                      >
+                        <Shield className="w-3 h-3" />
+                        <span>Captain: {captainName}</span>
+                      </div>
+                    </div>
+
+                    {/* Players List */}
+                    <div 
+                      className="backdrop-blur-md rounded-xl p-3 space-y-2 border"
+                      style={{
+                        backgroundColor: teamTheme.isLight ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.25)',
+                        borderColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.08)'
+                      }}
+                    >
+                      {teamPlayers.length === 0 ? (
+                        <p 
+                          className="text-xs italic text-center py-4"
+                          style={{ color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.4)' : 'rgba(255, 255, 255, 0.4)' }}
+                        >
+                          No squad members assigned yet.
+                        </p>
+                      ) : (
+                        teamPlayers.map((player: any) => (
+                          <div 
+                            key={player.id} 
+                            className="flex justify-between items-center py-1.5 border-b last:border-none"
+                            style={{ borderColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(255, 255, 255, 0.05)' }}
+                          >
+                            <span 
+                              className="text-xs font-bold flex items-center gap-1"
+                              style={{ color: teamTheme.text }}
+                            >
+                              {player.name}
+                              {player.isCaptain && <span className="text-[8px] font-black bg-amber-400 text-neutral-900 px-1 py-0.2 rounded uppercase">C</span>}
+                              {player.isGuest && (
+                                <span 
+                                  className="text-[8px] font-medium px-1 rounded"
+                                  style={{
+                                    backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.1)',
+                                    color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.6)'
+                                  }}
+                                >
+                                  Guest
+                                </span>
+                              )}
+                            </span>
+                            <span 
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider"
+                              style={{
+                                backgroundColor: teamTheme.isLight ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.05)',
+                                borderColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.15)' : 'rgba(255, 255, 255, 0.1)',
+                                color: teamTheme.isLight ? '#0f172a' : 'rgba(255, 255, 255, 0.8)'
+                              }}
+                            >
+                              {player.position}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Footer Url */}
+                    <div className="text-center mt-6">
+                      <span 
+                        className="text-[8px] font-bold uppercase tracking-[0.15em]"
+                        style={{ color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.4)' : 'rgba(255, 255, 255, 0.4)' }}
+                      >
+                        {displayDomain}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions Footer */}
+              <div className="px-5 pb-5 pt-2 flex gap-3 shrink-0 border-t border-neutral-800 bg-neutral-900">
+                <Button
+                  onClick={handleDownloadTeam}
+                  disabled={isGeneratingTeamImage}
+                  variant="outline"
+                  className="flex-1 h-12 rounded-xl bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700"
+                >
+                  {isGeneratingTeamImage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
+                  Save
+                </Button>
+                <Button
+                  onClick={handleShareTeam}
+                  disabled={isGeneratingTeamImage}
+                  className="flex-1 h-12 rounded-xl text-white font-bold"
+                  style={{ backgroundColor: teamTheme.accent, color: teamTheme.text }}
+                >
+                  {isGeneratingTeamImage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Share2 className="w-4 h-4 mr-2" />}
+                  Share
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Schedule Share Modal */}
+      {sharingSchedule && (() => {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        const displayDomain = appUrl.replace(/https?:\/\//, '').replace(/\/$/, '')
+        const groupName = (booking.groups as any).name || 'Match'
+
+        return (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 overflow-y-auto">
+            <div className="bg-neutral-900 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
+              <div className="flex justify-between items-center px-5 py-4 shrink-0 border-b border-neutral-800">
+                <h3 className="font-bold text-white text-lg">Share Schedule</h3>
+                <button onClick={() => setSharingSchedule(false)} className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Card Container to Capture */}
+              <div className="p-4 overflow-y-auto max-h-[60vh] flex justify-center bg-neutral-900">
+                <div
+                  ref={scheduleCardRef}
+                  className="w-[320px] rounded-2xl overflow-hidden relative shadow-lg shrink-0"
+                  style={{
+                    background: 'linear-gradient(135deg, #0b1528 0%, #030712 100%)',
+                    padding: '24px 20px',
+                  }}
+                >
+                  {/* Decorative Background Glows */}
+                  <div className="absolute -top-10 -right-10 w-36 h-36 rounded-full blur-[60px] pointer-events-none bg-green-500/10" />
+                  <div className="absolute -bottom-10 -left-10 w-28 h-28 rounded-full blur-[40px] pointer-events-none bg-blue-500/10" />
+
+                  {/* Grid Lines Overlay */}
+                  <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
+                    backgroundImage: `linear-gradient(#ffffff 1px, transparent 1px), linear-gradient(90deg, #ffffff 1px, transparent 1px)`,
+                    backgroundSize: '20px 20px'
+                  }} />
+
+                  {/* Card Content */}
+                  <div className="relative z-10 flex flex-col h-full text-white">
+                    {/* Header Branding */}
+                    <div className="flex justify-between items-center mb-5">
+                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30">KhelaHobe</span>
+                      <span className="text-[9px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded bg-green-500/10 text-green-400">
+                        Fixtures & Scores
+                      </span>
+                    </div>
+
+                    {/* Match & Venue Details */}
+                    <div className="text-center mb-5">
+                      <h2 className="text-xl font-black tracking-tight uppercase leading-none drop-shadow-sm mb-1 text-white text-center">
+                        {groupName}
+                      </h2>
+                      <div className="text-[9px] font-bold text-white/40 uppercase tracking-widest mt-1.5 flex items-center justify-center gap-1.5">
+                        <span>{format(parseISO(booking.match_date), 'MMM d, yyyy')}</span>
+                        <span>•</span>
+                        <span>{booking.field_name}</span>
+                      </div>
+                    </div>
+
+                    {/* Fixtures List */}
+                    <div className="bg-white/5 backdrop-blur-md rounded-xl p-3 border border-white/5 space-y-2.5">
+                      {matchSchedule.map((match: any) => {
+                        const isCompleted = match.status === 'completed'
+                        const homeTeam = teams.find((t: any) => t.id === match.home_team_id)
+                        const awayTeam = teams.find((t: any) => t.id === match.away_team_id)
+                        const homeName = homeTeam?.name || 'Home'
+                        const awayName = awayTeam?.name || 'Away'
+
+                        return (
+                          <div key={match.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-none">
+                            {/* Home Team */}
+                            <div className="flex-1 flex items-center justify-end gap-1.5 min-w-0">
+                              <span className="text-[11px] font-bold text-white/95 truncate text-right">{homeName}</span>
+                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white/10" style={{ backgroundColor: homeTeam?.jersey_color || '#ffffff' }} />
+                            </div>
+
+                            {/* Score/VS Badge */}
+                            <div className="px-2.5 py-0.5 rounded bg-white/5 border border-white/5 mx-2 flex-shrink-0 flex items-center justify-center min-w-[55px]">
+                              {isCompleted ? (
+                                <span className="text-[11px] font-black tracking-wider text-green-400">
+                                  {match.home_score} - {match.away_score}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-semibold text-white/40 tracking-wider">
+                                  - : -
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Away Team */}
+                            <div className="flex-1 flex items-center justify-start gap-1.5 min-w-0">
+                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white/10" style={{ backgroundColor: awayTeam?.jersey_color || '#ffffff' }} />
+                              <span className="text-[11px] font-bold text-white/95 truncate text-left">{awayName}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Footer Url */}
+                    <div className="text-center mt-6">
+                      <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-white/30">
+                        {displayDomain}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions Footer */}
+              <div className="px-5 pb-5 pt-2 flex gap-3 shrink-0 border-t border-neutral-800 bg-neutral-900">
+                <Button
+                  onClick={handleDownloadSchedule}
+                  disabled={isGeneratingScheduleImage}
+                  variant="outline"
+                  className="flex-1 h-12 rounded-xl bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700"
+                >
+                  {isGeneratingScheduleImage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
+                  Save
+                </Button>
+                <Button
+                  onClick={handleShareSchedule}
+                  disabled={isGeneratingScheduleImage}
+                  className="flex-1 h-12 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold"
+                >
+                  {isGeneratingScheduleImage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Share2 className="w-4 h-4 mr-2" />}
+                  Share
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
