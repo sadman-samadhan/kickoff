@@ -44,6 +44,7 @@ interface DashboardClientProps {
   profile: Profile | null
   goals: number
   assists: number
+  cleanSheets: number
   pendingBookings: Booking[]
   upcomingBookings: Booking[]
   allBookings: Booking[]
@@ -55,6 +56,7 @@ export default function DashboardClient({
   profile,
   goals,
   assists,
+  cleanSheets,
   pendingBookings,
   upcomingBookings,
   allBookings,
@@ -183,7 +185,7 @@ END:VCALENDAR`
           <div className="w-px bg-neutral-200"></div>
           <div className="flex flex-col items-center">
             <span className="text-xs text-neutral-500 uppercase tracking-wider font-semibold">CS</span>
-            <span className="text-lg font-bold text-neutral-800">0</span>
+            <span className="text-lg font-bold text-neutral-800">{cleanSheets}</span>
           </div>
         </div>
       </div>
@@ -248,36 +250,37 @@ END:VCALENDAR`
               const isMatchStarted = Date.now() >= new Date(matchDateTimeStr).getTime()
 
               return (
-              <Link href={`/groups/${booking.group_id}/match/${booking.id}`} key={booking.id}>
-                <div className="bg-white rounded-2xl p-4 border border-neutral-100 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-transform">
-                  <div className="flex flex-col items-center justify-center bg-green-50 text-green-800 rounded-xl w-14 h-14 shrink-0 border border-green-100">
-                    <span className="text-xs font-bold uppercase">{format(parseISO(booking.match_date), 'MMM')}</span>
-                    <span className="text-lg font-black leading-none">{format(parseISO(booking.match_date), 'dd')}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-neutral-900 truncate flex items-center gap-2">
-                      {booking.groups?.name}
-                      {isMatchStarted && (
-                        <span className="text-[9px] text-red-500 font-bold uppercase animate-pulse border border-red-200 bg-red-50 px-1.5 py-0.5 rounded">Started</span>
-                      )}
-                    </h4>
-                    <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1 truncate">
-                      <Clock className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{booking.match_time.slice(0, 5)}</span>
-                      <span className="mx-0.5">•</span>
-                      <MapPin className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{booking.field_name}</span>
+                <Link href={`/groups/${booking.group_id}/match/${booking.id}`} key={booking.id}>
+                  <div className="bg-white rounded-2xl p-4 border border-neutral-100 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-transform">
+                    <div className="flex flex-col items-center justify-center bg-green-50 text-green-800 rounded-xl w-14 h-14 shrink-0 border border-green-100">
+                      <span className="text-xs font-bold uppercase">{format(parseISO(booking.match_date), 'MMM')}</span>
+                      <span className="text-lg font-black leading-none">{format(parseISO(booking.match_date), 'dd')}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-neutral-900 truncate flex items-center gap-2">
+                        {booking.groups?.name}
+                        {isMatchStarted && (
+                          <span className="text-[9px] text-red-500 font-bold uppercase animate-pulse border border-red-200 bg-red-50 px-1.5 py-0.5 rounded">Started</span>
+                        )}
+                      </h4>
+                      <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1 truncate">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{booking.match_time.slice(0, 5)}</span>
+                        <span className="mx-0.5">•</span>
+                        <MapPin className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{booking.field_name}</span>
+                      </div>
+                    </div>
+                    <div>
+                      {booking.myRsvpStatus === 'in' && <div className="bg-green-100 text-green-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-green-200">IN</div>}
+                      {booking.myRsvpStatus === 'out' && <div className="bg-red-100 text-red-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-red-200">OUT</div>}
+                      {(booking.myRsvpStatus === 'pending' || booking.myRsvpStatus === 'none') && <div className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-amber-200">PENDING</div>}
+                      {booking.myRsvpStatus === 'waitlist' && <div className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-purple-200">WAITLIST</div>}
                     </div>
                   </div>
-                  <div>
-                    {booking.myRsvpStatus === 'in' && <div className="bg-green-100 text-green-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-green-200">IN</div>}
-                    {booking.myRsvpStatus === 'out' && <div className="bg-red-100 text-red-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-red-200">OUT</div>}
-                    {(booking.myRsvpStatus === 'pending' || booking.myRsvpStatus === 'none') && <div className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-amber-200">PENDING</div>}
-                    {booking.myRsvpStatus === 'waitlist' && <div className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-purple-200">WAITLIST</div>}
-                  </div>
-                </div>
-              </Link>
-            )})
+                </Link>
+              )
+            })
           )}
         </div>
       </div>

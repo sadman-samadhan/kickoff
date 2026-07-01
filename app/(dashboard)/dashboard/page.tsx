@@ -5,7 +5,7 @@ import DashboardClient from './DashboardClient'
 
 export default async function DashboardPage() {
   const supabase = createClient()
-  
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     redirect('/login')
@@ -18,7 +18,7 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single()
 
-  // 2. Fetch Goals and Assists
+  // 2. Fetch Goals, Assists, and Clean Sheets
   const { count: goalsCount } = await supabase
     .from('goal_events')
     .select('*', { count: 'exact', head: true })
@@ -29,6 +29,11 @@ export default async function DashboardPage() {
     .from('goal_events')
     .select('*', { count: 'exact', head: true })
     .eq('assist_id', user.id)
+
+  const { count: cleanSheetsCount } = await supabase
+    .from('clean_sheets')
+    .select('*', { count: 'exact', head: true })
+    .eq('player_id', user.id)
 
   // 3. Fetch user's groups
   const { data: userGroupsData } = await supabase
@@ -53,7 +58,7 @@ export default async function DashboardPage() {
       .from('group_members')
       .select('group_id')
       .in('group_id', groupIds)
-      
+
     allGroupMembers?.forEach(gm => {
       memberCounts[gm.group_id] = (memberCounts[gm.group_id] || 0) + 1
     })
@@ -64,7 +69,7 @@ export default async function DashboardPage() {
       .select('*, groups(name), rsvps(*)')
       .in('group_id', groupIds)
       .order('match_date', { ascending: true })
-    
+
     allBookings = bData || []
   }
 
@@ -105,11 +110,12 @@ export default async function DashboardPage() {
   })
 
   return (
-    <DashboardClient 
+    <DashboardClient
       user={user}
       profile={profile}
       goals={goalsCount || 0}
       assists={assistsCount || 0}
+      cleanSheets={cleanSheetsCount || 0}
       pendingBookings={pendingBookings}
       upcomingBookings={bookingsWithMyRsvp}
       allBookings={allBookings}
