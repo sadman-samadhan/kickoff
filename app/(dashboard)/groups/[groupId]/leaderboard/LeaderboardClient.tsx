@@ -153,7 +153,7 @@ export default function LeaderboardClient({ groupId, groupName }: { groupId: str
       {/* 3. SORT OPTIONS */}
       <div className="bg-neutral-100 p-1 rounded-xl flex gap-1 overflow-x-auto">
         {[
-          { id: 'points', label: '🏆 FPL Points' },
+          { id: 'points', label: '🏆 Points' },
           { id: 'goals', label: 'Goals' },
           { id: 'assists', label: 'Assists' },
           { id: 'clean_sheets', label: 'Clean Sheets' },

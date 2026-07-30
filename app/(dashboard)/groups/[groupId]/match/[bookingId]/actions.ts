@@ -198,6 +198,11 @@ export async function updateMatchScoreAction(
     await supabase.from('bookings').update({ status: 'ongoing' }).eq('id', bookingId)
   }
 
+  // Auto-populate knockout progression (e.g. Semi-Final winners -> Final)
+  const admin = createAdminClient()
+  const { checkAndAutoPopulateKnockoutProgression } = await import('@/lib/knockoutProgression')
+  await checkAndAutoPopulateKnockoutProgression(admin, bookingId)
+
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
   revalidatePath(`/groups/${groupId}`)
   revalidatePath('/dashboard')

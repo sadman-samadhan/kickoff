@@ -42,5 +42,14 @@ export async function PATCH(req: Request, { params }: { params: { matchId: strin
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Auto-populate knockout progression
+  const { createAdminClient } = await import('@/lib/supabase/server')
+  const { checkAndAutoPopulateKnockoutProgression } = await import('@/lib/knockoutProgression')
+  const { data: fullMatch } = await supabase.from('match_schedule').select('booking_id').eq('id', params.matchId).single()
+  if (fullMatch?.booking_id) {
+    const admin = createAdminClient()
+    await checkAndAutoPopulateKnockoutProgression(admin, fullMatch.booking_id)
+  }
+
   return NextResponse.json({ success: true })
 }

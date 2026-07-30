@@ -3,6 +3,7 @@
 
 import { useRef, useState } from 'react'
 import { toPng } from 'html-to-image'
+import { QRCodeSVG } from 'qrcode.react'
 import { Share2, Download, X, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -254,9 +255,18 @@ export default function StatShareCard({
                     </span>
                   </div>
 
-                  {/* Project URL */}
-                  <div className="text-center mt-3 relative -top-6">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-white/50">
+                  {/* Project URL + QR Code */}
+                  <div className="flex flex-col items-center justify-center pt-2 pb-1 gap-1.5 relative -top-3">
+                    <div className="p-1.5 bg-white rounded-xl shadow-md border border-white/20">
+                      <QRCodeSVG
+                        value="https://khelahbe.vercel.app/"
+                        size={54}
+                        bgColor="#ffffff"
+                        fgColor="#0f172a"
+                        level="M"
+                      />
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-white/70">
                       {displayDomain}
                     </span>
                   </div>

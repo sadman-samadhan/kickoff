@@ -3,6 +3,7 @@
 
 import { useRef, useState } from 'react'
 import { toPng } from 'html-to-image'
+import { QRCodeSVG } from 'qrcode.react'
 import { Share2, Download, X, Loader2, Trophy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -282,10 +283,19 @@ export default function MatchdayShareCard({
                     </div>
                   </div>
 
-                  {/* Footer website */}
-                  <div className="text-center">
+                  {/* Footer website + QR Code */}
+                  <div className="flex flex-col items-center justify-center pt-3 pb-1 gap-1.5">
+                    <div className="p-1.5 bg-white rounded-xl shadow-md border border-white/20">
+                      <QRCodeSVG
+                        value="https://khelahbe.vercel.app/"
+                        size={56}
+                        bgColor="#ffffff"
+                        fgColor="#0f172a"
+                        level="M"
+                      />
+                    </div>
                     <span
-                      className="text-[9px] font-bold uppercase tracking-widest"
+                      className="text-[9px] font-black uppercase tracking-widest"
                       style={{ color: theme.accent }}
                     >
                       {displayDomain}

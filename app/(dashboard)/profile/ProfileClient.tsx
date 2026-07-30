@@ -366,7 +366,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
           </span>
           {stats?.fpl_points !== undefined && (
             <span className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black text-xs px-3 py-1 rounded-full shadow-sm">
-              🏆 {stats.fpl_points} FPL PTS
+              🏆 {stats.fpl_points} PTS
             </span>
           )}
         </h2>
@@ -378,7 +378,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center col-span-2">
                 <span className="text-3xl font-black text-emerald-700 mb-0.5">{stats.fpl_points ?? 0}</span>
-                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">🏆 Total FPL Points</span>
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">🏆 Total Points</span>
               </div>
               <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
                 <span className="text-2xl font-black text-amber-600 mb-1">{stats.goals}</span>
