@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, startOfWeek, endOfWeek } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { TourGuide } from '@/components/ui/TourGuide'
+import { SystemBroadcastBanner } from '@/components/ui/SystemBroadcastBanner'
 
 interface Profile {
   full_name?: string
@@ -49,6 +50,7 @@ interface DashboardClientProps {
   upcomingBookings: Booking[]
   allBookings: Booking[]
   groups: Group[]
+  activeBroadcast?: any
 }
 
 export default function DashboardClient({
@@ -60,7 +62,8 @@ export default function DashboardClient({
   pendingBookings,
   upcomingBookings,
   allBookings,
-  groups
+  groups,
+  activeBroadcast
 }: DashboardClientProps) {
   const supabase = createClient()
   const [localPending, setLocalPending] = useState<Booking[]>(pendingBookings)
@@ -149,6 +152,9 @@ END:VCALENDAR`
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 max-w-xl mx-auto">
       <TourGuide page="dashboard" />
+
+      {/* SYSTEM BROADCAST BANNER POPUP */}
+      <SystemBroadcastBanner broadcast={activeBroadcast} />
 
       {/* 1. HEADER CARD */}
       <div data-tour="profile-card" className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100 flex flex-col items-center">

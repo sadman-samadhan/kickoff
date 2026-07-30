@@ -8,6 +8,8 @@ export interface Profile {
   preferred_position: 'GK' | 'DEF' | 'MID' | 'ATT' | null
   secondary_position: 'GK' | 'DEF' | 'MID' | 'ATT' | null
   email_notifications: boolean
+  is_site_admin?: boolean
+  is_suspended?: boolean
   created_at: string
 }
 

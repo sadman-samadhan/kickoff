@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Goal, Target, Shield, Activity, Camera, ChevronDown, ChevronUp, Loader2, X, Edit3, Settings, Trophy, LogOut, Bell, KeyRound, Eye, EyeOff, HelpCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -349,13 +350,24 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
         <div className="text-neutral-500 font-medium mb-5">@{profile.username}</div>
 
-        <Button
-          variant="outline"
-          onClick={() => setIsEditModalOpen(true)}
-          className="rounded-full shadow-sm w-full max-w-[200px] border-neutral-200 z-10 relative"
-        >
-          <Settings className="w-4 h-4 mr-2" /> Edit Profile
-        </Button>
+        <div className="flex gap-2 w-full max-w-xs justify-center z-10 relative">
+          <Button
+            variant="outline"
+            onClick={() => setIsEditModalOpen(true)}
+            className="rounded-full shadow-sm flex-1 border-neutral-200"
+          >
+            <Settings className="w-4 h-4 mr-2" /> Edit Profile
+          </Button>
+          {profile.is_site_admin && (
+            <Link href="/admin" className="flex-1">
+              <Button
+                className="rounded-full shadow-sm w-full bg-amber-500 hover:bg-amber-600 text-black font-bold border border-amber-400"
+              >
+                <Shield className="w-4 h-4 mr-1.5" /> Admin Panel
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* 2. PERSONAL STATS CARD */}

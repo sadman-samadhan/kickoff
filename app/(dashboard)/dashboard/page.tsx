@@ -109,6 +109,28 @@ export default async function DashboardPage() {
     }
   })
 
+  // Fetch active system broadcast not yet dismissed by this user
+  let activeBroadcast: any = null
+  const { data: latestBroadcast } = await supabase
+    .from('system_broadcasts')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (latestBroadcast) {
+    const { data: dismissal } = await supabase
+      .from('broadcast_dismissals')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('broadcast_id', latestBroadcast.id)
+      .single()
+
+    if (!dismissal) {
+      activeBroadcast = latestBroadcast
+    }
+  }
+
   return (
     <DashboardClient
       user={user}
@@ -120,6 +142,7 @@ export default async function DashboardPage() {
       upcomingBookings={bookingsWithMyRsvp}
       allBookings={allBookings}
       groups={groupsPayload}
+      activeBroadcast={activeBroadcast}
     />
   )
 }
