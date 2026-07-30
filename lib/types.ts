@@ -81,6 +81,11 @@ export interface MatchSchedule {
   home_score: number | null
   away_score: number | null
   status: 'scheduled' | 'ongoing' | 'completed'
+  stage_name?: string | null
+  dnp_player_ids?: string[] | null
+  dnp_guest_names?: string[] | null
+  motm_player_id?: string | null
+  motm_guest_name?: string | null
   home?: Pick<Team, 'id' | 'name'>
   away?: Pick<Team, 'id' | 'name'>
 }
@@ -127,6 +132,9 @@ export interface PlayerStats {
   assists: number
   clean_sheets: number
   matches_played: number
+  fpl_points: number
+  motm_count: number
+  own_goals: number
   groups: GroupStats[]
 }
 
@@ -137,6 +145,7 @@ export interface GroupStats {
   assists: number
   clean_sheets: number
   matches_played: number
+  fpl_points: number
 }
 
 export interface LeaderboardEntry {
@@ -149,12 +158,15 @@ export interface LeaderboardEntry {
   assists: number
   clean_sheets: number
   matches_played: number
+  fpl_points: number
+  motm_count?: number
 }
 
 export interface TopPerformers {
-  top_scorer: { player: Pick<Profile, 'full_name' | 'avatar_url'>; goals: number } | null
-  top_playmaker: { player: Pick<Profile, 'full_name' | 'avatar_url'>; assists: number } | null
-  top_defender: { player: Pick<Profile, 'full_name' | 'avatar_url'>; clean_sheets: number } | null
+  top_scorer: { player: Pick<Profile, 'full_name' | 'avatar_url'>; goals: number; fpl_points?: number } | null
+  top_playmaker: { player: Pick<Profile, 'full_name' | 'avatar_url'>; assists: number; fpl_points?: number } | null
+  top_defender: { player: Pick<Profile, 'full_name' | 'avatar_url'>; clean_sheets: number; fpl_points?: number } | null
+  top_overall?: { player: Pick<Profile, 'full_name' | 'avatar_url'>; fpl_points: number } | null
 }
 
 // ─── Group Message ───

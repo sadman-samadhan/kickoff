@@ -7,7 +7,7 @@ export async function PATCH(req: Request, { params }: { params: { matchId: strin
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { home_score, away_score, status } = await req.json()
+  const { home_score, away_score, status, dnp_player_ids, dnp_guest_names, motm_player_id, motm_guest_name } = await req.json()
 
   // Verify group membership
   const { data: match } = await supabase
@@ -29,7 +29,15 @@ export async function PATCH(req: Request, { params }: { params: { matchId: strin
 
   const { error } = await supabase
     .from('match_schedule')
-    .update({ home_score, away_score, status })
+    .update({
+      home_score,
+      away_score,
+      status,
+      dnp_player_ids: dnp_player_ids || [],
+      dnp_guest_names: dnp_guest_names || [],
+      motm_player_id: motm_player_id || null,
+      motm_guest_name: motm_guest_name || null
+    })
     .eq('id', params.matchId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -10,7 +10,7 @@ interface PlayerStatCardProps {
     avatar_url?: string | null
     preferred_position?: string | null
   }
-  stats: { goals: number; assists: number; clean_sheets: number; matches_played: number }
+  stats: { goals: number; assists: number; clean_sheets: number; matches_played: number; fpl_points?: number }
   rank: number
 }
 
@@ -43,11 +43,18 @@ export function PlayerStatCard({ player, stats, rank }: PlayerStatCardProps) {
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-bold text-neutral-900 truncate">{player.full_name}</span>
-          {player.preferred_position && (
-            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${positionColors[player.preferred_position] || 'bg-neutral-100 text-neutral-500'}`}>
-              {player.preferred_position}
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 truncate">
+            <span className="text-sm font-bold text-neutral-900 truncate">{player.full_name}</span>
+            {player.preferred_position && (
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${positionColors[player.preferred_position] || 'bg-neutral-100 text-neutral-500'}`}>
+                {player.preferred_position}
+              </span>
+            )}
+          </div>
+          {stats.fpl_points !== undefined && (
+            <span className="bg-emerald-50 text-emerald-700 font-black text-[11px] px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+              {stats.fpl_points} pts
             </span>
           )}
         </div>

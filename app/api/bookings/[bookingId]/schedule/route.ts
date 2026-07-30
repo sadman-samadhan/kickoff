@@ -1,6 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { generateLeagueSchedule, generateTournamentSchedule } from '@/lib/scheduleGenerator'
+import { generateLeagueSchedule, generateKnockoutSchedule, ScheduledMatch } from '@/lib/scheduleGenerator'
 
 export async function GET(req: Request, { params }: { params: { bookingId: string } }) {
   const supabase = createClient()
@@ -51,30 +51,31 @@ export async function POST(req: Request, { params }: { params: { bookingId: stri
     return NextResponse.json({ error: 'Not enough teams to generate schedule' }, { status: 400 })
   }
 
-  let matches = []
-  if (format === '1-leg-league') {
+  let matches: ScheduledMatch[] = []
+  if (format === '1-leg-league' || format === '1-Leg League') {
     matches = generateLeagueSchedule(teams, 1)
-  } else if (format === '2-leg-league') {
+  } else if (format === '2-leg-league' || format === '2-Leg League') {
     matches = generateLeagueSchedule(teams, 2)
-  } else if (format === '1-leg-tournament') {
-    matches = generateTournamentSchedule(teams, 1)
-  } else if (format === '2-leg-tournament') {
-    matches = generateTournamentSchedule(teams, 2)
+  } else if (format === '1-leg-tournament' || format.includes('Knockout') || format.includes('World Cup')) {
+    matches = generateKnockoutSchedule(teams, 1)
+  } else if (format === '2-leg-tournament' || format.includes('UCL')) {
+    matches = generateKnockoutSchedule(teams, 2)
   } else {
     return NextResponse.json({ error: 'Invalid format' }, { status: 400 })
   }
 
-  // Clean existing schedule first? (Optional, but usually a good idea if regenerating)
+  // Clean existing schedule first
   await supabase.from('match_schedule').delete().eq('booking_id', params.bookingId)
 
   // Insert matches
-  const insertData = matches.map(m => ({
+  const insertData = matches.map((m: ScheduledMatch) => ({
     booking_id: params.bookingId,
     home_team_id: m.home_team_id,
     away_team_id: m.away_team_id,
     match_number: m.match_number,
     leg: m.leg,
     scheduled_order: m.scheduled_order,
+    stage_name: m.stage_name || null,
     status: 'scheduled'
   }))
 

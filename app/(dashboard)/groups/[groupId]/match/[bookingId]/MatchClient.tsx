@@ -8,7 +8,8 @@ import { format, parseISO } from 'date-fns'
 import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal, Star, MinusCircle, Share2, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { rsvpAction } from '../../actions'
-import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction, reorderMatchesAction } from './actions'
+import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction, reorderMatchesAction, addManualMatchAction } from './actions'
+import { calculateFplPoints } from '@/lib/fpl'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ConfirmModal from '@/components/modals/ConfirmModal'
@@ -530,9 +531,19 @@ export default function MatchClient({
   const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false)
   const [scheduleType, setScheduleType] = useState('1-Leg League')
   
-  // Score Entry & Goal State
+  // Score Entry & Fantasy State
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null)
   const [scoreForms, setScoreForms] = useState<Record<string, { homeScore: number, awayScore: number }>>({})
+  const [dnpForms, setDnpForms] = useState<Record<string, { playerIds: string[], guestNames: string[] }>>({})
+  const [motmForms, setMotmForms] = useState<Record<string, { playerId: string, guestName: string }>>({})
+
+  // Manual Match State
+  const [isAddManualMatchOpen, setIsAddManualMatchOpen] = useState(false)
+  const [manualHomeTeamId, setManualHomeTeamId] = useState('')
+  const [manualAwayTeamId, setManualAwayTeamId] = useState('')
+  const [manualStageName, setManualStageName] = useState('Match')
+  const [manualLeg, setManualLeg] = useState(1)
+  const [isManualMatchLoading, setIsManualMatchLoading] = useState(false)
   
   const [isAddGoalOpen, setIsAddGoalOpen] = useState(false)
   const [goalForm, setGoalForm] = useState({ teamId: '', scorerId: '', assistId: '', minute: '', isOwnGoal: false })
@@ -649,15 +660,20 @@ export default function MatchClient({
     return a.name.localeCompare(b.name)
   })
 
-  // 2. Top Players Table (Goals, Assists & Cleansheets)
+  // 2. Top Players Table (FPL Points, Goals, Assists, Clean Sheets & MOTM)
   interface PlayerStats {
     id: string
     name: string
+    position: string
     isGuest: boolean
     teamId: string
     goals: number
+    ownGoals: number
     assists: number
     cleanSheets: number
+    appearances: number
+    motmCount: number
+    fplPoints: number
     teamPoints: number
   }
 
@@ -668,21 +684,27 @@ export default function MatchClient({
     const rsvpObj = rsvps.find((r: any) => r.id === p.rsvpId)
     const teamId = rsvpObj ? getPlayerTeamId(rsvpObj) : ''
     const teamStats = sortedPointsTable.find(t => t.id === teamId)
+    const pos = p.position || 'ATT'
+    
     playerStatsMap[p.id] = {
       id: p.id,
       name: p.name,
+      position: pos,
       isGuest: p.isGuest,
       teamId: teamId,
       goals: 0,
+      ownGoals: 0,
       assists: 0,
       cleanSheets: 0,
+      appearances: 0,
+      motmCount: 0,
+      fplPoints: 0,
       teamPoints: teamStats ? teamStats.points : 0
     }
   })
 
-  // Calculate goals and assists
+  // Calculate goals, own goals, and assists
   goalEvents.forEach((g: any) => {
-    // Goals
     if (!g.is_own_goal) {
       let scorerKey = null
       if (g.scorer_id) {
@@ -694,9 +716,19 @@ export default function MatchClient({
       if (scorerKey && playerStatsMap[scorerKey]) {
         playerStatsMap[scorerKey].goals += 1
       }
+    } else {
+      let ownScorerKey = null
+      if (g.scorer_id) {
+        ownScorerKey = g.scorer_id
+      } else if (g.guest_scorer_name) {
+        const found = allPlayersForTeam.find(p => p.isGuest && p.name === g.guest_scorer_name)
+        if (found) ownScorerKey = found.id
+      }
+      if (ownScorerKey && playerStatsMap[ownScorerKey]) {
+        playerStatsMap[ownScorerKey].ownGoals += 1
+      }
     }
 
-    // Assists
     let assistKey = null
     if (g.assist_id) {
       assistKey = g.assist_id
@@ -709,39 +741,63 @@ export default function MatchClient({
     }
   })
 
-  // Calculate clean sheets
+  // Calculate appearances, clean sheets, and MOTM awards
   matchSchedule.forEach((match: any) => {
     if (match.status === 'completed') {
       const homeScore = match.home_score || 0
       const awayScore = match.away_score || 0
+      const dnpPlayerIds: string[] = match.dnp_player_ids || []
+      const dnpGuestNames: string[] = match.dnp_guest_names || []
 
-      if (awayScore === 0) {
-        // Home team clean sheet
-        Object.values(playerStatsMap).forEach(p => {
-          if (p.teamId === match.home_team_id) {
+      // Appearances & Clean Sheets for participants
+      Object.values(playerStatsMap).forEach(p => {
+        const isHome = p.teamId === match.home_team_id
+        const isAway = p.teamId === match.away_team_id
+
+        if (isHome || isAway) {
+          const isDnp = p.isGuest ? dnpGuestNames.includes(p.name) : dnpPlayerIds.includes(p.id)
+          if (!isDnp) {
+            p.appearances += 1
+          }
+
+          if (!isDnp && isHome && awayScore === 0) {
             p.cleanSheets += 1
           }
-        })
-      }
-
-      if (homeScore === 0) {
-        // Away team clean sheet
-        Object.values(playerStatsMap).forEach(p => {
-          if (p.teamId === match.away_team_id) {
+          if (!isDnp && isAway && homeScore === 0) {
             p.cleanSheets += 1
           }
-        })
-      }
+        }
+
+        // MOTM bonus check
+        if (match.motm_player_id && match.motm_player_id === p.id) {
+          p.motmCount += 1
+        } else if (match.motm_guest_name && p.isGuest && match.motm_guest_name === p.name) {
+          p.motmCount += 1
+        }
+      })
     }
   })
 
+  // Calculate final FPL Points for each player
+  Object.values(playerStatsMap).forEach(p => {
+    p.fplPoints = calculateFplPoints({
+      position: p.position,
+      goals: p.goals,
+      assists: p.assists,
+      cleanSheets: p.cleanSheets,
+      ownGoals: p.ownGoals,
+      appearances: p.appearances,
+      motmCount: p.motmCount
+    })
+  })
+
   const sortedTopPlayers = Object.values(playerStatsMap)
-    .filter(p => p.goals > 0 || p.assists > 0 || p.cleanSheets > 0)
+    .filter(p => p.fplPoints > 0 || p.appearances > 0)
     .sort((a, b) => {
+      if (b.fplPoints !== a.fplPoints) return b.fplPoints - a.fplPoints
       if (b.goals !== a.goals) return b.goals - a.goals
       if (b.assists !== a.assists) return b.assists - a.assists
       if (b.cleanSheets !== a.cleanSheets) return b.cleanSheets - a.cleanSheets
-      if (b.teamPoints !== a.teamPoints) return b.teamPoints - a.teamPoints
       return a.name.localeCompare(b.name)
     })
 
@@ -835,6 +891,24 @@ export default function MatchClient({
         ...scoreForms,
         [match.id]: { homeScore: match.home_score || 0, awayScore: match.away_score || 0 }
       })
+      if (!dnpForms[match.id]) {
+        setDnpForms({
+          ...dnpForms,
+          [match.id]: {
+            playerIds: match.dnp_player_ids || [],
+            guestNames: match.dnp_guest_names || []
+          }
+        })
+      }
+      if (!motmForms[match.id]) {
+        setMotmForms({
+          ...motmForms,
+          [match.id]: {
+            playerId: match.motm_player_id || '',
+            guestName: match.motm_guest_name || ''
+          }
+        })
+      }
     }
   }
 
@@ -842,11 +916,21 @@ export default function MatchClient({
     setIsScoreLoading(true)
     try {
       const form = scoreForms[matchId] || { homeScore: 0, awayScore: 0 }
-      
+      const dnp = dnpForms[matchId] || { playerIds: [], guestNames: [] }
+      const motm = motmForms[matchId] || { playerId: '', guestName: '' }
+
       await fetch(`/api/matches/${matchId}/score`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ home_score: form.homeScore, away_score: form.awayScore, status: 'completed' })
+        body: JSON.stringify({
+          home_score: form.homeScore,
+          away_score: form.awayScore,
+          status: 'completed',
+          dnp_player_ids: dnp.playerIds,
+          dnp_guest_names: dnp.guestNames,
+          motm_player_id: motm.playerId || null,
+          motm_guest_name: motm.guestName || null
+        })
       })
 
       await fetch(`/api/matches/${matchId}/complete`, {
@@ -858,6 +942,24 @@ export default function MatchClient({
       console.error(e)
     } finally {
       setIsScoreLoading(false)
+    }
+  }
+
+  const handleAddManualMatch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!manualHomeTeamId || !manualAwayTeamId) return
+    setIsManualMatchLoading(true)
+    try {
+      await addManualMatchAction(booking.id, groupId, manualHomeTeamId, manualAwayTeamId, manualLeg, manualStageName)
+      setIsAddManualMatchOpen(false)
+      setManualHomeTeamId('')
+      setManualAwayTeamId('')
+      setManualStageName('Match')
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsManualMatchLoading(false)
     }
   }
 
@@ -1489,30 +1591,50 @@ export default function MatchClient({
                 </button>
               )}
               {matchSchedule.length > 0 && userRole === 'admin' && (
-                <Button variant="outline" size="sm" onClick={handleReschedule} className="h-8 text-xs text-amber-700 border-amber-200 hover:bg-amber-50">
-                  Reschedule
-                </Button>
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setIsAddManualMatchOpen(true)} className="h-8 text-xs text-emerald-700 border-emerald-200 hover:bg-emerald-50 flex items-center gap-1">
+                    <Plus className="w-3.5 h-3.5" /> Add Match
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleReschedule} className="h-8 text-xs text-amber-700 border-amber-200 hover:bg-amber-50">
+                    Reschedule
+                  </Button>
+                </>
               )}
             </div>
           </div>
           
           <div className="p-4">
             {matchSchedule.length === 0 ? (
-              <div className="space-y-3">
-                <CustomSelect
-                  value={scheduleType}
-                  onChange={val => setScheduleType(val)}
-                  placeholder="Select schedule type..."
-                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
-                  options={[
-                    { value: '1-Leg League', label: '1-Leg League' },
-                    { value: '2-Leg League', label: '2-Leg League' }
-                  ]}
-                />
-                <Button className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl" onClick={handleGenerateSchedule} disabled={isGeneratingSchedule}>
-                  {isGeneratingSchedule ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trophy className="w-4 h-4 mr-2" />}
-                  Generate Schedule
-                </Button>
+              <div className="space-y-4">
+                <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-100 space-y-3">
+                  <div className="text-xs font-bold text-neutral-700 uppercase tracking-wider">Option 1: Fixture Templates</div>
+                  <CustomSelect
+                    value={scheduleType}
+                    onChange={val => setScheduleType(val)}
+                    placeholder="Select fixture template..."
+                    buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                    options={[
+                      { value: '1-Leg League', label: '1-Leg League' },
+                      { value: '2-Leg League', label: '2-Leg League' },
+                      { value: 'World Cup Knockout (1-Leg)', label: 'World Cup Knockout (1-Leg)' },
+                      { value: 'UCL Knockout (2-Leg)', label: 'UCL Knockout (2-Leg)' }
+                    ]}
+                  />
+                  <Button className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold" onClick={handleGenerateSchedule} disabled={isGeneratingSchedule}>
+                    {isGeneratingSchedule ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trophy className="w-4 h-4 mr-2" />}
+                    Generate Template Schedule
+                  </Button>
+                </div>
+
+                {userRole === 'admin' && (
+                  <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 flex flex-col items-center gap-2">
+                    <div className="text-xs font-bold text-emerald-900">Option 2: Create Custom Fixture</div>
+                    <p className="text-[11px] text-emerald-700 text-center">Add matches one by one according to your custom tournament or casual format.</p>
+                    <Button variant="outline" className="w-full border-emerald-300 text-emerald-800 hover:bg-emerald-100 rounded-xl text-xs font-bold" onClick={() => setIsAddManualMatchOpen(true)}>
+                      <Plus className="w-4 h-4 mr-1.5" /> Build Custom Fixture
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
@@ -1521,6 +1643,12 @@ export default function MatchClient({
                   const isExpanded = expandedMatchId === match.id
                   const matchGoals = goalEvents.filter((g: any) => g.match_schedule_id === match.id)
                   
+                  const homeTeam = teams.find((t: any) => t.id === match.home_team_id)
+                  const awayTeam = teams.find((t: any) => t.id === match.away_team_id)
+                  const homePlayersList = homeTeam ? getTeamPlayersList(homeTeam) : []
+                  const awayPlayersList = awayTeam ? getTeamPlayersList(awayTeam) : []
+                  const allMatchPlayers = [...homePlayersList, ...awayPlayersList]
+
                   return (
                     <div key={match.id} className="flex items-stretch gap-2">
                       {userRole === 'admin' && (
@@ -1555,8 +1683,15 @@ export default function MatchClient({
                             {isCompleted && <span className="text-lg font-black">{match.home_score}</span>}
                           </div>
                           
-                          <div className="px-3 py-1 bg-neutral-100 text-[10px] font-bold text-neutral-500 rounded mx-2">
-                            VS
+                          <div className="flex flex-col items-center mx-2">
+                            {match.stage_name && (
+                              <span className="text-[8px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 mb-0.5">
+                                {match.stage_name}
+                              </span>
+                            )}
+                            <div className="px-2.5 py-0.5 bg-neutral-100 text-[10px] font-bold text-neutral-500 rounded">
+                              VS
+                            </div>
                           </div>
                           
                           <div className="flex-1 flex justify-start items-center gap-2">
@@ -1588,6 +1723,87 @@ export default function MatchClient({
                                 />
                               </div>
                             </div>
+
+                            {/* DNP Substitutes Selection */}
+                            {allMatchPlayers.length > 0 && (
+                              <div className="mb-4 bg-neutral-50 p-3 rounded-xl border border-neutral-100">
+                                <div className="text-xs font-bold text-neutral-700 mb-2 flex items-center justify-between">
+                                  <span>Did Not Play (DNP) Substitutes</span>
+                                  <span className="text-[10px] text-neutral-400 font-normal">Checked players lose appearance pt</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  {allMatchPlayers.map((p) => {
+                                    const currentDnp = dnpForms[match.id] || { playerIds: [], guestNames: [] }
+                                    const isChecked = p.isGuest
+                                      ? currentDnp.guestNames.includes(p.name)
+                                      : currentDnp.playerIds.includes(p.id)
+
+                                    return (
+                                      <label key={p.id} className="flex items-center gap-2 cursor-pointer text-neutral-700 hover:text-neutral-900 select-none">
+                                        <input
+                                          type="checkbox"
+                                          checked={isChecked}
+                                          onChange={(e) => {
+                                            const checked = e.target.checked
+                                            if (p.isGuest) {
+                                              const nextGuests = checked
+                                                ? [...currentDnp.guestNames, p.name]
+                                                : currentDnp.guestNames.filter(g => g !== p.name)
+                                              setDnpForms({
+                                                ...dnpForms,
+                                                [match.id]: { ...currentDnp, guestNames: nextGuests }
+                                              })
+                                            } else {
+                                              const nextIds = checked
+                                                ? [...currentDnp.playerIds, p.id]
+                                                : currentDnp.playerIds.filter(id => id !== p.id)
+                                              setDnpForms({
+                                                ...dnpForms,
+                                                [match.id]: { ...currentDnp, playerIds: nextIds }
+                                              })
+                                            }
+                                          }}
+                                          className="rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                                        />
+                                        <span className="truncate">{p.name}</span>
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* MOTM Selection */}
+                            {allMatchPlayers.length > 0 && (
+                              <div className="mb-4 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
+                                <div className="text-xs font-bold text-amber-900 mb-1.5 flex items-center gap-1.5">
+                                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /> Man of the Match (MOTM)
+                                  <span className="text-[10px] text-amber-700 font-normal">(+1 Bonus Point)</span>
+                                </div>
+                                <CustomSelect
+                                  value={motmForms[match.id]?.playerId ? motmForms[match.id].playerId : (motmForms[match.id]?.guestName ? `guest_${motmForms[match.id].guestName}` : '')}
+                                  onChange={(val) => {
+                                    if (!val) {
+                                      setMotmForms({ ...motmForms, [match.id]: { playerId: '', guestName: '' } })
+                                    } else if (val.startsWith('guest_')) {
+                                      setMotmForms({ ...motmForms, [match.id]: { playerId: '', guestName: val.replace('guest_', '') } })
+                                    } else {
+                                      setMotmForms({ ...motmForms, [match.id]: { playerId: val, guestName: '' } })
+                                    }
+                                  }}
+                                  placeholder="Select MOTM..."
+                                  buttonClassName="w-full px-3 py-1.5 border border-amber-200 rounded-lg text-xs bg-white focus:ring-2 focus:ring-amber-500 outline-none"
+                                  options={[
+                                    { value: '', label: 'None Selected' },
+                                    ...allMatchPlayers.map(p => ({
+                                      value: p.isGuest ? `guest_${p.name}` : p.id,
+                                      label: `⭐ ${p.name} (${p.position})`
+                                    }))
+                                  ]}
+                                />
+                              </div>
+                            )}
+
                             <Button className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl text-sm font-bold mb-6" onClick={() => handleSaveScore(match.id)} disabled={isScoreLoading}>
                               {isScoreLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Score & Complete'}
                             </Button>
@@ -1716,9 +1932,10 @@ export default function MatchClient({
                       <tr className="border-b border-neutral-100 text-neutral-400 font-bold uppercase tracking-wider">
                         <th className="py-2.5 px-2">Player</th>
                         <th className="py-2.5 px-2">Team</th>
-                        <th className="py-2.5 px-2 text-center w-12">⚽ G</th>
-                        <th className="py-2.5 px-2 text-center w-12">👟 A</th>
-                        <th className="py-2.5 px-2 text-center w-12">🛡️ CS</th>
+                        <th className="py-2.5 px-2 text-center">PTS</th>
+                        <th className="py-2.5 px-2 text-center w-10">⚽ G</th>
+                        <th className="py-2.5 px-2 text-center w-10">👟 A</th>
+                        <th className="py-2.5 px-2 text-center w-10">🛡️ CS</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-50">
@@ -1726,19 +1943,26 @@ export default function MatchClient({
                         <tr key={player.id} className="hover:bg-neutral-50/50 transition-colors">
                           <td className="py-3 px-2 font-bold text-neutral-800">
                             <div className="flex flex-col">
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 truncate">
                                 {player.name}
                                 {player.isGuest && (
                                   <span className="text-[8px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase tracking-wider">
                                     Guest
                                   </span>
                                 )}
+                                {player.motmCount > 0 && (
+                                  <span className="text-amber-500 font-bold text-[10px]" title="Man of the Match (+1 Bonus)">
+                                    ⭐
+                                  </span>
+                                )}
                               </span>
+                              <span className="text-[9px] font-semibold text-neutral-400 uppercase">{player.position}</span>
                             </div>
                           </td>
-                          <td className="py-3 px-2 text-neutral-500 truncate max-w-[100px]">
+                          <td className="py-3 px-2 text-neutral-500 truncate max-w-[90px]">
                             {getTeamName(player.teamId)}
                           </td>
+                          <td className="py-3 px-2 text-center font-black text-emerald-700 bg-emerald-50/50 rounded-lg">{player.fplPoints}</td>
                           <td className="py-3 px-2 text-center font-black text-neutral-900">{player.goals}</td>
                           <td className="py-3 px-2 text-center font-bold text-neutral-600">{player.assists}</td>
                           <td className="py-3 px-2 text-center font-bold text-neutral-600">{player.cleanSheets}</td>
@@ -2497,6 +2721,68 @@ export default function MatchClient({
           </div>
         )
       })()}
+
+      {/* MANUAL MATCH MODAL */}
+      {isAddManualMatchOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-neutral-900">Add Custom Match</h3>
+              <button onClick={() => setIsAddManualMatchOpen(false)} className="text-neutral-400 hover:text-neutral-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddManualMatch} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-neutral-600 block mb-1">Stage / Match Label</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                  placeholder="e.g. Final, Semi-Final, Match 5"
+                  value={manualStageName}
+                  onChange={e => setManualStageName(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-neutral-600 block mb-1">Home Team</label>
+                <CustomSelect
+                  value={manualHomeTeamId}
+                  onChange={val => setManualHomeTeamId(val)}
+                  placeholder="Select Home Team..."
+                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
+                  options={[
+                    { value: '', label: 'Select Home Team...' },
+                    ...teams.map((t: any) => ({ value: t.id, label: t.name || 'Team' }))
+                  ]}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-neutral-600 block mb-1">Away Team</label>
+                <CustomSelect
+                  value={manualAwayTeamId}
+                  onChange={val => setManualAwayTeamId(val)}
+                  placeholder="Select Away Team..."
+                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 outline-none"
+                  options={[
+                    { value: '', label: 'Select Away Team...' },
+                    ...teams.map((t: any) => ({ value: t.id, label: t.name || 'Team' }))
+                  ]}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setIsAddManualMatchOpen(false)}>Cancel</Button>
+                <Button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white" disabled={isManualMatchLoading}>
+                  {isManualMatchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Match'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

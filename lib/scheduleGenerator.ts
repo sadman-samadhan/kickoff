@@ -9,6 +9,7 @@ export interface ScheduledMatch {
   match_number: number;
   leg: number;
   scheduled_order: number;
+  stage_name?: string;
   is_placeholder?: boolean;
 }
 
@@ -40,7 +41,6 @@ function resolveConsecutiveConstraint(matches: ScheduledMatch[]): ScheduledMatch
       if (h) consecutiveCount[h] = (consecutiveCount[h] || 0) + 1;
       if (a) consecutiveCount[a] = (consecutiveCount[a] || 0) + 1;
       
-      // Reset counts for teams not in this match
       for (const t in consecutiveCount) {
         if (t !== h && t !== a) {
           consecutiveCount[t] = 0;
@@ -92,10 +92,11 @@ export function generateLeagueSchedule(teams: Team[], legs: 1 | 2): ScheduledMat
         const away = currentTIds[currentTIds.length - 1 - i];
         
         if (home !== null && away !== null) {
+          const stageName = legs === 2 ? `League (Leg ${leg})` : 'League Match'
           if (leg === 2) {
-            matches.push({ home_team_id: away, away_team_id: home, match_number: matchNum++, leg, scheduled_order: 0 });
+            matches.push({ home_team_id: away, away_team_id: home, match_number: matchNum++, leg, scheduled_order: 0, stage_name: stageName });
           } else {
-            matches.push({ home_team_id: home, away_team_id: away, match_number: matchNum++, leg, scheduled_order: 0 });
+            matches.push({ home_team_id: home, away_team_id: away, match_number: matchNum++, leg, scheduled_order: 0, stage_name: stageName });
           }
         }
       }
@@ -106,33 +107,70 @@ export function generateLeagueSchedule(teams: Team[], legs: 1 | 2): ScheduledMat
   return resolveConsecutiveConstraint(matches);
 }
 
-export function generateTournamentSchedule(teams: Team[], legs: 1 | 2): ScheduledMatch[] {
+/**
+ * World Cup (1-Leg) or UCL (2-Leg) Knockout format scheduler
+ */
+export function generateKnockoutSchedule(teams: Team[], legs: 1 | 2): ScheduledMatch[] {
   const randomized = shuffle(teams.map(t => t.id));
   const matches: ScheduledMatch[] = [];
   let matchNum = 1;
+  const isUcl = legs === 2;
 
-  if (randomized.length === 3) {
+  if (randomized.length === 2) {
+    // Single Final
+    const [teamA, teamB] = randomized;
+    matches.push({ home_team_id: teamA, away_team_id: teamB, match_number: matchNum++, leg: 1, scheduled_order: 0, stage_name: isUcl ? 'Final (Leg 1)' : 'Final' });
+    if (isUcl) {
+      matches.push({ home_team_id: teamB, away_team_id: teamA, match_number: matchNum++, leg: 2, scheduled_order: 0, stage_name: 'Final (Leg 2)' });
+    }
+  } else if (randomized.length === 3) {
+    // 3 teams: Semi-Final + Final
     const [byeTeam, teamB, teamC] = randomized;
-    matches.push({ home_team_id: teamB, away_team_id: teamC, match_number: matchNum++, leg: 1, scheduled_order: 0 });
-    if (legs === 2) matches.push({ home_team_id: teamC, away_team_id: teamB, match_number: matchNum++, leg: 2, scheduled_order: 0 });
     
-    matches.push({ home_team_id: byeTeam, away_team_id: null, match_number: matchNum++, leg: 1, scheduled_order: 0, is_placeholder: true });
-    if (legs === 2) matches.push({ home_team_id: null, away_team_id: byeTeam, match_number: matchNum++, leg: 2, scheduled_order: 0, is_placeholder: true });
+    // Semi Final
+    matches.push({ home_team_id: teamB, away_team_id: teamC, match_number: matchNum++, leg: 1, scheduled_order: 0, stage_name: isUcl ? 'Semi-Final (Leg 1)' : 'Semi-Final' });
+    if (isUcl) {
+      matches.push({ home_team_id: teamC, away_team_id: teamB, match_number: matchNum++, leg: 2, scheduled_order: 0, stage_name: 'Semi-Final (Leg 2)' });
+    }
     
-  } else if (randomized.length >= 4) {
+    // Final with Bye team
+    matches.push({ home_team_id: byeTeam, away_team_id: null, match_number: matchNum++, leg: 1, scheduled_order: 0, is_placeholder: true, stage_name: 'Final' });
+  } else if (randomized.length === 4) {
+    // 4 teams: 2 Semi-Finals + 3rd Place + Final
     const [teamA, teamB, teamC, teamD] = randomized;
-    matches.push({ home_team_id: teamA, away_team_id: teamB, match_number: matchNum++, leg: 1, scheduled_order: 0 });
-    if (legs === 2) matches.push({ home_team_id: teamB, away_team_id: teamA, match_number: matchNum++, leg: 2, scheduled_order: 0 });
     
-    matches.push({ home_team_id: teamC, away_team_id: teamD, match_number: matchNum++, leg: 1, scheduled_order: 0 });
-    if (legs === 2) matches.push({ home_team_id: teamD, away_team_id: teamC, match_number: matchNum++, leg: 2, scheduled_order: 0 });
+    // Semi Final 1
+    matches.push({ home_team_id: teamA, away_team_id: teamB, match_number: matchNum++, leg: 1, scheduled_order: 0, stage_name: isUcl ? 'Semi-Final 1 (Leg 1)' : 'Semi-Final 1' });
+    if (isUcl) {
+      matches.push({ home_team_id: teamB, away_team_id: teamA, match_number: matchNum++, leg: 2, scheduled_order: 0, stage_name: 'Semi-Final 1 (Leg 2)' });
+    }
+    
+    // Semi Final 2
+    matches.push({ home_team_id: teamC, away_team_id: teamD, match_number: matchNum++, leg: 1, scheduled_order: 0, stage_name: isUcl ? 'Semi-Final 2 (Leg 1)' : 'Semi-Final 2' });
+    if (isUcl) {
+      matches.push({ home_team_id: teamD, away_team_id: teamC, match_number: matchNum++, leg: 2, scheduled_order: 0, stage_name: 'Semi-Final 2 (Leg 2)' });
+    }
 
-    matches.push({ home_team_id: null, away_team_id: null, match_number: matchNum++, leg: 1, scheduled_order: 0, is_placeholder: true });
-    if (legs === 2) matches.push({ home_team_id: null, away_team_id: null, match_number: matchNum++, leg: 2, scheduled_order: 0, is_placeholder: true });
+    // Final
+    matches.push({ home_team_id: null, away_team_id: null, match_number: matchNum++, leg: 1, scheduled_order: 0, is_placeholder: true, stage_name: 'Final' });
   } else {
-    matches.push({ home_team_id: randomized[0], away_team_id: randomized[1] || null, match_number: matchNum++, leg: 1, scheduled_order: 0 });
-    if (legs === 2) matches.push({ home_team_id: randomized[1] || null, away_team_id: randomized[0], match_number: matchNum++, leg: 2, scheduled_order: 0 });
+    // 5+ teams: Round of 16 / Quarter-Finals setup
+    for (let i = 0; i < randomized.length; i += 2) {
+      const home = randomized[i];
+      const away = randomized[i + 1] || null;
+      const stage = randomized.length > 8 ? 'Round of 16' : 'Quarter-Final';
+      
+      matches.push({ home_team_id: home, away_team_id: away, match_number: matchNum++, leg: 1, scheduled_order: 0, stage_name: isUcl ? `${stage} (Leg 1)` : stage });
+      if (isUcl && away) {
+        matches.push({ home_team_id: away, away_team_id: home, match_number: matchNum++, leg: 2, scheduled_order: 0, stage_name: `${stage} (Leg 2)` });
+      }
+    }
+    
+    // Placeholder Final
+    matches.push({ home_team_id: null, away_team_id: null, match_number: matchNum++, leg: 1, scheduled_order: 0, is_placeholder: true, stage_name: 'Final' });
   }
 
   return matches.map((m, idx) => ({ ...m, scheduled_order: idx + 1 }));
 }
+
+export const generateTournamentSchedule = generateKnockoutSchedule;

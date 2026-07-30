@@ -360,8 +360,15 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
       {/* 2. PERSONAL STATS CARD */}
       <div data-tour="profile-stats" className="bg-white rounded-3xl p-5 shadow-sm border border-neutral-100">
-        <h2 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
-          <Activity className="w-5 h-5 text-neutral-400" /> My Stats
+        <h2 className="text-lg font-bold text-neutral-900 mb-4 flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <Activity className="w-5 h-5 text-neutral-400" /> My Stats
+          </span>
+          {stats?.fpl_points !== undefined && (
+            <span className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black text-xs px-3 py-1 rounded-full shadow-sm">
+              🏆 {stats.fpl_points} FPL PTS
+            </span>
+          )}
         </h2>
 
         {loadingStats ? (
@@ -369,6 +376,10 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
         ) : stats ? (
           <>
             <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center col-span-2">
+                <span className="text-3xl font-black text-emerald-700 mb-0.5">{stats.fpl_points ?? 0}</span>
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">🏆 Total FPL Points</span>
+              </div>
               <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
                 <span className="text-2xl font-black text-amber-600 mb-1">{stats.goals}</span>
                 <span className="text-[10px] font-bold text-amber-700/60 uppercase tracking-wider flex items-center gap-1.5"><Goal className="w-3 h-3" /> Goals</span>
@@ -423,7 +434,12 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
                     onClick={() => toggleGroup(g.group_id)}
                   >
                     <span className="font-bold text-neutral-800 text-sm">{g.group_name}</span>
-                    {isExpanded ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                        {g.fpl_points ?? 0} pts
+                      </span>
+                      {isExpanded ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
+                    </div>
                   </button>
 
                   {isExpanded && (

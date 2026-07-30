@@ -2,6 +2,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { calculateFplPoints } from '@/lib/fpl'
 
 export async function GET(req: Request, { params }: { params: { groupId: string } }) {
   const supabaseAuth = createClient()
@@ -9,7 +10,7 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
-  const sort = searchParams.get('sort') || 'goals'
+  const sort = searchParams.get('sort') || 'points'
 
   const supabaseAdmin = createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,11 +59,32 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
   const playersStats = members.map((m: any) => {
     const pId = m.player_id
     const pGoals = goals.filter(g => g.scorer_id === pId && !g.is_own_goal).length
+    const pOwnGoals = goals.filter(g => g.scorer_id === pId && g.is_own_goal).length
     const pAssists = goals.filter(g => g.assist_id === pId).length
     const pCleanSheets = cleanSheets.filter(cs => cs.player_id === pId).length
     
     const myTeams = teamPlayers.filter(tp => tp.player_id === pId).map(tp => tp.team_id)
-    const pMatches = matchSchedules.filter(ms => ms.status === 'completed' && (myTeams.includes(ms.home_team_id) || myTeams.includes(ms.away_team_id))).length
+    
+    // Count completed matches excluding DNP
+    const pMatches = matchSchedules.filter(ms => {
+      if (ms.status !== 'completed') return false
+      const isInTeam = myTeams.includes(ms.home_team_id) || myTeams.includes(ms.away_team_id)
+      if (!isInTeam) return false
+      const isDnp = (ms.dnp_player_ids || []).includes(pId)
+      return !isDnp
+    }).length
+
+    const motmCount = matchSchedules.filter(ms => ms.status === 'completed' && ms.motm_player_id === pId).length
+
+    const fplPoints = calculateFplPoints({
+      position: m.profiles?.preferred_position,
+      goals: pGoals,
+      assists: pAssists,
+      cleanSheets: pCleanSheets,
+      ownGoals: pOwnGoals,
+      appearances: pMatches,
+      motmCount
+    })
 
     return {
       player_id: pId,
@@ -72,18 +94,27 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
       preferred_position: m.profiles.preferred_position,
       secondary_position: m.profiles.secondary_position,
       goals: pGoals,
+      own_goals: pOwnGoals,
       assists: pAssists,
       clean_sheets: pCleanSheets,
-      matches_played: pMatches
+      matches_played: pMatches,
+      motm_count: motmCount,
+      fpl_points: fplPoints
     }
   })
 
+  // Apply User's Sorting Rules:
+  // - Overall / points: Sort by FPL Points
+  // - Defender / clean_sheets: Sort by Clean Sheets first, then FPL Points
+  // - Playmaker / assists: Sort by Assists first, then FPL Points
+  // - Scorer / goals: Sort by Goals first, then FPL Points
   playersStats.sort((a: any, b: any) => {
-    if (sort === 'goals') return b.goals - a.goals || b.matches_played - a.matches_played
-    if (sort === 'assists') return b.assists - a.assists || b.matches_played - a.matches_played
-    if (sort === 'clean_sheets') return b.clean_sheets - a.clean_sheets || b.matches_played - a.matches_played
-    if (sort === 'matches') return b.matches_played - a.matches_played || b.goals - a.goals
-    return 0
+    if (sort === 'points') return b.fpl_points - a.fpl_points || b.goals - a.goals || a.full_name.localeCompare(b.full_name)
+    if (sort === 'goals') return b.goals - a.goals || b.fpl_points - a.fpl_points
+    if (sort === 'assists') return b.assists - a.assists || b.fpl_points - a.fpl_points
+    if (sort === 'clean_sheets') return b.clean_sheets - a.clean_sheets || b.fpl_points - a.fpl_points
+    if (sort === 'matches') return b.matches_played - a.matches_played || b.fpl_points - a.fpl_points
+    return b.fpl_points - a.fpl_points
   })
 
   return NextResponse.json({ players: playersStats })

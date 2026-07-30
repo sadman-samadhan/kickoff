@@ -89,61 +89,24 @@ export async function deleteTeamAction(teamId: string, bookingId: string, groupI
 
 export async function generateScheduleAction(bookingId: string, groupId: string, teams: any[], scheduleType: string) {
   const supabase = createClient()
+  const { generateLeagueSchedule, generateKnockoutSchedule } = await import('@/lib/scheduleGenerator')
 
-  let matches = []
-  let order = 1
-  const is2Leg = scheduleType.includes('2-Leg') || scheduleType.includes('2-leg');
+  const is2Leg = scheduleType.includes('2-Leg') || scheduleType.includes('2-leg') || scheduleType.includes('UCL')
+  const isKnockout = scheduleType.includes('Knockout') || scheduleType.includes('World Cup') || scheduleType.includes('UCL')
 
-  if (teams.length === 2) {
-    matches.push({ home_team_id: teams[0].id, away_team_id: teams[1].id, scheduled_order: order++, leg: 1 });
-    if (is2Leg) matches.push({ home_team_id: teams[1].id, away_team_id: teams[0].id, scheduled_order: order++, leg: 2 });
-  } else if (teams.length === 3) {
-    // 1v2, 1v3, 2v3
-    matches.push({ home_team_id: teams[0].id, away_team_id: teams[1].id, scheduled_order: order++, leg: 1 });
-    matches.push({ home_team_id: teams[0].id, away_team_id: teams[2].id, scheduled_order: order++, leg: 1 });
-    matches.push({ home_team_id: teams[1].id, away_team_id: teams[2].id, scheduled_order: order++, leg: 1 });
-    if (is2Leg) {
-      // 2v1, 3v1, 3v2
-      matches.push({ home_team_id: teams[1].id, away_team_id: teams[0].id, scheduled_order: order++, leg: 2 });
-      matches.push({ home_team_id: teams[2].id, away_team_id: teams[0].id, scheduled_order: order++, leg: 2 });
-      matches.push({ home_team_id: teams[2].id, away_team_id: teams[1].id, scheduled_order: order++, leg: 2 });
-    }
-  } else if (teams.length === 4) {
-    // 1v2, 3v4, 1v3, 2v4, 1v4, 2v3
-    matches.push({ home_team_id: teams[0].id, away_team_id: teams[1].id, scheduled_order: order++, leg: 1 });
-    matches.push({ home_team_id: teams[2].id, away_team_id: teams[3].id, scheduled_order: order++, leg: 1 });
-    matches.push({ home_team_id: teams[0].id, away_team_id: teams[2].id, scheduled_order: order++, leg: 1 });
-    matches.push({ home_team_id: teams[1].id, away_team_id: teams[3].id, scheduled_order: order++, leg: 1 });
-    matches.push({ home_team_id: teams[0].id, away_team_id: teams[3].id, scheduled_order: order++, leg: 1 });
-    matches.push({ home_team_id: teams[1].id, away_team_id: teams[2].id, scheduled_order: order++, leg: 1 });
-    if (is2Leg) {
-      // 2v1, 4v3, 3v1, 4v2, 4v1, 3v2
-      matches.push({ home_team_id: teams[1].id, away_team_id: teams[0].id, scheduled_order: order++, leg: 2 });
-      matches.push({ home_team_id: teams[3].id, away_team_id: teams[2].id, scheduled_order: order++, leg: 2 });
-      matches.push({ home_team_id: teams[2].id, away_team_id: teams[0].id, scheduled_order: order++, leg: 2 });
-      matches.push({ home_team_id: teams[3].id, away_team_id: teams[1].id, scheduled_order: order++, leg: 2 });
-      matches.push({ home_team_id: teams[3].id, away_team_id: teams[0].id, scheduled_order: order++, leg: 2 });
-      matches.push({ home_team_id: teams[2].id, away_team_id: teams[1].id, scheduled_order: order++, leg: 2 });
-    }
-  } else {
-    for (let i=0; i<teams.length; i++) {
-      for (let j=i+1; j<teams.length; j++) {
-        matches.push({ home_team_id: teams[i].id, away_team_id: teams[j].id, scheduled_order: order++, leg: 1 });
-      }
-    }
-    if (is2Leg) {
-      for (let i=0; i<teams.length; i++) {
-        for (let j=i+1; j<teams.length; j++) {
-          matches.push({ home_team_id: teams[j].id, away_team_id: teams[i].id, scheduled_order: order++, leg: 2 });
-        }
-      }
-    }
-  }
+  const generatedMatches = isKnockout
+    ? generateKnockoutSchedule(teams, is2Leg ? 2 : 1)
+    : generateLeagueSchedule(teams, is2Leg ? 2 : 1)
 
-  for (const match of matches) {
+  for (const match of generatedMatches) {
     await supabase.from('match_schedule').insert({
       booking_id: bookingId,
-      ...match,
+      home_team_id: match.home_team_id,
+      away_team_id: match.away_team_id,
+      match_number: match.match_number,
+      leg: match.leg,
+      scheduled_order: match.scheduled_order,
+      stage_name: match.stage_name || (isKnockout ? 'Knockout' : 'League'),
       status: 'scheduled'
     })
   }
@@ -152,14 +115,66 @@ export async function generateScheduleAction(bookingId: string, groupId: string,
   return { success: true }
 }
 
-export async function updateMatchScoreAction(groupId: string, bookingId: string, matchScheduleId: string, homeScore: number, awayScore: number, status: string, goalEvents: any[]) {
+export async function addManualMatchAction(
+  bookingId: string,
+  groupId: string,
+  homeTeamId: string,
+  awayTeamId: string,
+  leg: number = 1,
+  stageName: string = 'Match'
+) {
+  const admin = createAdminClient()
+  const { data: existingMatches } = await admin
+    .from('match_schedule')
+    .select('scheduled_order')
+    .eq('booking_id', bookingId)
+
+  const maxOrder = existingMatches?.reduce((max, m) => Math.max(max, m.scheduled_order || 0), 0) || 0
+
+  await admin.from('match_schedule').insert({
+    booking_id: bookingId,
+    home_team_id: homeTeamId,
+    away_team_id: awayTeamId,
+    match_number: maxOrder + 1,
+    leg: leg || 1,
+    scheduled_order: maxOrder + 1,
+    stage_name: stageName,
+    status: 'scheduled'
+  })
+
+  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  return { success: true }
+}
+
+export async function updateMatchScoreAction(
+  groupId: string,
+  bookingId: string,
+  matchScheduleId: string,
+  homeScore: number,
+  awayScore: number,
+  status: string,
+  goalEvents: any[],
+  fantasyData?: {
+    dnpPlayerIds?: string[]
+    dnpGuestNames?: string[]
+    motmPlayerId?: string | null
+    motmGuestName?: string | null
+  }
+) {
   const supabase = createClient()
   
   await supabase.from('match_schedule').update({
     home_score: homeScore,
     away_score: awayScore,
-    status
+    status,
+    dnp_player_ids: fantasyData?.dnpPlayerIds || [],
+    dnp_guest_names: fantasyData?.dnpGuestNames || [],
+    motm_player_id: fantasyData?.motmPlayerId || null,
+    motm_guest_name: fantasyData?.motmGuestName || null
   }).eq('id', matchScheduleId)
+
+  // Clear previous goal events for this match before re-inserting if updated
+  await supabase.from('goal_events').delete().eq('match_schedule_id', matchScheduleId)
 
   // Insert goal events if any
   if (goalEvents && goalEvents.length > 0) {

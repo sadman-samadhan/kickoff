@@ -14,7 +14,7 @@ export default function LeaderboardClient({ groupId, groupName }: { groupId: str
   const [loading, setLoading] = useState(true)
   
   const [positionFilter, setPositionFilter] = useState('All')
-  const [sortBy, setSortBy] = useState('goals')
+  const [sortBy, setSortBy] = useState('points')
 
   useEffect(() => {
     async function fetchTop() {
@@ -151,8 +151,9 @@ export default function LeaderboardClient({ groupId, groupName }: { groupId: str
       </div>
 
       {/* 3. SORT OPTIONS */}
-      <div className="bg-neutral-100 p-1 rounded-xl flex gap-1">
+      <div className="bg-neutral-100 p-1 rounded-xl flex gap-1 overflow-x-auto">
         {[
+          { id: 'points', label: '🏆 FPL Points' },
           { id: 'goals', label: 'Goals' },
           { id: 'assists', label: 'Assists' },
           { id: 'clean_sheets', label: 'Clean Sheets' },
@@ -161,7 +162,7 @@ export default function LeaderboardClient({ groupId, groupName }: { groupId: str
           <button
             key={sort.id}
             onClick={() => setSortBy(sort.id)}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${sortBy === sort.id ? 'bg-white text-green-700 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${sortBy === sort.id ? 'bg-white text-emerald-700 shadow-sm border border-emerald-100' : 'text-neutral-500 hover:text-neutral-700'}`}
           >
             {sort.label}
           </button>
@@ -204,12 +205,18 @@ export default function LeaderboardClient({ groupId, groupName }: { groupId: str
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <h3 className="font-bold text-neutral-900 truncate">{player.full_name}</h3>
-                    <span className="text-[9px] font-bold text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded uppercase">{player.preferred_position || 'N/A'}</span>
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <div className="flex items-center gap-2 truncate">
+                      <h3 className="font-bold text-neutral-900 truncate">{player.full_name}</h3>
+                      <span className="text-[9px] font-bold text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded uppercase">{player.preferred_position || 'N/A'}</span>
+                    </div>
+
+                    <div className="bg-emerald-50 text-emerald-700 font-black text-xs px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">
+                      {player.fpl_points ?? 0} pts
+                    </div>
                   </div>
                   
-                  <div className="flex items-center gap-4 text-xs font-bold mt-1.5">
+                  <div className="flex items-center gap-3 text-xs font-bold mt-1.5">
                     <div className={`flex items-center gap-1 ${sortBy === 'goals' ? 'text-amber-600' : 'text-neutral-500'}`}>
                       <Goal className="w-3.5 h-3.5" /> {player.goals}
                     </div>
@@ -219,6 +226,11 @@ export default function LeaderboardClient({ groupId, groupName }: { groupId: str
                     <div className={`flex items-center gap-1 ${sortBy === 'clean_sheets' ? 'text-purple-600' : 'text-neutral-500'}`}>
                       <Shield className="w-3.5 h-3.5" /> {player.clean_sheets}
                     </div>
+                    {player.motm_count ? (
+                      <div className="text-amber-600 font-bold text-[11px] flex items-center gap-0.5">
+                        ⭐ {player.motm_count}
+                      </div>
+                    ) : null}
                     <div className={`flex items-center gap-1 ml-auto ${sortBy === 'matches' ? 'text-neutral-900' : 'text-neutral-400'}`}>
                       {player.matches_played} <span className="text-[10px] uppercase">GP</span>
                     </div>
