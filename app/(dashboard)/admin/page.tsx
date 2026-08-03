@@ -16,10 +16,10 @@ export default async function AdminPage() {
     .select('*')
     .order('created_at', { ascending: false })
 
-  // 2. Fetch Groups
+  // 2. Fetch Groups with members and bookings
   const { data: groups } = await supabaseAdmin
     .from('groups')
-    .select('*, group_members(id)')
+    .select('*, group_members(*, profiles(*)), bookings(*)')
     .order('created_at', { ascending: false })
 
   // 3. Fetch Match Bookings
@@ -39,6 +39,12 @@ export default async function AdminPage() {
     .select('*')
     .order('created_at', { ascending: false })
 
+  // 6. Fetch User Appeals
+  const { data: appeals } = await supabaseAdmin
+    .from('admin_appeals')
+    .select('*, profiles(*)')
+    .order('created_at', { ascending: false })
+
   const stats = {
     totalUsers: users?.length || 0,
     totalGroups: groups?.length || 0,
@@ -53,6 +59,7 @@ export default async function AdminPage() {
       groups={groups || []}
       fields={fields || []}
       broadcasts={broadcasts || []}
+      appeals={appeals || []}
       currentUserId={user.id}
     />
   )

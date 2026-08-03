@@ -227,7 +227,16 @@ export async function adminAddRsvpAction(bookingId: string, groupId: string, pla
 
   const playerIds = Array.isArray(playerIdOrIds) ? playerIdOrIds : [playerIdOrIds]
 
-  for (const playerId of playerIds) {
+  // Filter out suspended profiles
+  const { data: suspendedProfiles } = await admin.from('profiles').select('id').in('id', playerIds).eq('is_suspended', true)
+  const suspendedIds = new Set((suspendedProfiles || []).map((p: any) => p.id))
+  const validPlayerIds = playerIds.filter((id: string) => !suspendedIds.has(id))
+
+  if (validPlayerIds.length === 0) {
+    throw new Error('Cannot add suspended player(s) to match')
+  }
+
+  for (const playerId of validPlayerIds) {
     // Fetch current RSVPs
     const { data: currentRsvps } = await admin.from('rsvps').select('*').eq('booking_id', bookingId)
     const inCount = currentRsvps?.filter((r: any) => r.status === 'in').length || 0

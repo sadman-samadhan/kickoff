@@ -35,10 +35,11 @@ export default async function GroupPage({ params }: { params: { groupId: string 
   }
 
   const role = myMembership.role
-  const members = membersData?.map(m => ({
+  const activeMembersData = membersData?.filter(m => !(m.profiles as any)?.is_suspended) || []
+  const members = activeMembersData.map(m => ({
     ...m.profiles,
     role: m.role
-  })) || []
+  }))
 
   // 3. Fetch bookings, RSVPs, teams, and match_schedule
   const { data: bookingsData } = await supabaseAdmin

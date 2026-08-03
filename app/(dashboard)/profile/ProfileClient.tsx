@@ -6,12 +6,13 @@ import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Goal, Target, Shield, Activity, Camera, ChevronDown, ChevronUp, Loader2, X, Edit3, Settings, Trophy, LogOut, Bell, KeyRound, Eye, EyeOff, HelpCircle } from 'lucide-react'
+import { Goal, Target, Shield, Activity, Camera, ChevronDown, ChevronUp, Loader2, X, Edit3, Settings, Trophy, LogOut, Bell, KeyRound, Eye, EyeOff, HelpCircle, AlertOctagon, Mail, Send, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { Toast } from '@/components/ui/Toast'
 import StatShareCard from '@/components/cards/StatShareCard'
 import { TourGuide } from '@/components/ui/TourGuide'
+import { submitAdminAppealAction } from '@/app/(dashboard)/admin/actions'
 
 const MAX_AVATAR_SIZE = 300
 
@@ -66,6 +67,27 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isEditingName, setIsEditingName] = useState(false)
   const [tempName, setTempName] = useState(profile.full_name)
+
+  const [appealSubject, setAppealSubject] = useState('')
+  const [appealMessage, setAppealMessage] = useState('')
+  const [isSubmittingAppeal, setIsSubmittingAppeal] = useState(false)
+  const [appealSuccess, setAppealSuccess] = useState(false)
+
+  const handleSendAppeal = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!appealSubject.trim() || !appealMessage.trim()) return
+    setIsSubmittingAppeal(true)
+    try {
+      await submitAdminAppealAction(appealSubject, appealMessage)
+      setAppealSuccess(true)
+      setAppealSubject('')
+      setAppealMessage('')
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit appeal')
+    } finally {
+      setIsSubmittingAppeal(false)
+    }
+  }
 
   const [editForm, setEditForm] = useState({
     username: profile.username || '',
@@ -369,6 +391,73 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
           )}
         </div>
       </div>
+
+      {/* SUSPENDED ACCOUNT APPEAL CARD */}
+      {profile.is_suspended && (
+        <div className="bg-rose-50 border-2 border-rose-200 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center gap-3 text-rose-700 font-bold">
+            <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+              <AlertOctagon className="w-5 h-5 text-rose-600 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-rose-900">Account Currently Suspended</h3>
+              <p className="text-xs text-rose-700/80 font-medium">Your squad features, match scheduling, and chat access are locked.</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl p-4 border border-rose-100 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-neutral-800">
+              <Mail className="w-4 h-4 text-emerald-600" /> Contact Site Admin / Submit Appeal
+            </div>
+
+            {appealSuccess ? (
+              <div className="p-3 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 text-center space-y-1">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto" />
+                <p>Appeal submitted successfully! Site administration has been notified.</p>
+                <button
+                  onClick={() => setAppealSuccess(false)}
+                  className="text-[10px] text-emerald-700 underline block mx-auto font-bold pt-1"
+                >
+                  Send another message
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSendAppeal} className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold text-neutral-500 uppercase block mb-1">Subject</label>
+                  <input
+                    type="text"
+                    placeholder="Subject of appeal..."
+                    value={appealSubject}
+                    onChange={e => setAppealSubject(e.target.value)}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-neutral-500 uppercase block mb-1">Message</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Provide details for site admin..."
+                    value={appealMessage}
+                    onChange={e => setAppealMessage(e.target.value)}
+                    className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={isSubmittingAppeal}
+                  className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl"
+                >
+                  {isSubmittingAppeal ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+                  Send Message to Admin
+                </Button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 2. PERSONAL STATS CARD */}
       <div data-tour="profile-stats" className="bg-white rounded-3xl p-5 shadow-sm border border-neutral-100">

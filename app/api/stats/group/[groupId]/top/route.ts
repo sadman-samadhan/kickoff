@@ -13,7 +13,8 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { data: members } = await supabaseAdmin.from('group_members').select('player_id, profiles(*)').eq('group_id', params.groupId)
+  const { data: rawMembers } = await supabaseAdmin.from('group_members').select('player_id, profiles(*)').eq('group_id', params.groupId)
+  const members = rawMembers?.filter((m: any) => !m.profiles?.is_suspended) || []
   if (!members || members.length === 0) return NextResponse.json({ top_scorer: null, top_playmaker: null, best_defender: null })
 
   const { data: bookings } = await supabaseAdmin.from('bookings').select('id').eq('group_id', params.groupId)

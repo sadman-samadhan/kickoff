@@ -2,9 +2,15 @@
 -- KhelaHobe Migration: Site Admin, User Suspension, System Broadcasts
 -- =============================================
 
--- 1. Add site admin and suspension columns to profiles
+-- 1. Add site admin, suspension, and notification preference columns to profiles
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_site_admin BOOLEAN DEFAULT FALSE;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT FALSE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email_notifications BOOLEAN DEFAULT TRUE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS push_msg_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS push_notif_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS push_forum_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS security_question TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS security_answer TEXT;
 
 -- 2. Set initial site admin for sakib.samadhan@gmail.com
 UPDATE profiles 

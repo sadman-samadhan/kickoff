@@ -7,7 +7,7 @@ import Link from 'next/link'
 import {
   Shield, Users, Trophy, MapPin, Megaphone, Search, Plus,
   Edit3, Trash2, Ban, CheckCircle, ChevronRight, Loader2,
-  Calendar, AlertTriangle, ExternalLink
+  Calendar, AlertTriangle, ExternalLink, X, Mail
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CustomSelect } from '@/components/ui/select'
@@ -15,6 +15,7 @@ import ConfirmModal from '@/components/modals/ConfirmModal'
 import {
   toggleUserSuspensionAction,
   createSystemBroadcastAction,
+  deleteSystemBroadcastAction,
   saveFieldAction,
   deleteFieldAction
 } from './actions'
@@ -30,6 +31,7 @@ interface AdminClientProps {
   groups: any[]
   fields: any[]
   broadcasts: any[]
+  appeals: any[]
   currentUserId: string
 }
 
@@ -39,9 +41,10 @@ export default function AdminClient({
   groups,
   fields,
   broadcasts,
+  appeals,
   currentUserId
 }: AdminClientProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'broadcasts' | 'fields' | 'groups'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'appeals' | 'broadcasts' | 'fields' | 'groups'>('overview')
 
   // Search & Filter State
   const [userSearch, setUserSearch] = useState('')
@@ -52,6 +55,13 @@ export default function AdminClient({
   const [broadcastMessage, setBroadcastMessage] = useState('')
   const [isSendingBroadcast, setIsSendingBroadcast] = useState(false)
   const [broadcastToast, setBroadcastToast] = useState<string | null>(null)
+
+  // Group Details Modal State
+  const [groupModal, setGroupModal] = useState<{
+    isOpen: boolean
+    group: any | null
+    tab: 'members' | 'bookings'
+  }>({ isOpen: false, group: null, tab: 'members' })
 
   // User Suspension Modal State
   const [suspensionModal, setSuspensionModal] = useState<{
@@ -124,6 +134,21 @@ export default function AdminClient({
     }
   }
 
+  const handleDeleteBroadcast = (broadcastId: string, title: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Announcement',
+      message: `Are you sure you want to delete broadcast announcement "${title}"? This will remove the banner popup from user dashboards.`,
+      onConfirm: async () => {
+        try {
+          await deleteSystemBroadcastAction(broadcastId)
+        } catch (e: any) {
+          alert(e.message || 'Failed to delete broadcast')
+        }
+      }
+    })
+  }
+
   const handleSaveField = async () => {
     if (!fieldModal.name.trim()) return
     setIsSavingField(true)
@@ -186,6 +211,7 @@ export default function AdminClient({
         {[
           { key: 'overview', label: '📊 Overview' },
           { key: 'users', label: `👥 Users (${users.length})` },
+          { key: 'appeals', label: `📩 Appeals (${appeals.length})` },
           { key: 'broadcasts', label: '📢 Announcements' },
           { key: 'fields', label: `🏟️ Turf Fields (${fields.length})` },
           { key: 'groups', label: `🛡️ Groups (${groups.length})` },
@@ -384,6 +410,91 @@ export default function AdminClient({
         </div>
       )}
 
+      {/* USER APPEALS MODULE */}
+      {activeTab === 'appeals' && (
+        <div className="space-y-4 animate-in fade-in-50 duration-200">
+          <div className="bg-white p-4 rounded-2xl border border-neutral-100 shadow-sm flex justify-between items-center">
+            <div>
+              <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
+                <Mail className="w-4 h-4 text-emerald-500" /> Suspended User Appeals & Messages
+              </h3>
+              <p className="text-[10px] text-neutral-400 font-medium">Review appeals submitted by restricted accounts</p>
+            </div>
+            <span className="bg-rose-100 text-rose-700 text-xs font-extrabold px-3 py-1 rounded-full">
+              {appeals.filter((a: any) => a.status === 'pending').length} Appeals
+            </span>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-neutral-100 text-neutral-400 font-bold uppercase tracking-wider bg-neutral-50/50">
+                    <th className="py-3 px-4">User</th>
+                    <th className="py-3 px-3">Subject</th>
+                    <th className="py-3 px-3">Message</th>
+                    <th className="py-3 px-3 text-center">Date</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-50">
+                  {appeals.map((app: any) => {
+                    const profile = app.profiles
+                    return (
+                      <tr key={app.id} className="hover:bg-neutral-50/50 transition-colors">
+                        <td className="py-3 px-4 font-bold text-neutral-800">
+                          <div className="flex items-center gap-2">
+                            {profile?.avatar_url ? (
+                              <img src={profile.avatar_url} className="w-7 h-7 rounded-full object-cover shrink-0" alt="" />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs shrink-0">
+                                {(profile?.full_name || 'U').charAt(0)}
+                              </div>
+                            )}
+                            <div className="flex flex-col">
+                              <span>{profile?.full_name || 'User'}</span>
+                              <span className="text-[10px] text-neutral-400 font-normal">{profile?.email || 'N/A'}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 font-bold text-neutral-900">{app.subject}</td>
+                        <td className="py-3 px-3 text-neutral-600 font-medium max-w-xs">{app.message}</td>
+                        <td className="py-3 px-3 text-center text-neutral-400 text-[10px]">
+                          {new Date(app.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-4 text-right space-x-1.5">
+                          {profile?.is_suspended && (
+                            <Button
+                              size="sm"
+                              className="h-7 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold"
+                              onClick={() => setSuspensionModal({
+                                isOpen: true,
+                                user: profile,
+                                suspend: false,
+                                reason: ''
+                              })}
+                            >
+                              Reinstate User
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {appeals.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-neutral-400 text-xs italic">
+                        No appeals submitted yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 3. SYSTEM BROADCASTS MODULE */}
       {activeTab === 'broadcasts' && (
         <div className="space-y-6 animate-in fade-in-50 duration-200">
@@ -441,13 +552,20 @@ export default function AdminClient({
             <div className="space-y-2">
               {broadcasts.map(b => (
                 <div key={b.id} className="p-3 bg-neutral-50 rounded-xl border border-neutral-100 flex justify-between items-start">
-                  <div>
+                  <div className="flex-1 pr-2">
                     <h5 className="text-xs font-bold text-neutral-900">{b.title}</h5>
                     <p className="text-xs text-neutral-600 mt-0.5">{b.message}</p>
                     <span className="text-[9px] text-neutral-400 mt-1 block">
                       Posted: {new Date(b.created_at).toLocaleString()}
                     </span>
                   </div>
+                  <button
+                    onClick={() => handleDeleteBroadcast(b.id, b.title)}
+                    className="p-1.5 text-neutral-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors shrink-0"
+                    title="Delete Broadcast"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               ))}
               {broadcasts.length === 0 && (
@@ -538,7 +656,8 @@ export default function AdminClient({
                     <th className="py-3 px-4">Group Name</th>
                     <th className="py-3 px-3">Invite Code</th>
                     <th className="py-3 px-3 text-center">Members</th>
-                    <th className="py-3 px-4 text-right">Action</th>
+                    <th className="py-3 px-3 text-center">Bookings</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-50">
@@ -547,12 +666,23 @@ export default function AdminClient({
                       <td className="py-3 px-4 font-bold text-neutral-800">{g.name}</td>
                       <td className="py-3 px-3 text-neutral-500 font-mono text-[10px]">{g.invite_code}</td>
                       <td className="py-3 px-3 text-center font-bold text-neutral-700">
-                        {g.group_members ? g.group_members.length : '-'}
+                        {g.group_members ? g.group_members.length : 0}
                       </td>
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3 px-3 text-center font-bold text-neutral-700">
+                        {g.bookings ? g.bookings.length : 0}
+                      </td>
+                      <td className="py-3 px-4 text-right space-x-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setGroupModal({ isOpen: true, group: g, tab: 'members' })}
+                          className="h-7 text-[10px] rounded-lg border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        >
+                          Inspect Group
+                        </Button>
                         <Link href={`/groups/${g.id}`}>
                           <Button size="sm" variant="outline" className="h-7 text-[10px] rounded-lg">
-                            View Group <ChevronRight className="w-3 h-3 ml-1" />
+                            Open Group <ChevronRight className="w-3 h-3 ml-1" />
                           </Button>
                         </Link>
                       </td>
@@ -560,6 +690,136 @@ export default function AdminClient({
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: GROUP INSPECTION (Members & Bookings) */}
+      {groupModal.isOpen && groupModal.group && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-lg shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[85vh] flex flex-col">
+            <div className="flex justify-between items-start border-b pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-base text-neutral-900">{groupModal.group.name}</h3>
+                  <span className="text-[10px] font-mono bg-neutral-100 px-2 py-0.5 rounded text-neutral-600">
+                    Code: {groupModal.group.invite_code}
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-500 font-medium mt-0.5">
+                  {groupModal.group.group_members?.length || 0} Members • {groupModal.group.bookings?.length || 0} Match Bookings
+                </p>
+              </div>
+              <button
+                onClick={() => setGroupModal({ isOpen: false, group: null, tab: 'members' })}
+                className="p-1 text-neutral-400 hover:text-neutral-600 rounded-full hover:bg-neutral-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex bg-neutral-100 p-1 rounded-xl">
+              <button
+                onClick={() => setGroupModal({ ...groupModal, tab: 'members' })}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  groupModal.tab === 'members' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
+                }`}
+              >
+                👥 Members ({groupModal.group.group_members?.length || 0})
+              </button>
+              <button
+                onClick={() => setGroupModal({ ...groupModal, tab: 'bookings' })}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  groupModal.tab === 'bookings' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
+                }`}
+              >
+                ⚽ Bookings ({groupModal.group.bookings?.length || 0})
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="flex-1 overflow-y-auto pr-1 space-y-2 max-h-[50vh]">
+              {groupModal.tab === 'members' ? (
+                <div className="space-y-2">
+                  {groupModal.group.group_members?.map((m: any) => {
+                    const profile = m.profiles
+                    const isAdmin = m.role === 'admin'
+
+                    return (
+                      <div key={m.id} className="p-2.5 bg-neutral-50 rounded-xl border border-neutral-100 flex justify-between items-center text-xs">
+                        <div className="flex items-center gap-2.5">
+                          {profile?.avatar_url ? (
+                            <img src={profile.avatar_url} className="w-7 h-7 rounded-full object-cover shrink-0" alt="" />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs shrink-0">
+                              {(profile?.full_name || 'M').charAt(0)}
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-bold text-neutral-800 flex items-center gap-1.5">
+                              <span>{profile?.full_name || 'Member'}</span>
+                              {isAdmin && (
+                                <span className="text-[8px] bg-amber-100 text-amber-800 font-black px-1.5 py-0.2 rounded uppercase">
+                                  Admin
+                                </span>
+                              )}
+                              {profile?.is_suspended && (
+                                <span className="text-[8px] bg-rose-100 text-rose-800 font-black px-1.5 py-0.2 rounded uppercase">
+                                  Suspended
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-neutral-400 font-medium">
+                              @{profile?.username || 'user'} • {profile?.preferred_position || 'Field Player'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {groupModal.group.bookings?.map((b: any) => (
+                    <div key={b.id} className="p-3 bg-neutral-50 rounded-xl border border-neutral-100 flex justify-between items-center text-xs">
+                      <div>
+                        <div className="font-bold text-neutral-800 flex items-center gap-2">
+                          <span>{b.match_date} @ {b.match_time?.slice(0, 5) || '19:00'}</span>
+                          <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${
+                            b.status === 'completed' ? 'bg-neutral-200 text-neutral-700' :
+                            b.status === 'ongoing' ? 'bg-blue-100 text-blue-700' :
+                            b.status === 'cancelled' ? 'bg-rose-100 text-rose-700' :
+                            'bg-emerald-100 text-emerald-700'
+                          }`}>
+                            {b.status}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-neutral-500 mt-0.5 font-medium">
+                          📍 {b.field_name} • Max {b.max_players} players
+                        </div>
+                      </div>
+                      <Link href={`/groups/${groupModal.group.id}/match/${b.id}`}>
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] rounded-lg">
+                          Match Page →
+                        </Button>
+                      </Link>
+                    </div>
+                  ))}
+                  {(!groupModal.group.bookings || groupModal.group.bookings.length === 0) && (
+                    <p className="text-xs text-neutral-400 italic text-center py-4">No match bookings created in this group yet.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t flex justify-end">
+              <Link href={`/groups/${groupModal.group.id}`}>
+                <Button className="bg-neutral-900 hover:bg-black text-white text-xs font-bold rounded-xl px-4 h-9">
+                  Open Full Group Page <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                </Button>
+              </Link>
             </div>
           </div>
         </div>

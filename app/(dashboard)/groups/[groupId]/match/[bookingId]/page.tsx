@@ -68,17 +68,24 @@ export default async function MatchPage({ params }: { params: { groupId: string,
     .select('*, profiles(*)')
     .eq('group_id', params.groupId)
 
+  const activeRsvps = (rsvps || []).filter((r: any) => !(r.profiles as any)?.is_suspended)
+  const activeTeams = (teamsData || []).map((t: any) => ({
+    ...t,
+    team_players: (t.team_players || []).filter((tp: any) => !(tp.profiles as any)?.is_suspended)
+  }))
+  const activeGroupMembers = (groupMembers || []).filter((gm: any) => !(gm.profiles as any)?.is_suspended)
+
   return (
     <MatchClient 
       booking={booking}
-      rsvps={rsvps || []}
-      teams={teamsData || []}
+      rsvps={activeRsvps}
+      teams={activeTeams}
       matchSchedule={matchSchedule || []}
       goalEvents={goalEvents}
       currentUser={user}
       groupId={params.groupId}
       userRole={member?.role || 'member'}
-      groupMembers={groupMembers || []}
+      groupMembers={activeGroupMembers}
     />
   )
 }
