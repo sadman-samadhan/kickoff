@@ -256,3 +256,31 @@ export async function deleteGroupAction(groupId: string) {
   revalidatePath('/groups')
   return { success: true }
 }
+
+export async function updateGroupScoringSettingsAction(groupId: string, settings: any) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  // Verify caller is admin
+  const { data: callerMembership } = await admin
+    .from('group_members')
+    .select('role')
+    .eq('group_id', groupId)
+    .eq('player_id', user.id)
+    .single()
+
+  if (callerMembership?.role !== 'admin') throw new Error('Only admins can edit scoring settings')
+
+  const { error } = await admin
+    .from('groups')
+    .update({ custom_scoring_settings: settings })
+    .eq('id', groupId)
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/dashboard')
+  return { success: true }
+}

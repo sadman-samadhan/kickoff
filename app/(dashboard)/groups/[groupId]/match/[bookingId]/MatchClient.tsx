@@ -1699,6 +1699,20 @@ export default function MatchClient({
                             {isCompleted && <span className="text-lg font-black">{match.away_score}</span>}
                             <span className="font-bold text-sm text-neutral-800">{getTeamName(match.away_team_id)}</span>
                           </div>
+
+                          <Link
+                            href={`/groups/${groupId}/match/${booking.id}/game/${match.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="ml-3 shrink-0"
+                          >
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[9px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                            >
+                              Match Details ➔
+                            </Button>
+                          </Link>
                         </div>
 
                         {isExpanded && (

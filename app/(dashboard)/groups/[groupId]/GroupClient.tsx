@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, Shield, ChevronRight, X, Loader2, Copy, Trophy, UserMinus, ShieldCheck, LogOut, MessageCircle, Star } from 'lucide-react'
 import ChatTab from './ChatTab'
+import SettingsTab from './SettingsTab'
 import { Button } from '@/components/ui/button'
 import { useChatUnread } from '@/components/providers/ChatUnreadProvider'
 import { TourGuide } from '@/components/ui/TourGuide'
@@ -58,11 +59,11 @@ export default function GroupClient({
 }: GroupClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const initialTab = searchParams.get('tab') as 'matches' | 'chat' | 'squad' | null
+  const initialTab = searchParams.get('tab') as 'matches' | 'chat' | 'squad' | 'settings' | null
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'matches' | 'chat' | 'squad'>(
-    initialTab === 'chat' || initialTab === 'squad' ? initialTab : 'matches'
+  const [activeTab, setActiveTab] = useState<'matches' | 'chat' | 'squad' | 'settings'>(
+    initialTab || 'matches'
   )
   const { unreadCounts, markAsRead } = useChatUnread()
   const unreadCount = unreadCounts[group.id] || 0
@@ -254,11 +255,12 @@ export default function GroupClient({
       </div>
 
       {/* TAB NAVIGATION */}
-      <div data-tour="group-tabs" className="flex bg-white rounded-2xl p-1 border border-neutral-100 shadow-sm">
+      <div data-tour="group-tabs" className="flex bg-white rounded-2xl p-1 border border-neutral-100 shadow-sm overflow-x-auto">
         {[
           { key: 'matches' as const, label: 'Matches', icon: Calendar },
           { key: 'chat' as const, label: 'Chat', icon: MessageCircle, badge: unreadCount },
           { key: 'squad' as const, label: 'Squad', icon: Users },
+          { key: 'settings' as const, label: 'Settings', icon: Settings },
         ].map(tab => {
           const Icon = tab.icon
           const isActive = activeTab === tab.key
@@ -524,6 +526,10 @@ export default function GroupClient({
         </div>
       </div>
       </>
+      )}
+
+      {activeTab === 'settings' && (
+        <SettingsTab groupId={group.id} group={group} isAdmin={role === 'admin'} />
       )}
 
       {/* LEAVE GROUP BUTTON */}

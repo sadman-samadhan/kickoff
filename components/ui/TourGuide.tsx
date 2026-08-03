@@ -61,8 +61,8 @@ const GROUP_STEPS: Step[] = [
   },
   {
     target: '[data-tour="group-tabs"]',
-    title: "Squad Navigation",
-    content: "Toggle between the Matches schedule, real-time Group Chat, and the Squad directory/stats.",
+    title: "Squad Navigation & Settings",
+    content: "Toggle between Matches schedule, real-time Group Chat, Squad roster, and Group Settings for custom point rules!",
     placement: "bottom"
   },
   {
@@ -102,15 +102,15 @@ const MATCH_STEPS: Step[] = [
   },
   {
     target: '[data-tour="match-schedule"]',
-    title: "Matchday Fixtures",
-    content: "Generate matches between teams. Click a fixture to expand it and input scores, scorers, and assists.",
+    title: "Matchday Fixtures & Live Logger",
+    content: "Generate matches between teams. Click 'Match Details ➔' to open the live logger for goals, cards, rolling subs, and penalty saves!",
     placement: "top",
     condition: () => typeof document !== "undefined" && !!document.querySelector('[data-tour="match-schedule"]')
   },
   {
     target: '[data-tour="match-report"]',
-    title: "Matchday Standings",
-    content: "Track team points and view top players. You can also generate a Matchday Report card to share with friends!",
+    title: "Matchday Standings & Share Cards",
+    content: "Track team points, role-based awards, and top performers. Generate QR-coded share cards to post on social media!",
     placement: "top",
     condition: () => typeof document !== "undefined" && !!document.querySelector('[data-tour="match-report"]')
   }
