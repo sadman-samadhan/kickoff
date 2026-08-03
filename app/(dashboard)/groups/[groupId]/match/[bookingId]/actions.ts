@@ -10,19 +10,18 @@ export async function saveTeamsAction(bookingId: string, groupId: string, teamsD
   
   for (const team of teamsData) {
     const realCaptainId = (team.captainId && !team.captainId.startsWith('guest_')) ? team.captainId : null
-    const guestNames = (team.playerIds || [])
-      .filter((id: string) => id.startsWith('guest_'))
-      .map((id: string) => {
-        const rsvpId = id.replace('guest_', '')
-        return team.captainId === id ? `${team.guestNames?.[rsvpId] || id} (C)` : (team.guestNames?.[rsvpId] || rsvpId)
-      })
+    const guestRsvpIds = Array.from(new Set(
+      (team.playerIds || [])
+        .filter((id: string) => id.startsWith('guest_'))
+        .map((id: string) => id.replace('guest_', '').replace(' (C)', '').trim())
+    ))
 
     const { data: newTeam, error: teamError } = await admin.from('teams').insert({
       booking_id: bookingId,
       name: team.name || 'Team',
       jersey_color: team.jerseyColor || '#ffffff',
       captain_id: realCaptainId,
-      guest_members: guestNames.length > 0 ? guestNames : null
+      guest_members: guestRsvpIds.length > 0 ? guestRsvpIds : null
     }).select().single()
 
     if (teamError) throw new Error(teamError.message)
@@ -46,18 +45,17 @@ export async function saveTeamsAction(bookingId: string, groupId: string, teamsD
 export async function updateTeamAction(teamId: string, bookingId: string, groupId: string, data: { name: string, jerseyColor: string, captainId: string, playerIds: string[], guestNames?: Record<string, string> }) {
   const admin = createAdminClient()
   const realCaptainId = (data.captainId && !data.captainId.startsWith('guest_')) ? data.captainId : null
-  const guestNames = (data.playerIds || [])
-    .filter((id: string) => id.startsWith('guest_'))
-    .map((id: string) => {
-      const rsvpId = id.replace('guest_', '')
-      return data.guestNames?.[rsvpId] || rsvpId
-    })
+  const guestRsvpIds = Array.from(new Set(
+    (data.playerIds || [])
+      .filter((id: string) => id.startsWith('guest_'))
+      .map((id: string) => id.replace('guest_', '').replace(' (C)', '').trim())
+  ))
 
   await admin.from('teams').update({
     name: data.name,
     jersey_color: data.jerseyColor,
     captain_id: realCaptainId,
-    guest_members: guestNames.length > 0 ? guestNames : null
+    guest_members: guestRsvpIds.length > 0 ? guestRsvpIds : null
   }).eq('id', teamId)
 
   const { data: oldPlayers } = await admin.from('team_players').select('player_id').eq('team_id', teamId)

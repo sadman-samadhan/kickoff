@@ -5,8 +5,9 @@
 -- 1. Add custom_scoring_settings JSONB column to groups
 ALTER TABLE groups ADD COLUMN IF NOT EXISTS custom_scoring_settings JSONB;
 
--- 2. Add duration_minutes column to match_schedule
+-- 2. Add duration_minutes & starting_player_ids columns to match_schedule
 ALTER TABLE match_schedule ADD COLUMN IF NOT EXISTS duration_minutes INT DEFAULT 30;
+ALTER TABLE match_schedule ADD COLUMN IF NOT EXISTS starting_player_ids TEXT[];
 
 -- 3. Create match_events table for live match event logging
 CREATE TABLE IF NOT EXISTS match_events (
@@ -36,23 +37,23 @@ CREATE TABLE IF NOT EXISTS mvp_votes (
 ALTER TABLE match_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mvp_votes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Authenticated users can view match events" 
+CREATE POLICY "Anyone authenticated can view match events" 
   ON match_events FOR SELECT 
   USING (auth.role() = 'authenticated');
 
-CREATE POLICY "Authenticated users can insert match events" 
+CREATE POLICY "Anyone authenticated can insert match events" 
   ON match_events FOR INSERT 
   WITH CHECK (auth.role() = 'authenticated');
 
-CREATE POLICY "Authenticated users can delete match events" 
+CREATE POLICY "Anyone authenticated can delete match events" 
   ON match_events FOR DELETE 
   USING (auth.role() = 'authenticated');
 
-CREATE POLICY "Authenticated users can view MVP votes" 
+CREATE POLICY "Anyone authenticated can view MVP votes" 
   ON mvp_votes FOR SELECT 
   USING (auth.role() = 'authenticated');
 
-CREATE POLICY "Authenticated users can cast MVP votes" 
+CREATE POLICY "Anyone authenticated can cast MVP votes" 
   ON mvp_votes FOR INSERT 
   WITH CHECK (voter_id = auth.uid());
 

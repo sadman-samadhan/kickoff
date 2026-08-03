@@ -37,7 +37,8 @@ export default function MatchClient({
   currentUser,
   groupId,
   userRole,
-  groupMembers = []
+  groupMembers = [],
+  initialHasRated = false
 }: any) {
   const router = useRouter()
 
@@ -184,8 +185,13 @@ export default function MatchClient({
 
   const getTeamPlayersList = (team: any) => {
     const list: any[] = []
+    const addedIds = new Set<string>()
+    const addedNames = new Set<string>()
 
     team.team_players?.forEach((tp: any) => {
+      if (!tp.player_id || addedIds.has(tp.player_id)) return
+      addedIds.add(tp.player_id)
+      if (tp.profiles?.full_name) addedNames.add(tp.profiles.full_name.toLowerCase())
       const isCaptain = team.captain_id === tp.player_id
       const rsvp = rsvps.find((r: any) => r.player_id === tp.player_id)
       const pos = rsvp?.profiles?.preferred_position || 'Field Player'
@@ -198,14 +204,22 @@ export default function MatchClient({
       })
     })
 
-    team.guest_members?.forEach((gId: string) => {
-      const rsvp = rsvps.find((r: any) => r.id === gId)
-      if (rsvp) {
-        const isCaptain = team.captain_id === `guest_${rsvp.id}`
-        const pos = rsvp.guest_position || 'Field Player'
+    const rawGuestMembers: string[] = team.guest_members || []
+    rawGuestMembers.forEach((gId: string) => {
+      const cleanRsvpId = gId.replace(' (C)', '').replace('guest_', '').trim()
+      const rsvp = rsvps.find((r: any) => r.id === cleanRsvpId || r.guest_name === cleanRsvpId)
+      const name = rsvp?.guest_name || (cleanRsvpId && !cleanRsvpId.includes('-') ? cleanRsvpId : null)
+
+      if (name && !addedNames.has(name.toLowerCase())) {
+        addedNames.add(name.toLowerCase())
+        const guestKey = `guest_${rsvp?.id || cleanRsvpId}`
+        addedIds.add(guestKey)
+
+        const isCaptain = team.captain_id === `guest_${rsvp?.id || cleanRsvpId}` || team.captain_id === rsvp?.id || gId.includes('(C)')
+        const pos = rsvp?.guest_position || 'Field Player'
         list.push({
-          id: rsvp.id,
-          name: rsvp.guest_name || 'Guest Player',
+          id: guestKey,
+          name,
           position: pos,
           isCaptain,
           isGuest: true
@@ -562,7 +576,7 @@ export default function MatchClient({
   const [fieldRating, setFieldRating] = useState(0)
   const [fieldReview, setFieldReview] = useState('')
   const [isRatingLoading, setIsRatingLoading] = useState(false)
-  const [hasRated, setHasRated] = useState(false)
+  const [hasRated, setHasRated] = useState(initialHasRated || false)
   const [ratingHover, setRatingHover] = useState(0)
 
   // Matchday Report Tab State
@@ -712,7 +726,7 @@ export default function MatchClient({
       if (g.scorer_id) {
         scorerKey = g.scorer_id
       } else if (g.guest_scorer_name) {
-        const found = allPlayersForTeam.find(p => p.isGuest && p.name === g.guest_scorer_name)
+        const found = allPlayersForTeam.find(p => p.isGuest && (p.name.toLowerCase() === g.guest_scorer_name.toLowerCase() || p.id.includes(g.guest_scorer_name)))
         if (found) scorerKey = found.id
       }
       if (scorerKey && playerStatsMap[scorerKey]) {
@@ -723,7 +737,7 @@ export default function MatchClient({
       if (g.scorer_id) {
         ownScorerKey = g.scorer_id
       } else if (g.guest_scorer_name) {
-        const found = allPlayersForTeam.find(p => p.isGuest && p.name === g.guest_scorer_name)
+        const found = allPlayersForTeam.find(p => p.isGuest && (p.name.toLowerCase() === g.guest_scorer_name.toLowerCase() || p.id.includes(g.guest_scorer_name)))
         if (found) ownScorerKey = found.id
       }
       if (ownScorerKey && playerStatsMap[ownScorerKey]) {
@@ -735,7 +749,7 @@ export default function MatchClient({
     if (g.assist_id) {
       assistKey = g.assist_id
     } else if (g.guest_assist_name) {
-      const found = allPlayersForTeam.find(p => p.isGuest && p.name === g.guest_assist_name)
+      const found = allPlayersForTeam.find(p => p.isGuest && (p.name.toLowerCase() === g.guest_assist_name.toLowerCase() || p.id.includes(g.guest_assist_name)))
       if (found) assistKey = found.id
     }
     if (assistKey && playerStatsMap[assistKey]) {
@@ -1498,7 +1512,12 @@ export default function MatchClient({
                               )}
                             </h4>
                             <div className="text-[10px] text-neutral-400">
-                              {team.team_players?.length || 0} players{team.guest_members?.length > 0 ? ` + ${team.guest_members.length} guest(s)` : ''}
+                              {(() => {
+                                const playersList = getTeamPlayersList(team)
+                                const regCount = playersList.filter((p: any) => !p.isGuest).length
+                                const guestCount = playersList.filter((p: any) => p.isGuest).length
+                                return `${regCount} players${guestCount > 0 ? ` + ${guestCount} guest(s)` : ''}`
+                              })()}
                             </div>
                           </div>
                         </div>
@@ -1739,136 +1758,6 @@ export default function MatchClient({
                               </div>
                             </div>
 
-                            {/* DNP Substitutes Selection */}
-                            {allMatchPlayers.length > 0 && (
-                              <div className="mb-4 bg-neutral-50/80 p-3 rounded-xl border border-neutral-100 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[11px] font-bold text-neutral-600 uppercase tracking-wider">Tap to mark Did Not Play (DNP)</span>
-                                  <span className="text-[10px] text-neutral-400">Default: All Played (+1 pt)</span>
-                                </div>
-
-                                {/* Home Team Players Row */}
-                                {homePlayersList.length > 0 && (
-                                  <div className="space-y-1.5">
-                                    <div className="text-[10px] font-bold text-neutral-500 flex items-center gap-1.5 uppercase">
-                                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: homeTeam?.jersey_color || '#16a34a' }} />
-                                      <span>{getTeamName(match.home_team_id)}</span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {homePlayersList.map((p: any) => {
-                                        const currentDnp = dnpForms[match.id] || { playerIds: [], guestNames: [] }
-                                        const isDnp = p.isGuest
-                                          ? currentDnp.guestNames.includes(p.name)
-                                          : currentDnp.playerIds.includes(p.id)
-
-                                        const bgTint = hexToRgba(p.teamColor, 0.12)
-                                        const borderTint = hexToRgba(p.teamColor, 0.35)
-                                        const lastName = p.name ? (p.name.trim().split(/\s+/).pop() || p.name) : 'Player'
-
-                                        return (
-                                          <button
-                                            key={p.id}
-                                            type="button"
-                                            onClick={() => {
-                                              if (p.isGuest) {
-                                                const nextGuests = !isDnp
-                                                  ? [...currentDnp.guestNames, p.name]
-                                                  : currentDnp.guestNames.filter(g => g !== p.name)
-                                                setDnpForms({
-                                                  ...dnpForms,
-                                                  [match.id]: { ...currentDnp, guestNames: nextGuests }
-                                                })
-                                              } else {
-                                                const nextIds = !isDnp
-                                                  ? [...currentDnp.playerIds, p.id]
-                                                  : currentDnp.playerIds.filter(id => id !== p.id)
-                                                setDnpForms({
-                                                  ...dnpForms,
-                                                  [match.id]: { ...currentDnp, playerIds: nextIds }
-                                                })
-                                              }
-                                            }}
-                                            style={
-                                              !isDnp
-                                                ? { backgroundColor: bgTint, borderColor: borderTint, color: '#0f172a' }
-                                                : undefined
-                                            }
-                                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border select-none ${isDnp
-                                                ? 'bg-rose-50 text-rose-600 border-rose-200 line-through opacity-80 scale-95 shadow-inner'
-                                                : 'shadow-sm hover:brightness-95'
-                                              }`}
-                                          >
-                                            <span>{lastName}</span>
-                                            {isDnp && <span className="text-[9px] font-black bg-rose-200 text-rose-800 px-1 py-0.2 rounded no-underline">DNP</span>}
-                                          </button>
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Away Team Players Row */}
-                                {awayPlayersList.length > 0 && (
-                                  <div className="space-y-1.5 pt-1.5 border-t border-neutral-200/60">
-                                    <div className="text-[10px] font-bold text-neutral-500 flex items-center gap-1.5 uppercase">
-                                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: awayTeam?.jersey_color || '#2563eb' }} />
-                                      <span>{getTeamName(match.away_team_id)}</span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {awayPlayersList.map((p: any) => {
-                                        const currentDnp = dnpForms[match.id] || { playerIds: [], guestNames: [] }
-                                        const isDnp = p.isGuest
-                                          ? currentDnp.guestNames.includes(p.name)
-                                          : currentDnp.playerIds.includes(p.id)
-
-                                        const bgTint = hexToRgba(p.teamColor, 0.12)
-                                        const borderTint = hexToRgba(p.teamColor, 0.35)
-                                        const lastName = p.name ? (p.name.trim().split(/\s+/).pop() || p.name) : 'Player'
-
-                                        return (
-                                          <button
-                                            key={p.id}
-                                            type="button"
-                                            onClick={() => {
-                                              if (p.isGuest) {
-                                                const nextGuests = !isDnp
-                                                  ? [...currentDnp.guestNames, p.name]
-                                                  : currentDnp.guestNames.filter(g => g !== p.name)
-                                                setDnpForms({
-                                                  ...dnpForms,
-                                                  [match.id]: { ...currentDnp, guestNames: nextGuests }
-                                                })
-                                              } else {
-                                                const nextIds = !isDnp
-                                                  ? [...currentDnp.playerIds, p.id]
-                                                  : currentDnp.playerIds.filter(id => id !== p.id)
-                                                setDnpForms({
-                                                  ...dnpForms,
-                                                  [match.id]: { ...currentDnp, playerIds: nextIds }
-                                                })
-                                              }
-                                            }}
-                                            style={
-                                              !isDnp
-                                                ? { backgroundColor: bgTint, borderColor: borderTint, color: '#0f172a' }
-                                                : undefined
-                                            }
-                                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border select-none ${isDnp
-                                                ? 'bg-rose-50 text-rose-600 border-rose-200 line-through opacity-80 scale-95 shadow-inner'
-                                                : 'shadow-sm hover:brightness-95'
-                                              }`}
-                                          >
-                                            <span>{lastName}</span>
-                                            {isDnp && <span className="text-[9px] font-black bg-rose-200 text-rose-800 px-1 py-0.2 rounded no-underline">DNP</span>}
-                                          </button>
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
                             {/* MOTM Selection */}
                             {allMatchPlayers.length > 0 && (
                               <div className="mb-4 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
@@ -1900,49 +1789,9 @@ export default function MatchClient({
                               </div>
                             )}
 
-                            <Button className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl text-sm font-bold mb-6" onClick={() => handleSaveScore(match.id)} disabled={isScoreLoading}>
+                            <Button className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl text-sm font-bold mb-2" onClick={() => handleSaveScore(match.id)} disabled={isScoreLoading}>
                               {isScoreLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Score & Complete'}
                             </Button>
-
-                            <div className="border-t border-neutral-100 pt-4">
-                              <div className="flex justify-between items-center mb-3">
-                                <h4 className="text-xs font-bold text-neutral-800 uppercase tracking-wider flex items-center gap-1.5"><Goal className="w-3.5 h-3.5 text-neutral-500" /> Goals</h4>
-                                <Button variant="outline" size="sm" className="h-7 text-[10px] px-2 rounded-lg" onClick={() => setIsAddGoalOpen(true)}>
-                                  <Plus className="w-3 h-3 mr-1" /> Add
-                                </Button>
-                              </div>
-
-                              <div className="space-y-2">
-                                {matchGoals.map((g: any) => (
-                                  <div key={g.id} className="flex justify-between items-center bg-neutral-50 p-2 rounded-lg border border-neutral-100">
-                                    <div className="flex items-center gap-2">
-                                      {g.profiles?.avatar_url ? (
-                                        <img src={(g.profiles as any).avatar_url} className="w-6 h-6 rounded-full" alt={(g.profiles as any)?.full_name || 'Scorer'} />
-                                      ) : (
-                                        <div className={`w-6 h-6 rounded-full font-bold flex items-center justify-center text-[10px] ${g.guest_scorer_name ? 'bg-amber-100 text-amber-700' : 'bg-neutral-200 text-neutral-600'}`}>
-                                          {(g.profiles?.full_name || g.scorer?.full_name || g.guest_scorer_name || 'G').charAt(0)}
-                                        </div>
-                                      )}
-                                      <div className="flex flex-col">
-                                        <span className="text-xs font-bold text-neutral-800 leading-none">
-                                          {g.profiles?.full_name || g.scorer?.full_name || g.guest_scorer_name || 'Guest Player'} {g.is_own_goal && <span className="text-red-500 text-[9px] ml-1">(OG)</span>}
-                                        </span>
-                                        {(g.assist || g.guest_assist_name) && <span className="text-[9px] text-neutral-500 mt-0.5">Assist: {g.assist?.full_name || g.guest_assist_name}</span>}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                      {g.minute && <span className="text-[10px] font-bold text-neutral-400">{g.minute}&apos;</span>}
-                                      <button className="text-neutral-400 hover:text-red-500 p-1" onClick={() => handleDeleteGoal(g.id, match.id)}>
-                                        <X className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))}
-                                {matchGoals.length === 0 && (
-                                  <p className="text-[10px] text-neutral-400 text-center py-2">No goals added yet.</p>
-                                )}
-                              </div>
-                            </div>
                           </div>
                         )}
                       </div>

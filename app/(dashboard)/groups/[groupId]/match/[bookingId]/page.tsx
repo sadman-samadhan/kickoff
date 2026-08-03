@@ -51,22 +51,92 @@ export default async function MatchPage({ params }: { params: { groupId: string,
     scheduled_order: number
   }
 
-  // Fetch Goal Events
+  // Fetch Match Events & Legacy Goal Events
   const scheduleIds = matchSchedule?.map((m: MatchScheduleItem) => m.id) || []
-  let goalEvents: { id: string; scorer_id: string; assist_id?: string; profiles: unknown; assist: unknown }[] = []
+  let matchEvents: any[] = []
+  let rawGoalEvents: any[] = []
+
   if (scheduleIds.length > 0) {
+    const { data: me } = await supabaseAdmin
+      .from('match_events')
+      .select('*, profiles!player_id(*), secondary_profile:profiles!secondary_player_id(*)')
+      .in('match_schedule_id', scheduleIds)
+      .order('minute', { ascending: true })
+    matchEvents = me || []
+
     const { data: ge } = await supabaseAdmin
       .from('goal_events')
       .select('*, profiles!scorer_id(*), assist:profiles!assist_id(*)')
       .in('match_schedule_id', scheduleIds)
-    goalEvents = ge || []
+    rawGoalEvents = ge || []
   }
+
+  // Build Unified Goal Events with clean Guest Name Resolution
+  const unifiedGoalEvents: any[] = []
+  const seenGoalKeys = new Set<string>()
+
+  const activeGuestRsvps = (rsvps || []).filter((r: any) => r.status === 'in' && (r.player_id === null || r.guest_name))
+
+  matchEvents.filter((e: any) => e.event_type === 'goal').forEach((e: any) => {
+    const gScorerId = e.player_id || e.details_json?.guest_player_id
+    const goalKey = `${e.match_schedule_id}_${e.minute}_${gScorerId}`
+    seenGoalKeys.add(goalKey)
+
+    // Resolve Scorer Name
+    let scorerName = e.profiles?.full_name || null
+    let guestScorerName = null
+    if (!scorerName && gScorerId) {
+      const cleanId = gScorerId.replace('guest_', '').replace(' (C)', '').trim()
+      const rsvp = activeGuestRsvps.find((r: any) => r.id === cleanId || r.guest_name === cleanId)
+      guestScorerName = rsvp?.guest_name || (cleanId && !cleanId.includes('-') ? cleanId : 'Guest Player')
+    }
+
+    // Resolve Assist Name
+    const gAssistId = e.secondary_player_id || e.details_json?.guest_secondary_player_id
+    let assistName = e.secondary_profile?.full_name || null
+    let guestAssistName = null
+    if (!assistName && gAssistId) {
+      const cleanId = gAssistId.replace('guest_', '').replace(' (C)', '').trim()
+      const rsvp = activeGuestRsvps.find((r: any) => r.id === cleanId || r.guest_name === cleanId)
+      guestAssistName = rsvp?.guest_name || (cleanId && !cleanId.includes('-') ? cleanId : null)
+    }
+
+    unifiedGoalEvents.push({
+      id: e.id,
+      match_schedule_id: e.match_schedule_id,
+      scorer_id: e.player_id,
+      assist_id: e.secondary_player_id,
+      guest_scorer_name: guestScorerName,
+      guest_assist_name: guestAssistName,
+      is_own_goal: e.details_json?.is_own_goal === true,
+      minute: e.minute,
+      profiles: e.profiles,
+      assist: e.secondary_profile,
+      details_json: e.details_json
+    })
+  })
+
+  rawGoalEvents.forEach((ge: any) => {
+    const goalKey = `${ge.match_schedule_id}_${ge.minute}_${ge.scorer_id || ge.guest_scorer_name}`
+    if (!seenGoalKeys.has(goalKey)) {
+      seenGoalKeys.add(goalKey)
+      unifiedGoalEvents.push(ge)
+    }
+  })
 
   // Fetch Group Members for Admin to add
   const { data: groupMembers } = await supabaseAdmin
     .from('group_members')
     .select('*, profiles(*)')
     .eq('group_id', params.groupId)
+
+  // Check if current user has rated the field for this booking
+  const { data: userRating } = await supabaseAdmin
+    .from('field_ratings')
+    .select('id')
+    .eq('booking_id', params.bookingId)
+    .eq('user_id', user.id)
+    .maybeSingle()
 
   const activeRsvps = (rsvps || []).filter((r: any) => !(r.profiles as any)?.is_suspended)
   const activeTeams = (teamsData || []).map((t: any) => ({
@@ -81,11 +151,12 @@ export default async function MatchPage({ params }: { params: { groupId: string,
       rsvps={activeRsvps}
       teams={activeTeams}
       matchSchedule={matchSchedule || []}
-      goalEvents={goalEvents}
+      goalEvents={unifiedGoalEvents}
       currentUser={user}
       groupId={params.groupId}
       userRole={member?.role || 'member'}
       groupMembers={activeGroupMembers}
+      initialHasRated={!!userRating}
     />
   )
 }

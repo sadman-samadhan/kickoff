@@ -42,7 +42,12 @@ export default async function GameDetailsPage({
     ? await supabaseAdmin.from('teams').select('*').eq('id', match.away_team_id).single()
     : { data: null }
 
-  // 4. Fetch Home and Away Players
+  // 4. Fetch Home and Away Players (including registered players and guests)
+  const { data: rsvps } = await supabaseAdmin
+    .from('rsvps')
+    .select('*')
+    .eq('booking_id', params.bookingId)
+
   const { data: homeTp } = match.home_team_id
     ? await supabaseAdmin.from('team_players').select('player_id, profiles(*)').eq('team_id', match.home_team_id)
     : { data: [] }
@@ -51,8 +56,40 @@ export default async function GameDetailsPage({
     ? await supabaseAdmin.from('team_players').select('player_id, profiles(*)').eq('team_id', match.away_team_id)
     : { data: [] }
 
-  const homePlayers = (homeTp || []).map((t: any) => ({ ...t.profiles, id: t.player_id })).filter((p: any) => !p.is_suspended)
-  const awayPlayers = (awayTp || []).map((t: any) => ({ ...t.profiles, id: t.player_id })).filter((p: any) => !p.is_suspended)
+  const homeRegistered = (homeTp || []).map((t: any) => ({ ...t.profiles, id: t.player_id })).filter((p: any) => !p.is_suspended)
+  const awayRegistered = (awayTp || []).map((t: any) => ({ ...t.profiles, id: t.player_id })).filter((p: any) => !p.is_suspended)
+
+  // Resolve Guest Players from team guest_members cleanly without duplicates
+  const guestRsvps = (rsvps || []).filter((r: any) => r.status === 'in' && (r.player_id === null || r.guest_name))
+
+  const resolveTeamGuests = (guestMembers: string[]) => {
+    const list: any[] = []
+    const seenNames = new Set<string>()
+
+    ;(guestMembers || []).forEach((gEntry: string) => {
+      const cleanId = gEntry.replace('guest_', '').replace(' (C)', '').trim()
+      const rsvp = guestRsvps.find((r: any) => r.id === cleanId || r.guest_name === cleanId)
+      const name = rsvp?.guest_name || (cleanId && !cleanId.includes('-') ? cleanId : null)
+
+      if (name && !seenNames.has(name.toLowerCase())) {
+        seenNames.add(name.toLowerCase())
+        list.push({
+          id: `guest_${rsvp?.id || cleanId}`,
+          full_name: name,
+          preferred_position: rsvp?.guest_position || 'ATT',
+          is_guest: true,
+        })
+      }
+    })
+
+    return list
+  }
+
+  const homeGuests = resolveTeamGuests(homeTeam?.guest_members)
+  const awayGuests = resolveTeamGuests(awayTeam?.guest_members)
+
+  const homePlayers = [...homeRegistered, ...homeGuests]
+  const awayPlayers = [...awayRegistered, ...awayGuests]
 
   // 5. Fetch Match Events
   const { data: events } = await supabaseAdmin

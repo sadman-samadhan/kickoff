@@ -13,7 +13,9 @@ import {
   logMatchEventAction,
   deleteMatchEventAction,
   updateMatchDurationAction,
-  updateMatchStatusAction
+  updateMatchStatusAction,
+  updateMatchScoreAction,
+  updateStartingLineupAction
 } from './gameActions'
 import { calculateMatchPlayerPitchTime } from '@/lib/tournamentScoring'
 
@@ -30,6 +32,81 @@ interface GameDetailsClientProps {
   isAdmin: boolean
 }
 
+interface OptionItem<T extends string = string> {
+  value: T
+  label: string
+  sublabel?: string
+  color?: string
+}
+
+function OptionSelector<T extends string>({
+  options,
+  value,
+  onChange,
+  placeholder = 'Select option...',
+}: {
+  options: OptionItem<T>[]
+  value: T
+  onChange: (val: T) => void
+  placeholder?: string
+}) {
+  if (options.length === 0) {
+    return <p className="text-xs text-neutral-400 italic py-1">No options available</p>
+  }
+
+  // Render Pill Cards if options < 5
+  if (options.length < 5) {
+    return (
+      <div className="flex flex-wrap gap-2 py-1">
+        {options.map((opt) => {
+          const isSelected = value === opt.value
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                isSelected
+                  ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-600 ring-offset-1'
+                  : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-800 border-neutral-200'
+              }`}
+            >
+              {opt.color && (
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0 border border-white/40"
+                  style={{ backgroundColor: opt.color }}
+                />
+              )}
+              <span>{opt.label}</span>
+              {opt.sublabel && (
+                <span className={`text-[10px] opacity-80 font-normal ${isSelected ? 'text-emerald-100' : 'text-neutral-400'}`}>
+                  ({opt.sublabel})
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // Fallback to Styled Dropdown for options >= 5
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as T)}
+      className="w-full p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+    >
+      <option value="">{placeholder}</option>
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label} {opt.sublabel ? `(${opt.sublabel})` : ''}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 export default function GameDetailsClient({
   groupId,
   bookingId,
@@ -42,9 +119,20 @@ export default function GameDetailsClient({
   events,
   isAdmin,
 }: GameDetailsClientProps) {
-  const [activeTab, setActiveTab] = useState<'events' | 'pitchTime'>('events')
+  const [activeTab, setActiveTab] = useState<'events' | 'lineup' | 'pitchTime'>('events')
   const [durationInput, setDurationInput] = useState<number>(match.duration_minutes || 30)
   const [isUpdatingDuration, setIsUpdatingDuration] = useState(false)
+  const [homeScoreInput, setHomeScoreInput] = useState<number>(match.home_score ?? 0)
+  const [awayScoreInput, setAwayScoreInput] = useState<number>(match.away_score ?? 0)
+
+  const handleSaveScore = async () => {
+    if (!isAdmin) return
+    try {
+      await updateMatchScoreAction(matchId, bookingId, groupId, homeScoreInput, awayScoreInput)
+    } catch (e: any) {
+      alert(e.message || 'Failed to update score')
+    }
+  }
 
   // Event Modal States
   const [goalModal, setGoalModal] = useState<{ isOpen: boolean; teamId: string; scorerId: string; assistId: string; minute: number; isOwnGoal: boolean }>({
@@ -62,17 +150,62 @@ export default function GameDetailsClient({
 
   const [isLogging, setIsLogging] = useState(false)
 
+  const allPlayers = [...homePlayers, ...awayPlayers]
+  const defaultStartingPids = match.starting_player_ids || allPlayers.map((p) => p.id)
+  const [startingPlayerIds, setStartingPlayerIds] = useState<string[]>(defaultStartingPids)
+
+  const handleToggleStartingPlayer = async (pid: string) => {
+    if (!isAdmin) return
+    const nextPids = startingPlayerIds.includes(pid)
+      ? startingPlayerIds.filter((id) => id !== pid)
+      : [...startingPlayerIds, pid]
+
+    setStartingPlayerIds(nextPids)
+    try {
+      await updateStartingLineupAction(matchId, bookingId, groupId, nextPids)
+    } catch (e: any) {
+      console.error(e)
+    }
+  }
+
+  // Calculate Dynamic On-Pitch vs On-Bench State for Substitutions
+  const getDynamicPitchState = () => {
+    const onPitch = new Set<string>(startingPlayerIds)
+    const onBench = new Set<string>(allPlayers.map((p) => p.id).filter((id) => !startingPlayerIds.includes(id)))
+
+    events
+      .filter((e) => e.event_type === 'sub')
+      .sort((a, b) => a.minute - b.minute)
+      .forEach((sub) => {
+        const subOffId = sub.player_id || sub.details_json?.guest_player_id
+        const subOnId = sub.secondary_player_id || sub.details_json?.guest_secondary_player_id
+
+        if (subOffId) {
+          onPitch.delete(subOffId)
+          onBench.add(subOffId)
+        }
+        if (subOnId) {
+          onBench.delete(subOnId)
+          onPitch.add(subOnId)
+        }
+      })
+
+    return {
+      onPitchPlayers: allPlayers.filter((p) => onPitch.has(p.id)),
+      onBenchPlayers: allPlayers.filter((p) => onBench.has(p.id)),
+    }
+  }
+
   // Calculate Pitch Time & Goals Conceded On Pitch
   const homePids = homePlayers.map((p) => p.id)
   const awayPids = awayPlayers.map((p) => p.id)
-  const startingPids = [...homePids.slice(0, 7), ...awayPids.slice(0, 7)] // Defaults to initial roster
 
   const pitchData = calculateMatchPlayerPitchTime(
     events,
     durationInput || 30,
     homePids,
     awayPids,
-    startingPids
+    startingPlayerIds
   )
 
   const handleUpdateDuration = async () => {
@@ -178,9 +311,10 @@ export default function GameDetailsClient({
     }
   }
 
-  const getPlayerName = (pid?: string) => {
-    if (!pid) return ''
-    const p = [...homePlayers, ...awayPlayers].find((x) => x.id === pid)
+  const getPlayerName = (pid?: string | null, detailsJson?: any, isSecondary = false) => {
+    const targetId = pid || (isSecondary ? detailsJson?.guest_secondary_player_id : detailsJson?.guest_player_id)
+    if (!targetId) return 'Player'
+    const p = [...homePlayers, ...awayPlayers].find((x) => x.id === targetId)
     return p ? p.full_name : 'Player'
   }
 
@@ -247,9 +381,31 @@ export default function GameDetailsClient({
 
           {/* Live Score */}
           <div className="px-4 text-center">
-            <div className="text-3xl font-black tracking-tight text-white">
-              {match.home_score ?? 0} : {match.away_score ?? 0}
-            </div>
+            {isAdmin ? (
+              <div className="flex items-center gap-1 justify-center">
+                <input
+                  type="number"
+                  min="0"
+                  value={homeScoreInput}
+                  onChange={(e) => setHomeScoreInput(parseInt(e.target.value) || 0)}
+                  onBlur={handleSaveScore}
+                  className="w-11 h-9 text-center text-xl font-black bg-neutral-800 text-white rounded-xl border border-neutral-700 outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <span className="text-lg font-bold text-neutral-400">:</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={awayScoreInput}
+                  onChange={(e) => setAwayScoreInput(parseInt(e.target.value) || 0)}
+                  onBlur={handleSaveScore}
+                  className="w-11 h-9 text-center text-xl font-black bg-neutral-800 text-white rounded-xl border border-neutral-700 outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            ) : (
+              <div className="text-3xl font-black tracking-tight text-white">
+                {match.home_score ?? 0} : {match.away_score ?? 0}
+              </div>
+            )}
             <span className="text-[9px] font-extrabold uppercase tracking-widest text-neutral-400 mt-1 block">
               {match.status === 'completed' ? 'Final Score' : match.status === 'ongoing' ? 'LIVE' : 'VS'}
             </span>
@@ -291,22 +447,30 @@ export default function GameDetailsClient({
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-neutral-100 p-1.5 rounded-2xl">
+      <div className="flex bg-neutral-100 p-1.5 rounded-2xl overflow-x-auto gap-1">
         <button
           onClick={() => setActiveTab('events')}
-          className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+          className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
             activeTab === 'events' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
           }`}
         >
-          ⚽ Live Events & Feed ({events.length})
+          ⚽ Events ({events.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('lineup')}
+          className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
+            activeTab === 'lineup' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
+          }`}
+        >
+          📋 Starters & Bench
         </button>
         <button
           onClick={() => setActiveTab('pitchTime')}
-          className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+          className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition-all whitespace-nowrap ${
             activeTab === 'pitchTime' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'
           }`}
         >
-          ⏱️ Pitch Time & Goals Conceded
+          ⏱️ Pitch Time
         </button>
       </div>
 
@@ -372,7 +536,7 @@ export default function GameDetailsClient({
                           {ev.event_type === 'goal' && (
                             <>
                               <span>⚽</span>
-                              <span>{getPlayerName(ev.player_id)}</span>
+                              <span>{getPlayerName(ev.player_id, ev.details_json)}</span>
                               {ev.details_json?.is_own_goal && (
                                 <span className="text-[9px] bg-rose-100 text-rose-700 font-extrabold px-1.5 py-0.2 rounded">
                                   OG
@@ -383,27 +547,27 @@ export default function GameDetailsClient({
                           {ev.event_type === 'card' && (
                             <>
                               <span>{ev.details_json?.card_type === 'red' ? '🟥' : '🟨'}</span>
-                              <span>{getPlayerName(ev.player_id)}</span>
+                              <span>{getPlayerName(ev.player_id, ev.details_json)}</span>
                             </>
                           )}
                           {ev.event_type === 'sub' && (
                             <>
                               <span>🔁</span>
-                              <span className="text-rose-600">OFF: {getPlayerName(ev.player_id)}</span>
+                              <span className="text-rose-600">OFF: {getPlayerName(ev.player_id, ev.details_json)}</span>
                               <span className="text-neutral-400">→</span>
-                              <span className="text-emerald-600">ON: {getPlayerName(ev.secondary_player_id)}</span>
+                              <span className="text-emerald-600">ON: {getPlayerName(ev.secondary_player_id, ev.details_json, true)}</span>
                             </>
                           )}
                           {ev.event_type === 'penalty_save' && (
                             <>
                               <span>🧤</span>
-                              <span>Penalty Saved: {getPlayerName(ev.player_id)}</span>
+                              <span>Penalty Saved: {getPlayerName(ev.player_id, ev.details_json)}</span>
                             </>
                           )}
                         </div>
-                        {ev.event_type === 'goal' && ev.secondary_player_id && (
+                        {ev.event_type === 'goal' && (ev.secondary_player_id || ev.details_json?.guest_secondary_player_id) && (
                           <div className="text-[10px] text-neutral-500 font-medium mt-0.5">
-                            Assist: {getPlayerName(ev.secondary_player_id)}
+                            Assist: {getPlayerName(ev.secondary_player_id, ev.details_json, true)}
                           </div>
                         )}
                       </div>
@@ -427,7 +591,83 @@ export default function GameDetailsClient({
         </div>
       )}
 
-      {/* TAB 2: PITCH TIME & GOALS CONCEDED */}
+      {/* TAB 2: LINEUPS & STARTERS */}
+      {activeTab === 'lineup' && (
+        <div className="space-y-4 animate-in fade-in-50 duration-200">
+          <div className="bg-white rounded-3xl p-5 border border-neutral-100 shadow-sm space-y-3">
+            <h4 className="text-xs font-bold text-neutral-900 uppercase tracking-wider flex items-center gap-2">
+              <Users className="w-4 h-4 text-emerald-600" /> Matchday Starting XI & Bench
+            </h4>
+            <p className="text-[10px] text-neutral-400 font-medium">
+              Tap any player pill to toggle between <strong>Started (On Pitch)</strong> and <strong>Benched (Sub)</strong>. Benched players with 0 minutes logged automatically count as DNP.
+            </p>
+
+            {/* Home Team Section */}
+            <div className="space-y-2 pt-2">
+              <div className="text-xs font-bold text-neutral-600 flex items-center gap-2 uppercase">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: homeTeam?.jersey_color || '#16a34a' }} />
+                <span>{homeTeam?.name || 'Home Team'}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {homePlayers.map((p) => {
+                  const isStarter = startingPlayerIds.includes(p.id)
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={!isAdmin}
+                      onClick={() => handleToggleStartingPlayer(p.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                        isStarter
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                          : 'bg-rose-50 text-rose-700 border-rose-200 opacity-75'
+                      }`}
+                    >
+                      <span>{p.full_name}</span>
+                      <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded ${isStarter ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'}`}>
+                        {isStarter ? 'Starter' : 'Bench'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Away Team Section */}
+            <div className="space-y-2 pt-4 border-t border-neutral-100">
+              <div className="text-xs font-bold text-neutral-600 flex items-center gap-2 uppercase">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: awayTeam?.jersey_color || '#2563eb' }} />
+                <span>{awayTeam?.name || 'Away Team'}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {awayPlayers.map((p) => {
+                  const isStarter = startingPlayerIds.includes(p.id)
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={!isAdmin}
+                      onClick={() => handleToggleStartingPlayer(p.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                        isStarter
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                          : 'bg-rose-50 text-rose-700 border-rose-200 opacity-75'
+                      }`}
+                    >
+                      <span>{p.full_name}</span>
+                      <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded ${isStarter ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'}`}>
+                        {isStarter ? 'Starter' : 'Bench'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: PITCH TIME & GOALS CONCEDED */}
       {activeTab === 'pitchTime' && (
         <div className="space-y-4">
           <div className="bg-white rounded-3xl p-5 border border-neutral-100 shadow-sm space-y-3">
@@ -500,47 +740,66 @@ export default function GameDetailsClient({
             <div className="space-y-3 text-xs">
               <div>
                 <label className="font-bold text-neutral-600 block mb-1">Scoring Team</label>
-                <select
+                <OptionSelector
+                  options={[
+                    { value: homeTeam?.id || 'home', label: homeTeam?.name || 'Home Team', color: homeTeam?.jersey_color || '#16a34a' },
+                    { value: awayTeam?.id || 'away', label: awayTeam?.name || 'Away Team', color: awayTeam?.jersey_color || '#2563eb' }
+                  ]}
                   value={goalModal.teamId}
-                  onChange={(e) => setGoalModal({ ...goalModal, teamId: e.target.value })}
-                  className="w-full p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl font-bold outline-none"
-                >
-                  <option value={homeTeam?.id}>{homeTeam?.name || 'Home Team'}</option>
-                  <option value={awayTeam?.id}>{awayTeam?.name || 'Away Team'}</option>
-                </select>
+                  onChange={(val) => {
+                    setGoalModal((prev) => ({
+                      ...prev,
+                      teamId: val,
+                      scorerId: '',
+                      assistId: ''
+                    }))
+                  }}
+                  placeholder="Select Team..."
+                />
               </div>
 
-              <div>
-                <label className="font-bold text-neutral-600 block mb-1">Scorer</label>
-                <select
-                  value={goalModal.scorerId}
-                  onChange={(e) => setGoalModal({ ...goalModal, scorerId: e.target.value })}
-                  className="w-full p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl font-bold outline-none"
-                >
-                  <option value="">Select Scorer...</option>
-                  {[...homePlayers, ...awayPlayers].map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.full_name} ({p.preferred_position || 'P'})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {(() => {
+                const targetPlayers = goalModal.isOwnGoal
+                  ? (goalModal.teamId === homeTeam?.id ? awayPlayers : goalModal.teamId === awayTeam?.id ? homePlayers : [...homePlayers, ...awayPlayers])
+                  : (goalModal.teamId === homeTeam?.id ? homePlayers : goalModal.teamId === awayTeam?.id ? awayPlayers : [...homePlayers, ...awayPlayers])
 
-              <div>
-                <label className="font-bold text-neutral-600 block mb-1">Assist (Optional)</label>
-                <select
-                  value={goalModal.assistId}
-                  onChange={(e) => setGoalModal({ ...goalModal, assistId: e.target.value })}
-                  className="w-full p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl font-medium outline-none"
-                >
-                  <option value="">No Assist</option>
-                  {[...homePlayers, ...awayPlayers].map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                return (
+                  <>
+                    <div>
+                      <label className="font-bold text-neutral-600 block mb-1">
+                        {goalModal.isOwnGoal ? 'Scorer (Opposing Player - OG)' : 'Scorer'}
+                      </label>
+                      <OptionSelector
+                        options={targetPlayers.map((p) => ({
+                          value: p.id,
+                          label: p.full_name,
+                          sublabel: p.preferred_position || 'P'
+                        }))}
+                        value={goalModal.scorerId}
+                        onChange={(val) => setGoalModal({ ...goalModal, scorerId: val })}
+                        placeholder="Select Scorer..."
+                      />
+                    </div>
+
+                    {!goalModal.isOwnGoal && (
+                      <div>
+                        <label className="font-bold text-neutral-600 block mb-1">Assist (Optional)</label>
+                        <OptionSelector
+                          options={targetPlayers
+                            .filter((p) => p.id !== goalModal.scorerId)
+                            .map((p) => ({
+                              value: p.id,
+                              label: p.full_name
+                            }))}
+                          value={goalModal.assistId}
+                          onChange={(val) => setGoalModal({ ...goalModal, assistId: val })}
+                          placeholder="No Assist"
+                        />
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
 
               <div className="flex items-center justify-between">
                 <label className="font-bold text-neutral-600">Minute</label>
@@ -590,31 +849,30 @@ export default function GameDetailsClient({
             <h3 className="font-bold text-base text-neutral-900">🟨 Log Card Event</h3>
             <div className="space-y-3 text-xs">
               <div>
-                <label className="font-bold text-neutral-600 block mb-1">Player</label>
-                <select
-                  value={cardModal.playerId}
-                  onChange={(e) => setCardModal({ ...cardModal, playerId: e.target.value })}
-                  className="w-full p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl font-bold outline-none"
-                >
-                  <option value="">Select Player...</option>
-                  {[...homePlayers, ...awayPlayers].map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.full_name}
-                    </option>
-                  ))}
-                </select>
+                <label className="font-bold text-neutral-600 block mb-1">Card Type</label>
+                <OptionSelector
+                  options={[
+                    { value: 'yellow', label: '🟨 Yellow Card (-1 pt)' },
+                    { value: 'red', label: '🟥 Red Card (-3 pts)' }
+                  ]}
+                  value={cardModal.cardType}
+                  onChange={(val) => setCardModal({ ...cardModal, cardType: val as any })}
+                  placeholder="Select Card Type..."
+                />
               </div>
 
               <div>
-                <label className="font-bold text-neutral-600 block mb-1">Card Type</label>
-                <select
-                  value={cardModal.cardType}
-                  onChange={(e) => setCardModal({ ...cardModal, cardType: e.target.value as any })}
-                  className="w-full p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl font-bold outline-none"
-                >
-                  <option value="yellow">🟨 Yellow Card (-1 pt)</option>
-                  <option value="red">🟥 Red Card (-3 pts)</option>
-                </select>
+                <label className="font-bold text-neutral-600 block mb-1">Player</label>
+                <OptionSelector
+                  options={[...homePlayers, ...awayPlayers].map((p) => ({
+                    value: p.id,
+                    label: p.full_name,
+                    sublabel: p.preferred_position || 'P'
+                  }))}
+                  value={cardModal.playerId}
+                  onChange={(val) => setCardModal({ ...cardModal, playerId: val })}
+                  placeholder="Select Player..."
+                />
               </div>
 
               <div className="flex items-center justify-between">
@@ -649,73 +907,72 @@ export default function GameDetailsClient({
       )}
 
       {/* MODAL: LOG ROLLING SUB */}
-      {subModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
-            <h3 className="font-bold text-base text-neutral-900">🔁 Log Rolling Substitution</h3>
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="font-bold text-rose-600 block mb-1">Player Subbed OFF</label>
-                <select
-                  value={subModal.subOffId}
-                  onChange={(e) => setSubModal({ ...subModal, subOffId: e.target.value })}
-                  className="w-full p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl font-bold outline-none"
+      {subModal.isOpen && (() => {
+        const { onPitchPlayers, onBenchPlayers } = getDynamicPitchState()
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+              <h3 className="font-bold text-base text-neutral-900">🔁 Log Rolling Substitution</h3>
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="font-bold text-rose-600 block mb-1">Player Subbed OFF (Currently On Pitch)</label>
+                  <OptionSelector
+                    options={onPitchPlayers.map((p) => ({
+                      value: p.id,
+                      label: p.full_name,
+                      sublabel: 'On Pitch'
+                    }))}
+                    value={subModal.subOffId}
+                    onChange={(val) => setSubModal({ ...subModal, subOffId: val })}
+                    placeholder="Select Player On Pitch..."
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-emerald-600 block mb-1">Player Subbed ON (Currently On Bench)</label>
+                  <OptionSelector
+                    options={onBenchPlayers.map((p) => ({
+                      value: p.id,
+                      label: p.full_name,
+                      sublabel: 'Bench'
+                    }))}
+                    value={subModal.subOnId}
+                    onChange={(val) => setSubModal({ ...subModal, subOnId: val })}
+                    placeholder="Select Player On Bench..."
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-neutral-600">Minute</label>
+                  <input
+                    type="number"
+                    value={subModal.minute}
+                    onChange={(e) => setSubModal({ ...subModal, minute: parseInt(e.target.value) || 0 })}
+                    className="w-20 p-2 text-center bg-neutral-50 border border-neutral-200 rounded-xl font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 rounded-xl text-xs"
+                  onClick={() => setSubModal({ ...subModal, isOpen: false })}
                 >
-                  <option value="">Select Sub Off...</option>
-                  {[...homePlayers, ...awayPlayers].map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="font-bold text-emerald-600 block mb-1">Player Subbed ON</label>
-                <select
-                  value={subModal.subOnId}
-                  onChange={(e) => setSubModal({ ...subModal, subOnId: e.target.value })}
-                  className="w-full p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl font-bold outline-none"
+                  Cancel
+                </Button>
+                <Button
+                  disabled={isLogging}
+                  onClick={handleLogSub}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs"
                 >
-                  <option value="">Select Sub On...</option>
-                  {[...homePlayers, ...awayPlayers].map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.full_name}
-                    </option>
-                  ))}
-                </select>
+                  {isLogging ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Sub'}
+                </Button>
               </div>
-
-              <div className="flex items-center justify-between">
-                <label className="font-bold text-neutral-600">Minute</label>
-                <input
-                  type="number"
-                  value={subModal.minute}
-                  onChange={(e) => setSubModal({ ...subModal, minute: parseInt(e.target.value) || 0 })}
-                  className="w-20 p-2 text-center bg-neutral-50 border border-neutral-200 rounded-xl font-bold"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                className="flex-1 rounded-xl text-xs"
-                onClick={() => setSubModal({ ...subModal, isOpen: false })}
-              >
-                Cancel
-              </Button>
-              <Button
-                disabled={isLogging}
-                onClick={handleLogSub}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs"
-              >
-                {isLogging ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Sub'}
-              </Button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* MODAL: LOG PENALTY SAVE */}
       {penModal.isOpen && (
@@ -725,20 +982,18 @@ export default function GameDetailsClient({
             <div className="space-y-3 text-xs">
               <div>
                 <label className="font-bold text-neutral-600 block mb-1">Goalkeeper</label>
-                <select
-                  value={penModal.playerId}
-                  onChange={(e) => setPenModal({ ...penModal, playerId: e.target.value })}
-                  className="w-full p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl font-bold outline-none"
-                >
-                  <option value="">Select Goalkeeper...</option>
-                  {[...homePlayers, ...awayPlayers]
+                <OptionSelector
+                  options={[...homePlayers, ...awayPlayers]
                     .filter((p) => p.preferred_position === 'GK' || true)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name} ({p.preferred_position || 'P'})
-                      </option>
-                    ))}
-                </select>
+                    .map((p) => ({
+                      value: p.id,
+                      label: p.full_name,
+                      sublabel: p.preferred_position || 'P'
+                    }))}
+                  value={penModal.playerId}
+                  onChange={(val) => setPenModal({ ...penModal, playerId: val })}
+                  placeholder="Select Goalkeeper..."
+                />
               </div>
 
               <div className="flex items-center justify-between">

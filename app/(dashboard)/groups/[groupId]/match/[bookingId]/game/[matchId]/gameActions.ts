@@ -33,6 +33,32 @@ export async function updateMatchDurationAction(
 }
 
 /**
+ * Update Starting Lineup (Starting XI Player IDs)
+ */
+export async function updateStartingLineupAction(
+  matchId: string,
+  bookingId: string,
+  groupId: string,
+  startingPlayerIds: string[]
+) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { error } = await admin
+    .from('match_schedule')
+    .update({ starting_player_ids: startingPlayerIds })
+    .eq('id', matchId)
+
+  if (error) throw new Error(error.message)
+
+  revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
+  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  return { success: true }
+}
+
+/**
  * Log a Match Event (Goal, Card, Substitution, Penalty Save)
  */
 export async function logMatchEventAction(
@@ -53,16 +79,28 @@ export async function logMatchEventAction(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
+  const isGuestPlayer = eventData.player_id?.startsWith('guest_')
+  const isGuestSecondary = eventData.secondary_player_id?.startsWith('guest_')
+
+  const realPlayerId = isGuestPlayer ? null : eventData.player_id
+  const realSecondaryPlayerId = isGuestSecondary ? null : (eventData.secondary_player_id || null)
+
+  const mergedDetails = {
+    ...(eventData.details_json || {}),
+    ...(isGuestPlayer ? { guest_player_id: eventData.player_id } : {}),
+    ...(isGuestSecondary ? { guest_secondary_player_id: eventData.secondary_player_id } : {})
+  }
+
   const { data: event, error } = await admin
     .from('match_events')
     .insert({
       match_schedule_id: matchId,
       event_type: eventData.event_type,
-      player_id: eventData.player_id,
-      secondary_player_id: eventData.secondary_player_id || null,
+      player_id: realPlayerId,
+      secondary_player_id: realSecondaryPlayerId,
       team_id: eventData.team_id || null,
       minute: eventData.minute || 0,
-      details_json: eventData.details_json || null,
+      details_json: mergedDetails,
     })
     .select()
     .single()
@@ -74,8 +112,8 @@ export async function logMatchEventAction(
     const isOwnGoal = eventData.details_json?.is_own_goal === true
     await admin.from('goal_events').insert({
       match_schedule_id: matchId,
-      scorer_id: eventData.player_id,
-      assist_id: eventData.secondary_player_id || null,
+      scorer_id: realPlayerId,
+      assist_id: realSecondaryPlayerId,
       team_id: eventData.team_id,
       is_own_goal: isOwnGoal,
       minute: eventData.minute || null,
@@ -201,6 +239,37 @@ export async function updateMatchStatusAction(
     const { checkAndAutoPopulateKnockoutProgression } = await import('@/lib/knockoutProgression')
     await checkAndAutoPopulateKnockoutProgression(admin, bookingId)
   }
+
+  revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
+  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  revalidatePath(`/groups/${groupId}`)
+  return { success: true }
+}
+
+/**
+ * Manually update match score
+ */
+export async function updateMatchScoreAction(
+  matchId: string,
+  bookingId: string,
+  groupId: string,
+  homeScore: number,
+  awayScore: number
+) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { error } = await admin
+    .from('match_schedule')
+    .update({
+      home_score: Math.max(0, homeScore),
+      away_score: Math.max(0, awayScore),
+    })
+    .eq('id', matchId)
+
+  if (error) throw new Error(error.message)
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)

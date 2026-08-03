@@ -84,7 +84,7 @@ export interface MatchEvent {
   id: string
   match_schedule_id: string
   event_type: 'goal' | 'card' | 'sub' | 'penalty_save'
-  player_id: string
+  player_id?: string | null
   secondary_player_id?: string | null // assist_id or sub_on_player_id
   team_id?: string | null
   minute: number
@@ -92,6 +92,8 @@ export interface MatchEvent {
     card_type?: 'yellow' | 'red'
     is_own_goal?: boolean
     guest_name?: string
+    guest_player_id?: string
+    guest_secondary_player_id?: string
   } | null
 }
 
@@ -125,8 +127,8 @@ export function calculateMatchPlayerPitchTime(
     .sort((a, b) => a.minute - b.minute)
 
   subEvents.forEach((sub) => {
-    const subOffId = sub.player_id
-    const subOnId = sub.secondary_player_id
+    const subOffId = sub.player_id || sub.details_json?.guest_player_id
+    const subOnId = sub.secondary_player_id || sub.details_json?.guest_secondary_player_id
     const min = Math.min(Math.max(0, sub.minute), matchDuration)
 
     // Close active interval for subOff player
@@ -164,18 +166,18 @@ export function calculateMatchPlayerPitchTime(
     return intervals.some((i) => minute >= i.start && minute <= (i.end ?? matchDuration))
   }
 
-  // Calculate goals conceded on pitch for each player
-  const goalEvents = allEvents.filter((e) => e.event_type === 'goal')
-  const goalsConcededOnPitch: Record<string, number> = {}
+  // Calculate Pitch Minutes & DNP flag for each player
   const minutesPlayed: Record<string, number> = {}
+  const goalsConcededOnPitch: Record<string, number> = {}
   const isDnp: Record<string, boolean> = {}
 
+  const goalEvents = allEvents.filter((e) => e.event_type === 'goal')
+
   allPlayerIds.forEach((pid) => {
-    // Total minutes played
     const intervals = playerIntervals[pid] || []
-    const mins = intervals.reduce((sum, i) => sum + Math.max(0, (i.end ?? matchDuration) - i.start), 0)
-    minutesPlayed[pid] = mins
-    isDnp[pid] = mins === 0
+    const totalMins = intervals.reduce((acc, i) => acc + ((i.end ?? matchDuration) - i.start), 0)
+    minutesPlayed[pid] = totalMins
+    isDnp[pid] = totalMins === 0
 
     // Count goals conceded by this player's team while they were on pitch
     const isHome = homeTeamPlayerIds.includes(pid)
@@ -184,9 +186,10 @@ export function calculateMatchPlayerPitchTime(
     goalEvents.forEach((g) => {
       const gMin = g.minute
       const isOwnGoal = g.details_json?.is_own_goal === true
+      const scorerId = (g.player_id || g.details_json?.guest_player_id) ?? ''
 
       // Goal against home team: Goal scored by away team OR own goal by home team
-      const isGoalAgainstHome = (!isOwnGoal && !homeTeamPlayerIds.includes(g.player_id)) || (isOwnGoal && homeTeamPlayerIds.includes(g.player_id))
+      const isGoalAgainstHome = (!isOwnGoal && !homeTeamPlayerIds.includes(scorerId)) || (isOwnGoal && homeTeamPlayerIds.includes(scorerId))
 
       const isConcededAgainstMyTeam = isHome ? isGoalAgainstHome : !isGoalAgainstHome
 
