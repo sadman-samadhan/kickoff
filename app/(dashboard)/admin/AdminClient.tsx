@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import {
-  Shield, Users, Trophy, MapPin, Megaphone, Search, Plus,
+  Shield, Users, MapPin, Megaphone, Search, Plus,
   Edit3, Trash2, Ban, CheckCircle, ChevronRight, Loader2,
   Calendar, AlertTriangle, ExternalLink, X, Mail
 } from 'lucide-react'

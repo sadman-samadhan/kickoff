@@ -4,10 +4,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import {
-  ChevronLeft, Clock, Plus, Trash2, Shield, Activity, Users,
-  CheckCircle, Loader2, ArrowRightLeft, Flag, Award, AlertTriangle
-} from 'lucide-react'
+import { ChevronLeft, Clock, Trash2, Users, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   logMatchEventAction,
@@ -331,7 +328,11 @@ export default function GameDetailsClient({
         <div className="flex items-center gap-2">
           {isAdmin && (
             <div className="flex items-center gap-1.5 bg-white border border-neutral-200 px-2 py-1 rounded-xl shadow-sm">
-              <Clock className="w-3.5 h-3.5 text-neutral-400" />
+              {isUpdatingDuration ? (
+                <Loader2 className="w-3.5 h-3.5 text-neutral-400 animate-spin" />
+              ) : (
+                <Clock className="w-3.5 h-3.5 text-neutral-400" />
+              )}
               <input
                 type="number"
                 value={durationInput}
