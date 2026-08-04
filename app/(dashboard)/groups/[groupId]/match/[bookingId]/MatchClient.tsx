@@ -659,9 +659,27 @@ export default function MatchClient({
     }
   })
 
-  // Calculate stats from completed matches
+  // Helper to identify knockout / playoff stage matches
+  const isKnockoutMatch = (match: any) => {
+    if (!match.stage_name) return false
+    const stage = match.stage_name.toLowerCase()
+    return (
+      stage.includes('final') ||
+      stage.includes('semi') ||
+      stage.includes('quarter') ||
+      stage.includes('qualifier') ||
+      stage.includes('eliminator') ||
+      stage.includes('playoff') ||
+      stage.includes('3rd') ||
+      stage.includes('knockout')
+    )
+  }
+
+  const isKnockoutSchedule = matchSchedule.length > 0 && matchSchedule.every((m: any) => isKnockoutMatch(m))
+
+  // Calculate stats from completed LEAGUE matches (excluding knockout/playoff matches)
   matchSchedule.forEach((match: any) => {
-    if (match.status === 'completed') {
+    if (match.status === 'completed' && !isKnockoutMatch(match)) {
       const homeStats = pointsTable[match.home_team_id]
       const awayStats = pointsTable[match.away_team_id]
 
@@ -2124,7 +2142,7 @@ export default function MatchClient({
                   onClick={() => setActiveReportTab('points')}
                   className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeReportTab === 'points' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'}`}
                 >
-                  {isKnockoutSchedule ? '🌿 Knockout Bracket' : '📊 Points Table'}
+                  📊 Points Table
                 </button>
                 <button
                   type="button"
@@ -2136,11 +2154,8 @@ export default function MatchClient({
               </div>
 
               {activeReportTab === 'points' ? (
-                isKnockoutSchedule ? (
-                  <KnockoutBracketCard matches={matchSchedule} teams={teams} />
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
                       <thead>
                         <tr className="border-b border-neutral-100 text-neutral-400 font-bold uppercase tracking-wider">
                           <th className="py-2.5 px-1 text-center w-8">#</th>
@@ -2175,9 +2190,21 @@ export default function MatchClient({
                         ))}
                       </tbody>
                     </table>
+
+                    {/* KNOCKOUT STAGE BRACKET / PLAYOFF TREE GRAPH */}
+                    {matchSchedule.some((m: any) => isKnockoutMatch(m)) && (
+                      <div className="mt-5 pt-4 border-t border-neutral-100 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/60 inline-flex items-center gap-1.5">
+                            <Trophy className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+                            Knockout Stage & Playoff Tree
+                          </h4>
+                        </div>
+                        <KnockoutBracketCard matches={matchSchedule.filter(isKnockoutMatch)} teams={teams} />
+                      </div>
+                    )}
                   </div>
-                )
-              ) : (
+                ) : (
                 <div className="overflow-x-auto">
                   {sortedTopPlayers.length > 0 ? (
                     <table className="w-full text-left border-collapse text-xs">
