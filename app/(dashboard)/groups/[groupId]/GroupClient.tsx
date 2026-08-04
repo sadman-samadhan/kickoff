@@ -20,6 +20,7 @@ interface Member {
   full_name?: string
   avatar_url?: string
   preferred_position?: string
+  secondary_position?: string | null
   role: 'admin' | 'member'
 }
 
@@ -30,7 +31,7 @@ interface Booking {
   field_name: string
   max_players: number
   status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled'
-  rsvps?: { player_id: string; status: string; waitlist_position?: number }[]
+  rsvps?: { player_id: string; status: string; waitlist_position?: number; selected_position?: string }[]
   champion?: string
 }
 
@@ -131,27 +132,46 @@ export default function GroupClient({
   }, [group.id])
 
   // Next Match logic
-  const myRsvpObj = nextMatch?.rsvps?.find((r: { player_id: string }) => r.player_id === userId)
+  const myProfile = members.find((m: any) => m.id === userId)
+  const myRsvpObj = nextMatch?.rsvps?.find((r: { player_id: string; selected_position?: string }) => r.player_id === userId)
   const myRsvp = myRsvpObj?.status || 'none'
   const inCount = nextMatch?.rsvps?.filter((r: { status: string }) => r.status === 'in').length || 0
   const waitlistCount = nextMatch?.rsvps?.filter((r: { status: string }) => r.status === 'waitlist').length || 0
   const maxPlayers = nextMatch?.max_players || 21
   const progressPercent = Math.min(100, (inCount / maxPlayers) * 100)
 
+  const [isPositionModalOpen, setIsPositionModalOpen] = useState(false)
+  const [selectedPosInput, setSelectedPosInput] = useState<string>('')
+
   const handleRsvp = async (status: string) => {
     if (status === 'out' && myRsvp === 'in' && waitlistCount > 0) {
       setIsConfirmOutOpen(true)
       return
     }
-    await executeRsvp(status)
+    if (status === 'in') {
+      const prefPos = myProfile?.preferred_position || 'Field Player'
+      const secPos = myProfile?.secondary_position
+      const isFieldPlayer = prefPos === 'Field Player' || !prefPos
+      const hasSecondary = secPos && secPos !== prefPos
+
+      if (isFieldPlayer || hasSecondary) {
+        const defaultPos = myRsvpObj?.selected_position || (hasSecondary ? prefPos : 'MID')
+        setSelectedPosInput(defaultPos)
+        setIsPositionModalOpen(true)
+        return
+      }
+    }
+    await executeRsvp(status, myProfile?.preferred_position || 'MID')
   }
 
-  const executeRsvp = async (status: string) => {
+  const executeRsvp = async (status: string, positionOverride?: string) => {
     if (!nextMatch) return
     setIsRsvpLoading(true)
     setIsConfirmOutOpen(false)
+    setIsPositionModalOpen(false)
     try {
-      const res = await rsvpAction(nextMatch.id, group.id, status, maxPlayers)
+      const posToSave = positionOverride || selectedPosInput || myProfile?.preferred_position || 'MID'
+      const res = await rsvpAction(nextMatch.id, group.id, status, maxPlayers, posToSave)
       if (res.status === 'waitlist') {
         setWaitlistPos(res.waitlistPosition)
         setIsWaitlistAlertOpen(true)
@@ -487,7 +507,7 @@ export default function GroupClient({
                   <div className="relative shrink-0">
                     {member.avatar_url ? (
                       <div className="w-9 h-9 rounded-full border border-neutral-200 overflow-hidden relative">
-                        <Image src={member.avatar_url} alt={member.full_name || "Player"} fill sizes="36px" className="object-cover" />
+                        <img src={member.avatar_url} alt={member.full_name || "Player"} className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <div className="w-9 h-9 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-sm border border-green-200">
@@ -750,20 +770,41 @@ export default function GroupClient({
       )}
 
       {/* Confirm Out Modal */}
-      {isConfirmOutOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4">
-          <div className="bg-white rounded-3xl w-full max-sm p-6 animate-in zoom-in-95 duration-200 shadow-2xl">
-            <h3 className="font-bold text-xl text-neutral-900 mb-2">Are you sure?</h3>
-            <p className="text-neutral-600 mb-6">Your spot will automatically be given to the next person on the waitlist. You will lose your guaranteed spot.</p>
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => setIsConfirmOutOpen(false)}>Cancel</Button>
-              <Button className="flex-1 h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white" onClick={() => executeRsvp('out')}>
-                {isRsvpLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Yes, I&apos;m Out"}
-              </Button>
+      {isConfirmOutOpen && (() => {
+        const nextMatchTeams = (nextMatch as any)?.teams || []
+        const myAssignedTeam = nextMatchTeams.find((t: any) => t.team_players?.some((tp: any) => tp.player_id === userId))
+        const isBlocked = myAssignedTeam && role !== 'admin'
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200 shadow-2xl">
+              <h3 className="font-bold text-xl text-neutral-900 mb-2">
+                {isBlocked ? `Assigned to ${myAssignedTeam.name}` : 'Are you sure?'}
+              </h3>
+              <p className="text-neutral-600 mb-6 text-sm leading-relaxed">
+                {isBlocked
+                  ? `You are already assigned to ${myAssignedTeam.name} for this match. You cannot opt out directly. Please contact a Group Admin to opt out.`
+                  : waitlistCount > 0
+                  ? 'Your spot will automatically be given to the next person on the waitlist. You will lose your guaranteed spot.'
+                  : 'Are you sure you want to change your status to I\'m Out?'}
+              </p>
+              <div className="flex gap-3">
+                {isBlocked ? (
+                  <Button className="w-full h-12 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold" onClick={() => setIsConfirmOutOpen(false)}>
+                    Got it
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" className="flex-1 h-12 rounded-xl font-bold" onClick={() => setIsConfirmOutOpen(false)}>Cancel</Button>
+                    <Button className="flex-1 h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold" onClick={() => executeRsvp('out')}>
+                      {isRsvpLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Yes, I'm Out"}
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Waitlist Alert */}
       {isWaitlistAlertOpen && (
@@ -971,9 +1012,94 @@ export default function GroupClient({
                     }
                   }}
                 >
-                  {adminActionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Delete'}
+                  {adminActionLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Delete Group'}
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POSITION CHOICE MODAL */}
+      {isPositionModalOpen && myProfile && (
+        <div className="fixed inset-0 bg-neutral-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[70] animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-neutral-100">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center mb-4">
+              <Shield className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-neutral-900 mb-1">Confirm Match Position</h3>
+            <p className="text-xs text-neutral-500 mb-5">
+              You have a secondary position registered in your profile. Select which position you will play in for this match.
+            </p>
+
+            {myProfile?.secondary_position && myProfile?.secondary_position !== myProfile?.preferred_position && myProfile?.preferred_position !== 'Field Player' ? (
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPosInput(myProfile.preferred_position || 'MID')}
+                  className={`p-4 rounded-2xl border-2 transition-all text-center ${
+                    selectedPosInput === (myProfile.preferred_position || 'MID')
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600/30'
+                      : 'border-neutral-200 bg-neutral-50 text-neutral-600 hover:border-neutral-300'
+                  }`}
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 mb-1">Primary</div>
+                  <div className="text-xl font-black">{myProfile.preferred_position || 'MID'}</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedPosInput(myProfile.secondary_position!)}
+                  className={`p-4 rounded-2xl border-2 transition-all text-center ${
+                    selectedPosInput === myProfile.secondary_position
+                      ? 'border-blue-600 bg-blue-50 text-blue-900 ring-2 ring-blue-600/30'
+                      : 'border-neutral-200 bg-neutral-50 text-neutral-600 hover:border-neutral-300'
+                  }`}
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-blue-700 mb-1">Secondary</div>
+                  <div className="text-xl font-black">{myProfile.secondary_position}</div>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5 mb-6">
+                {[
+                  { pos: 'GK', name: 'Goalkeeper', color: 'bg-emerald-50 text-emerald-900 border-emerald-600' },
+                  { pos: 'DEF', name: 'Defender', color: 'bg-blue-50 text-blue-900 border-blue-600' },
+                  { pos: 'MID', name: 'Midfielder', color: 'bg-amber-50 text-amber-900 border-amber-600' },
+                  { pos: 'ATT', name: 'Attacker', color: 'bg-rose-50 text-rose-900 border-rose-600' }
+                ].map(item => (
+                  <button
+                    key={item.pos}
+                    type="button"
+                    onClick={() => setSelectedPosInput(item.pos)}
+                    className={`p-3 rounded-2xl border-2 font-bold text-center transition-all ${
+                      selectedPosInput === item.pos
+                        ? `${item.color} ring-2 ring-emerald-600/30`
+                        : 'bg-neutral-50 border-neutral-200 text-neutral-700 hover:border-neutral-300'
+                    }`}
+                  >
+                    <div className="text-xs uppercase opacity-75">{item.name}</div>
+                    <div className="text-lg font-black">{item.pos}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setIsPositionModalOpen(false)}
+                className="flex-1 h-12 rounded-xl text-neutral-600 font-bold"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => executeRsvp('in', selectedPosInput)}
+                disabled={isRsvpLoading}
+                className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md"
+              >
+                {isRsvpLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Confirm'}
+              </Button>
             </div>
           </div>
         </div>

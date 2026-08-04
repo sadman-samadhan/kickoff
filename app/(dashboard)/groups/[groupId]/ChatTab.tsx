@@ -216,7 +216,7 @@ export default function ChatTab({ groupId, userId }: { groupId: string; userId: 
                   <div className="shrink-0 mt-1">
                     {avatarUrl ? (
                       <div className="w-8 h-8 rounded-full border border-neutral-100 overflow-hidden relative">
-                        <Image src={avatarUrl} alt="" fill sizes="32px" className="object-cover" />
+                        <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold flex items-center justify-center text-xs border border-green-200 uppercase">

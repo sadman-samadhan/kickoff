@@ -2,7 +2,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { calculateFplPoints } from '@/lib/fpl'
+import { getGroupScoringSettings, calculateTournamentPlayerPoints } from '@/lib/tournamentScoring'
 
 export async function GET(req: Request, { params }: { params: { groupId: string } }) {
   const supabaseAuth = createClient()
@@ -38,6 +38,7 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
 
   let goals: any[] = []
   let cleanSheets: any[] = []
+  let matchEvents: any[] = []
   
   if (matchScheduleIds.length > 0) {
     const { data: g } = await supabaseAdmin.from('goal_events').select('*').in('match_schedule_id', matchScheduleIds)
@@ -45,6 +46,9 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
     
     const { data: cs } = await supabaseAdmin.from('clean_sheets').select('*').in('match_schedule_id', matchScheduleIds)
     cleanSheets = cs || []
+
+    const { data: me } = await supabaseAdmin.from('match_events').select('*').in('match_schedule_id', matchScheduleIds)
+    matchEvents = me || []
   }
 
   let teams: any[] = []
@@ -58,12 +62,25 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
     }
   }
 
+  // Fetch group custom scoring settings
+  const { data: group } = await supabaseAdmin
+    .from('groups')
+    .select('custom_scoring_settings')
+    .eq('id', params.groupId)
+    .single()
+
+  const customSettings = getGroupScoringSettings(group?.custom_scoring_settings)
+
   const playersStats = members.map((m: any) => {
     const pId = m.player_id
     const pGoals = goals.filter(g => g.scorer_id === pId && !g.is_own_goal).length
     const pOwnGoals = goals.filter(g => g.scorer_id === pId && g.is_own_goal).length
     const pAssists = goals.filter(g => g.assist_id === pId).length
     const pCleanSheets = cleanSheets.filter(cs => cs.player_id === pId).length
+
+    const pYellowCards = matchEvents.filter(e => e.player_id === pId && e.event_type === 'card' && e.details_json?.card_type === 'yellow').length
+    const pRedCards = matchEvents.filter(e => e.player_id === pId && e.event_type === 'card' && e.details_json?.card_type === 'red').length
+    const pPenaltySaves = matchEvents.filter(e => e.player_id === pId && e.event_type === 'penalty_save').length
     
     const myTeams = teamPlayers.filter(tp => tp.player_id === pId).map(tp => tp.team_id)
     
@@ -78,15 +95,22 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
 
     const motmCount = matchSchedules.filter(ms => ms.status === 'completed' && ms.motm_player_id === pId).length
 
-    const fplPoints = calculateFplPoints({
-      position: m.profiles?.preferred_position,
-      goals: pGoals,
-      assists: pAssists,
-      cleanSheets: pCleanSheets,
-      ownGoals: pOwnGoals,
-      appearances: pMatches,
-      motmCount
-    })
+    const { totalPoints: fplPoints } = calculateTournamentPlayerPoints(
+      m.profiles?.preferred_position,
+      {
+        goals: pGoals,
+        assists: pAssists,
+        cleanSheets: pCleanSheets,
+        penaltySaves: pPenaltySaves,
+        goalsConcededOnPitch: 0,
+        ownGoals: pOwnGoals,
+        yellowCards: pYellowCards,
+        redCards: pRedCards,
+        motmCount,
+        appearances: pMatches,
+      },
+      customSettings
+    )
 
     return {
       player_id: pId,

@@ -17,11 +17,11 @@ export default function SettingsTab({ groupId, group, isAdmin }: SettingsTabProp
   const [scoring, setScoring] = useState<GroupScoringSettings>(
     getGroupScoringSettings(group?.custom_scoring_settings)
   )
-  const [activePos, setActivePos] = useState<'GK' | 'DEF' | 'MID' | 'ATT'>('GK')
+  const [activePos, setActivePos] = useState<'GK' | 'DEF' | 'MID' | 'ATT' | 'BONUS'>('GK')
   const [isSaving, setIsSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
-  const handleStatChange = (pos: 'GK' | 'DEF' | 'MID' | 'ATT', field: string, val: number) => {
+  const handleStatChange = (pos: 'GK' | 'DEF' | 'MID' | 'ATT' | 'BONUS', field: string, val: number) => {
     setScoring((prev) => ({
       ...prev,
       [pos]: {
@@ -51,14 +51,15 @@ export default function SettingsTab({ groupId, group, isAdmin }: SettingsTabProp
     }
   }
 
-  const positions: { key: 'GK' | 'DEF' | 'MID' | 'ATT'; label: string; icon: string }[] = [
+  const positions: { key: 'GK' | 'DEF' | 'MID' | 'ATT' | 'BONUS'; label: string; icon: string }[] = [
     { key: 'GK', label: 'Goalkeepers (GK)', icon: '🧤' },
     { key: 'DEF', label: 'Defenders (DEF)', icon: '🛡️' },
     { key: 'MID', label: 'Midfielders (MID)', icon: '⚙️' },
     { key: 'ATT', label: 'Forwards (ATT)', icon: '⚽' },
+    { key: 'BONUS', label: 'Bonus & Awards', icon: '🎁' },
   ]
 
-  const fields: { key: string; label: string; desc: string }[] = [
+  const positionFields: { key: string; label: string; desc: string }[] = [
     { key: 'goal', label: 'Goal Scored', desc: 'Points awarded per goal scored' },
     { key: 'assist', label: 'Assist Provided', desc: 'Points awarded per goal assist' },
     { key: 'cleanSheet', label: 'Clean Sheet', desc: 'Points awarded for 0 goals conceded' },
@@ -69,6 +70,15 @@ export default function SettingsTab({ groupId, group, isAdmin }: SettingsTabProp
     { key: 'redCard', label: 'Red Card', desc: 'Points deducted for red card' },
   ]
 
+  const bonusFields: { key: string; label: string; desc: string }[] = [
+    { key: 'mvp', label: 'Match MVP (MOTM)', desc: 'Bonus points awarded per Match MVP award' },
+    { key: 'hatTrick', label: 'Hat-Trick Bonus', desc: 'Bonus points awarded for scoring 3+ goals in a match' },
+    { key: 'matchWin', label: 'Match Victory Bonus', desc: 'Bonus points awarded to players on the winning team' },
+    { key: 'appearance', label: 'Match Appearance', desc: 'Points awarded for playing in a completed match' },
+  ]
+
+  const fields = activePos === 'BONUS' ? bonusFields : positionFields
+
   return (
     <div className="space-y-6 pb-20 animate-in fade-in-50 duration-200">
       {/* Header */}
@@ -78,7 +88,7 @@ export default function SettingsTab({ groupId, group, isAdmin }: SettingsTabProp
             <Settings className="w-5 h-5 text-emerald-600" /> Group Points & Scoring Rules
           </h2>
           <p className="text-xs text-neutral-500 font-medium mt-0.5">
-            Configure custom point weights per position for leaderboards and awards.
+            Configure custom point weights per position and bonus awards for leaderboards.
           </p>
         </div>
         {isAdmin && (

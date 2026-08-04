@@ -49,7 +49,7 @@ export function calculateFplPoints({
     (ownGoals * 2) +
     (motmCount * 1)
 
-  return Math.max(0, points)
+  return points
 }
 
 /**

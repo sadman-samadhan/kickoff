@@ -11,11 +11,19 @@ export interface PositionScoringRules {
   redCard: number
 }
 
+export interface BonusScoringRules {
+  mvp: number
+  hatTrick: number
+  matchWin: number
+  appearance: number
+}
+
 export interface GroupScoringSettings {
   GK: PositionScoringRules
   DEF: PositionScoringRules
   MID: PositionScoringRules
   ATT: PositionScoringRules
+  BONUS: BonusScoringRules
 }
 
 /**
@@ -62,6 +70,12 @@ export const DEFAULT_GROUP_SCORING: GroupScoringSettings = {
     yellowCard: -1,
     redCard: -3,
   },
+  BONUS: {
+    mvp: 1,
+    hatTrick: 2,
+    matchWin: 1,
+    appearance: 1,
+  },
 }
 
 /**
@@ -74,6 +88,7 @@ export function getGroupScoringSettings(groupCustomSettings: any): GroupScoringS
     DEF: { ...DEFAULT_GROUP_SCORING.DEF, ...(groupCustomSettings.DEF || {}) },
     MID: { ...DEFAULT_GROUP_SCORING.MID, ...(groupCustomSettings.MID || {}) },
     ATT: { ...DEFAULT_GROUP_SCORING.ATT, ...(groupCustomSettings.ATT || {}) },
+    BONUS: { ...DEFAULT_GROUP_SCORING.BONUS, ...(groupCustomSettings.BONUS || {}) },
   }
 }
 
@@ -210,35 +225,98 @@ export function calculateMatchPlayerPitchTime(
   }
 }
 
+export interface PointItem {
+  label: string
+  count: number
+  weight: number
+  total: number
+}
+
+export interface PlayerPointsBreakdown {
+  goalPts: PointItem
+  assistPts: PointItem
+  cleanSheetPts: PointItem
+  penaltySavePts: PointItem
+  concededPts: PointItem
+  ownGoalPts: PointItem
+  yellowPts: PointItem
+  redPts: PointItem
+  mvpPts: PointItem
+  appearancePts: PointItem
+  totalPoints: number
+}
+
 /**
- * Calculates custom tournament role-based points for a player
+ * Calculates custom tournament role-based points for a player and returns breakdown
  */
 export function calculateTournamentPlayerPoints(
-  position: 'GK' | 'DEF' | 'MID' | 'ATT' | null | undefined,
+  position: string | null | undefined,
   stats: {
-    goals: number
-    assists: number
-    cleanSheets: number
-    penaltySaves: number
-    goalsConcededOnPitch: number
-    ownGoals: number
-    yellowCards: number
-    redCards: number
+    goals?: number
+    assists?: number
+    cleanSheets?: number
+    penaltySaves?: number
+    goalsConcededOnPitch?: number
+    ownGoals?: number
+    yellowCards?: number
+    redCards?: number
+    motmCount?: number
+    appearances?: number
   },
   customSettings?: GroupScoringSettings
-): number {
+): { totalPoints: number; breakdown: PlayerPointsBreakdown } {
   const settings = getGroupScoringSettings(customSettings)
-  const posKey = (position || 'MID') as 'GK' | 'DEF' | 'MID' | 'ATT'
-  const rules = settings[posKey] || settings.MID
+  const posKey = ((position || 'ATT').toUpperCase()) as 'GK' | 'DEF' | 'MID' | 'ATT'
+  const rules = settings[posKey] || settings.ATT
+  const bonus = settings.BONUS || DEFAULT_GROUP_SCORING.BONUS
 
-  const goalPts = stats.goals * rules.goal
-  const assistPts = stats.assists * rules.assist
-  const csPts = stats.cleanSheets * rules.cleanSheet
-  const penSavePts = stats.penaltySaves * rules.penaltySave
-  const concededPts = stats.goalsConcededOnPitch * rules.goalConceded
-  const ogPts = stats.ownGoals * rules.ownGoal
-  const yellowPts = stats.yellowCards * rules.yellowCard
-  const redPts = stats.redCards * rules.redCard
+  const goals = stats.goals || 0
+  const assists = stats.assists || 0
+  const cleanSheets = stats.cleanSheets || 0
+  const penaltySaves = stats.penaltySaves || 0
+  const conceded = stats.goalsConcededOnPitch || 0
+  const ownGoals = stats.ownGoals || 0
+  const yellowCards = stats.yellowCards || 0
+  const redCards = stats.redCards || 0
+  const motmCount = stats.motmCount || 0
+  const appearances = stats.appearances || 0
 
-  return goalPts + assistPts + csPts + penSavePts + concededPts + ogPts + yellowPts + redPts
+  const goalPts: PointItem = { label: 'Goals', count: goals, weight: rules.goal, total: goals * rules.goal }
+  const assistPts: PointItem = { label: 'Assists', count: assists, weight: rules.assist, total: assists * rules.assist }
+  const cleanSheetPts: PointItem = { label: 'Clean Sheets', count: cleanSheets, weight: rules.cleanSheet, total: cleanSheets * rules.cleanSheet }
+  const penaltySavePts: PointItem = { label: 'Penalty Saves', count: penaltySaves, weight: rules.penaltySave, total: penaltySaves * rules.penaltySave }
+  const concededPts: PointItem = { label: 'Goals Conceded', count: conceded, weight: rules.goalConceded, total: conceded * rules.goalConceded }
+  const ownGoalPts: PointItem = { label: 'Own Goals', count: ownGoals, weight: rules.ownGoal, total: ownGoals * rules.ownGoal }
+  const yellowPts: PointItem = { label: 'Yellow Cards', count: yellowCards, weight: rules.yellowCard, total: yellowCards * rules.yellowCard }
+  const redPts: PointItem = { label: 'Red Cards', count: redCards, weight: rules.redCard, total: redCards * rules.redCard }
+  const mvpPts: PointItem = { label: 'Match MVP (MOTM)', count: motmCount, weight: bonus.mvp, total: motmCount * bonus.mvp }
+  const appearancePts: PointItem = { label: 'Appearances', count: appearances, weight: bonus.appearance, total: appearances * bonus.appearance }
+
+  const totalPoints =
+    goalPts.total +
+    assistPts.total +
+    cleanSheetPts.total +
+    penaltySavePts.total +
+    concededPts.total +
+    ownGoalPts.total +
+    yellowPts.total +
+    redPts.total +
+    mvpPts.total +
+    appearancePts.total
+
+  const breakdown: PlayerPointsBreakdown = {
+    goalPts,
+    assistPts,
+    cleanSheetPts,
+    penaltySavePts,
+    concededPts,
+    ownGoalPts,
+    yellowPts,
+    redPts,
+    mvpPts,
+    appearancePts,
+    totalPoints,
+  }
+
+  return { totalPoints, breakdown }
 }

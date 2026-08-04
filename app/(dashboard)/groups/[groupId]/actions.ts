@@ -41,13 +41,23 @@ export async function addBookingAction(groupId: string, data: any) {
   return { success: true }
 }
 
-export async function rsvpAction(bookingId: string, groupId: string, status: string, maxPlayers: number) {
+export async function rsvpAction(bookingId: string, groupId: string, status: string, maxPlayers: number, selectedPosition?: string) {
   const supabase = createClient()
+  const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  // Fetch current RSVPs
-  const { data: currentRsvps } = await supabase.from('rsvps').select('*').eq('booking_id', bookingId)
+  // Fetch caller role
+  const { data: callerMembership } = await admin
+    .from('group_members')
+    .select('role')
+    .eq('group_id', groupId)
+    .eq('player_id', user.id)
+    .maybeSingle()
+  const isCallerAdmin = callerMembership?.role === 'admin'
+
+  // Fetch current RSVPs with admin client
+  const { data: currentRsvps } = await admin.from('rsvps').select('*').eq('booking_id', bookingId)
   
   const inCount = currentRsvps?.filter(r => r.status === 'in').length || 0
   const myRsvp = currentRsvps?.find(r => r.player_id === user.id)
@@ -64,33 +74,64 @@ export async function rsvpAction(bookingId: string, groupId: string, status: str
   }
 
   if (status === 'out') {
+    // Check if player is assigned to a team in this booking
+    const { data: bookingTeams } = await admin.from('teams').select('id, name, captain_id, team_players(*)').eq('booking_id', bookingId)
+    if (bookingTeams && bookingTeams.length > 0) {
+      const assignedTeam = bookingTeams.find(t => t.team_players?.some((tp: any) => tp.player_id === user.id))
+      if (assignedTeam && !isCallerAdmin) {
+        throw new Error(`You are already assigned to ${assignedTeam.name}. Please contact your Group Admin to opt out.`)
+      }
+      if (assignedTeam && isCallerAdmin) {
+        // Admin unassigning player from team
+        await admin.from('team_players').delete().eq('team_id', assignedTeam.id).eq('player_id', user.id)
+        if (assignedTeam.captain_id === user.id) {
+          await admin.from('teams').update({ captain_id: null }).eq('id', assignedTeam.id)
+        }
+      }
+    }
+
     // If I was 'in', move someone from waitlist to 'in'
     if (myRsvp?.status === 'in') {
       const waitlisters = currentRsvps?.filter(r => r.status === 'waitlist').sort((a, b) => (a.waitlist_position || 0) - (b.waitlist_position || 0))
       if (waitlisters && waitlisters.length > 0) {
         const nextInLine = waitlisters[0]
-        await supabase.from('rsvps').update({ status: 'in', waitlist_position: null }).eq('id', nextInLine.id)
+        await admin.from('rsvps').update({ status: 'in', waitlist_position: null }).eq('id', nextInLine.id)
       }
     }
   }
 
+  const payload: any = {
+    status: finalStatus,
+    waitlist_position: waitlistPosition,
+    responded_at: new Date().toISOString()
+  }
+
+  if (selectedPosition) {
+    payload.selected_position = selectedPosition
+  }
+
   if (myRsvp) {
-    await supabase.from('rsvps').update({ 
-      status: finalStatus, 
-      waitlist_position: waitlistPosition, 
-      responded_at: new Date().toISOString() 
-    }).eq('id', myRsvp.id)
+    let { error } = await admin.from('rsvps').update(payload).eq('id', myRsvp.id)
+    if (error && error.message?.includes('selected_position')) {
+      delete payload.selected_position
+      const retry = await admin.from('rsvps').update(payload).eq('id', myRsvp.id)
+      error = retry.error
+    }
+    if (error) throw new Error(error.message)
   } else {
-    await supabase.from('rsvps').insert({
-      booking_id: bookingId,
-      player_id: user.id,
-      status: finalStatus,
-      waitlist_position: waitlistPosition,
-      responded_at: new Date().toISOString()
-    })
+    payload.booking_id = bookingId
+    payload.player_id = user.id
+    let { error } = await admin.from('rsvps').insert(payload)
+    if (error && error.message?.includes('selected_position')) {
+      delete payload.selected_position
+      const retry = await admin.from('rsvps').insert(payload)
+      error = retry.error
+    }
+    if (error) throw new Error(error.message)
   }
 
   revalidatePath(`/groups/${groupId}`)
+  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
   revalidatePath('/groups')
   revalidatePath('/dashboard')
   return { status: finalStatus, waitlistPosition }

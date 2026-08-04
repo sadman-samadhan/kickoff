@@ -66,11 +66,14 @@ export default async function DashboardPage() {
     // Bookings (upcoming and recently completed for the calendar)
     const { data: bData } = await supabase
       .from('bookings')
-      .select('*, groups(name), rsvps(*)')
+      .select('*, groups(name), rsvps(*, profiles(*)))')
       .in('group_id', groupIds)
       .order('match_date', { ascending: true })
 
-    allBookings = bData || []
+    allBookings = (bData || []).map((b: any) => ({
+      ...b,
+      rsvps: (b.rsvps || []).filter((r: any) => !(r.profiles as any)?.is_suspended)
+    }))
   }
 
   const nowMs = Date.now()

@@ -4,7 +4,13 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import MatchClient from './MatchClient'
 
-export default async function MatchPage({ params }: { params: { groupId: string, bookingId: string } }) {
+export default async function MatchPage({
+  params,
+  searchParams
+}: {
+  params: { groupId: string, bookingId: string }
+  searchParams?: { tab?: string }
+}) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -75,20 +81,20 @@ export default async function MatchPage({ params }: { params: { groupId: string,
 
   // Build Unified Goal Events with clean Guest Name Resolution
   const unifiedGoalEvents: any[] = []
-  const seenGoalKeys = new Set<string>()
+  const matchEventGoalsBySchedule = new Set<string>()
 
   const activeGuestRsvps = (rsvps || []).filter((r: any) => r.status === 'in' && (r.player_id === null || r.guest_name))
 
   matchEvents.filter((e: any) => e.event_type === 'goal').forEach((e: any) => {
-    const gScorerId = e.player_id || e.details_json?.guest_player_id
-    const goalKey = `${e.match_schedule_id}_${e.minute}_${gScorerId}`
-    seenGoalKeys.add(goalKey)
+    matchEventGoalsBySchedule.add(e.match_schedule_id)
+    const gScorerId = e.player_id || e.details_json?.guest_player_id || 'unknown'
+    const isOwn = e.details_json?.is_own_goal === true
 
     // Resolve Scorer Name
     let scorerName = e.profiles?.full_name || null
     let guestScorerName = null
     if (!scorerName && gScorerId) {
-      const cleanId = gScorerId.replace('guest_', '').replace(' (C)', '').trim()
+      const cleanId = String(gScorerId).replace('guest_', '').replace(' (C)', '').trim()
       const rsvp = activeGuestRsvps.find((r: any) => r.id === cleanId || r.guest_name === cleanId)
       guestScorerName = rsvp?.guest_name || (cleanId && !cleanId.includes('-') ? cleanId : 'Guest Player')
     }
@@ -98,7 +104,7 @@ export default async function MatchPage({ params }: { params: { groupId: string,
     let assistName = e.secondary_profile?.full_name || null
     let guestAssistName = null
     if (!assistName && gAssistId) {
-      const cleanId = gAssistId.replace('guest_', '').replace(' (C)', '').trim()
+      const cleanId = String(gAssistId).replace('guest_', '').replace(' (C)', '').trim()
       const rsvp = activeGuestRsvps.find((r: any) => r.id === cleanId || r.guest_name === cleanId)
       guestAssistName = rsvp?.guest_name || (cleanId && !cleanId.includes('-') ? cleanId : null)
     }
@@ -106,11 +112,12 @@ export default async function MatchPage({ params }: { params: { groupId: string,
     unifiedGoalEvents.push({
       id: e.id,
       match_schedule_id: e.match_schedule_id,
+      team_id: e.team_id,
       scorer_id: e.player_id,
       assist_id: e.secondary_player_id,
       guest_scorer_name: guestScorerName,
       guest_assist_name: guestAssistName,
-      is_own_goal: e.details_json?.is_own_goal === true,
+      is_own_goal: isOwn,
       minute: e.minute,
       profiles: e.profiles,
       assist: e.secondary_profile,
@@ -118,10 +125,9 @@ export default async function MatchPage({ params }: { params: { groupId: string,
     })
   })
 
+  // Fallback to legacy rawGoalEvents only if a match schedule has no match_events
   rawGoalEvents.forEach((ge: any) => {
-    const goalKey = `${ge.match_schedule_id}_${ge.minute}_${ge.scorer_id || ge.guest_scorer_name}`
-    if (!seenGoalKeys.has(goalKey)) {
-      seenGoalKeys.add(goalKey)
+    if (!matchEventGoalsBySchedule.has(ge.match_schedule_id)) {
       unifiedGoalEvents.push(ge)
     }
   })
@@ -154,11 +160,13 @@ export default async function MatchPage({ params }: { params: { groupId: string,
       teams={activeTeams}
       matchSchedule={matchSchedule || []}
       goalEvents={unifiedGoalEvents}
+      matchEvents={matchEvents || []}
       currentUser={user}
       groupId={params.groupId}
       userRole={member?.role || 'member'}
       groupMembers={activeGroupMembers}
       initialHasRated={!!userRating}
+      initialTab={searchParams?.tab || 'players'}
     />
   )
 }
