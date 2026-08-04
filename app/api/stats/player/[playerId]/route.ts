@@ -3,6 +3,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { calculateFplPoints } from '@/lib/fpl'
+import { calculateMatchPlayerPitchTime } from '@/lib/tournamentScoring'
 
 export async function GET(req: Request, { params }: { params: { playerId: string } }) {
   const supabaseAuth = createClient()
@@ -47,32 +48,52 @@ export async function GET(req: Request, { params }: { params: { playerId: string
   const { data: teamPlayersData } = await supabaseAdmin
     .from('team_players')
     .select('team_id')
+  const { data: penaltySavesData } = await supabaseAdmin
+    .from('match_events')
+    .select('id')
     .eq('player_id', params.playerId)
+    .eq('event_type', 'penalty_save')
 
   const { data: motmMatches } = await supabaseAdmin
     .from('match_schedule')
     .select('id')
-    .eq('motm_player_id', params.playerId)
+    .or(`motm_player_id.eq.${params.playerId},mvp_player_id.eq.${params.playerId}`)
     .eq('status', 'completed')
 
   const totalGoals = goalsData?.length || 0
   const totalOwnGoals = ownGoalsData?.length || 0
   const totalAssists = assistsData?.length || 0
   const totalCleanSheets = cleanSheetsData?.length || 0
+  const totalPenaltySaves = penaltySavesData?.length || 0
   const totalMotm = motmMatches?.length || 0
   
   const teamIds = teamPlayersData?.map(tp => tp.team_id) || []
   let matchesPlayedData: any[] = []
+  let totalGoalsConcededOnPitch = 0
   
   if (teamIds.length > 0) {
     const { data: ms } = await supabaseAdmin
       .from('match_schedule')
-      .select('id, dnp_player_ids, bookings(group_id, groups(name))')
+      .select('id, home_team_id, away_team_id, starting_player_ids, duration_minutes, dnp_player_ids, bookings(group_id, groups(name))')
       .or(`home_team_id.in.(${teamIds.join(',')}),away_team_id.in.(${teamIds.join(',')})`)
       .eq('status', 'completed')
     
     // Filter out matches where player is in DNP list
     matchesPlayedData = (ms || []).filter(m => !(m.dnp_player_ids || []).includes(params.playerId))
+
+    for (const matchItem of matchesPlayedData) {
+      const { data: me } = await supabaseAdmin.from('match_events').select('*').eq('match_schedule_id', matchItem.id)
+      const { data: tpHome } = await supabaseAdmin.from('team_players').select('player_id').eq('team_id', matchItem.home_team_id)
+      const { data: tpAway } = await supabaseAdmin.from('team_players').select('player_id').eq('team_id', matchItem.away_team_id)
+
+      const homePids = (tpHome || []).map((t: any) => t.player_id)
+      const awayPids = (tpAway || []).map((t: any) => t.player_id)
+      const startingPids = matchItem.starting_player_ids || [...homePids, ...awayPids]
+      const duration = matchItem.duration_minutes || 30
+
+      const pitchRes = calculateMatchPlayerPitchTime(me || [], duration, homePids, awayPids, startingPids)
+      totalGoalsConcededOnPitch += (pitchRes.goalsConcededOnPitch[params.playerId] || 0)
+    }
   }
 
   const totalMatches = matchesPlayedData.length
@@ -83,6 +104,8 @@ export async function GET(req: Request, { params }: { params: { playerId: string
     assists: totalAssists,
     cleanSheets: totalCleanSheets,
     ownGoals: totalOwnGoals,
+    penaltySaves: totalPenaltySaves,
+    goalsConcededOnPitch: totalGoalsConcededOnPitch,
     appearances: totalMatches,
     motmCount: totalMotm
   })

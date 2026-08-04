@@ -168,6 +168,7 @@ export async function updateMatchScoreAction(
     dnp_player_ids: fantasyData?.dnpPlayerIds || [],
     dnp_guest_names: fantasyData?.dnpGuestNames || [],
     motm_player_id: fantasyData?.motmPlayerId || null,
+    mvp_player_id: fantasyData?.motmPlayerId || null,
     motm_guest_name: fantasyData?.motmGuestName || null
   }).eq('id', matchScheduleId)
 
@@ -207,7 +208,7 @@ export async function updateMatchScoreAction(
   return { success: true }
 }
 
-export async function adminAddRsvpAction(bookingId: string, groupId: string, playerIdOrIds: string | string[], maxPlayers: number) {
+export async function adminAddRsvpAction(bookingId: string, groupId: string, playerIdOrIds: string | string[], maxPlayers: number, selectedPositions?: Record<string, string>) {
   const supabase = createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -251,21 +252,50 @@ export async function adminAddRsvpAction(bookingId: string, groupId: string, pla
       }
     }
 
-    if (existingRsvp) {
-      await admin.from('rsvps').update({ 
-        status: finalStatus, 
-        waitlist_position: waitlistPosition, 
-        responded_at: new Date().toISOString() 
-      }).eq('id', existingRsvp.id)
-    } else {
-      await admin.from('rsvps').insert({
-        booking_id: bookingId,
-        player_id: playerId,
-        status: finalStatus,
-        waitlist_position: waitlistPosition,
-        responded_at: new Date().toISOString()
-      })
+    const payload: any = {
+      status: finalStatus,
+      waitlist_position: waitlistPosition,
+      responded_at: new Date().toISOString()
     }
+
+    if (selectedPositions && selectedPositions[playerId]) {
+      payload.selected_position = selectedPositions[playerId]
+    }
+
+    if (existingRsvp) {
+      let { error } = await admin.from('rsvps').update(payload).eq('id', existingRsvp.id)
+      if (error && error.message?.includes('selected_position')) {
+        delete payload.selected_position
+        await admin.from('rsvps').update(payload).eq('id', existingRsvp.id)
+      }
+    } else {
+      payload.booking_id = bookingId
+      payload.player_id = playerId
+      let { error } = await admin.from('rsvps').insert(payload)
+      if (error && error.message?.includes('selected_position')) {
+        delete payload.selected_position
+        await admin.from('rsvps').insert(payload)
+      }
+    }
+  }
+
+  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  revalidatePath(`/groups/${groupId}`)
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
+export async function updateRsvpPositionAction(rsvpId: string, bookingId: string, groupId: string, selectedPosition: string) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { error } = await admin.from('rsvps').update({ selected_position: selectedPosition }).eq('id', rsvpId)
+  if (error && error.message?.includes('selected_position')) {
+    throw new Error("Please run SQL migration in Supabase to enable selected_position column: ALTER TABLE rsvps ADD COLUMN IF NOT EXISTS selected_position TEXT;")
+  } else if (error) {
+    throw new Error(error.message)
   }
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)

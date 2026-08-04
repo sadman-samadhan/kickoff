@@ -44,7 +44,7 @@ export default async function GroupPage({ params }: { params: { groupId: string 
   // 3. Fetch bookings, RSVPs, teams, and match_schedule
   const { data: bookingsData } = await supabaseAdmin
     .from('bookings')
-    .select('*, rsvps(*), teams(*), match_schedule(*)')
+    .select('*, rsvps(*, profiles(*)), teams(*, team_players(*)), match_schedule(*)')
     .eq('group_id', params.groupId)
     .order('match_date', { ascending: true })
 
@@ -56,6 +56,7 @@ export default async function GroupPage({ params }: { params: { groupId: string 
     max_players: number
     status: string
     rsvps: { player_id: string; status: string }[]
+    teams?: any[]
     champion?: string
   }
 
@@ -148,7 +149,8 @@ export default async function GroupPage({ params }: { params: { groupId: string 
       field_name: b.field_name,
       max_players: b.max_players,
       status: b.status,
-      rsvps: b.rsvps,
+      rsvps: (b.rsvps || []).filter((r: any) => !(r.profiles as any)?.is_suspended),
+      teams: b.teams,
       champion: getChampionTeamName(b)
     }
 

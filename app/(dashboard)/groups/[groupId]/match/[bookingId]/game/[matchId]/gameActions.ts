@@ -51,7 +51,11 @@ export async function updateStartingLineupAction(
     .update({ starting_player_ids: startingPlayerIds })
     .eq('id', matchId)
 
-  if (error) throw new Error(error.message)
+  if (error && error.message?.includes('starting_player_ids')) {
+    console.warn('starting_player_ids column missing on match_schedule table')
+  } else if (error) {
+    throw new Error(error.message)
+  }
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
@@ -67,7 +71,7 @@ export async function logMatchEventAction(
   groupId: string,
   eventData: {
     event_type: 'goal' | 'card' | 'sub' | 'penalty_save'
-    player_id: string
+    player_id?: string | null
     secondary_player_id?: string | null
     team_id?: string | null
     minute: number
@@ -82,7 +86,7 @@ export async function logMatchEventAction(
   const isGuestPlayer = eventData.player_id?.startsWith('guest_')
   const isGuestSecondary = eventData.secondary_player_id?.startsWith('guest_')
 
-  const realPlayerId = isGuestPlayer ? null : eventData.player_id
+  const realPlayerId = isGuestPlayer ? null : (eventData.player_id || null)
   const realSecondaryPlayerId = isGuestSecondary ? null : (eventData.secondary_player_id || null)
 
   const mergedDetails = {
@@ -154,14 +158,6 @@ export async function deleteMatchEventAction(
     await admin.from('match_events').delete().eq('id', eventId)
 
     if (event.event_type === 'goal') {
-      // Delete matching goal_events entry if any
-      await admin
-        .from('goal_events')
-        .delete()
-        .eq('match_schedule_id', matchId)
-        .eq('scorer_id', event.player_id)
-        .eq('minute', event.minute)
-
       await syncMatchScoreFromEvents(admin, matchId)
     }
   }
@@ -173,7 +169,7 @@ export async function deleteMatchEventAction(
 }
 
 /**
- * Sync Match Score from Goal Events
+ * Sync Match Score & Legacy goal_events Table from match_events
  */
 async function syncMatchScoreFromEvents(admin: any, matchId: string) {
   const { data: match } = await admin
@@ -194,43 +190,65 @@ async function syncMatchScoreFromEvents(admin: any, matchId: string) {
   let awayScore = 0
 
   events?.forEach((g: any) => {
-    const isOwnGoal = g.details_json?.is_own_goal === true
-    if (g.team_id === match.home_team_id) {
-      if (isOwnGoal) awayScore++
-      else homeScore++
-    } else if (g.team_id === match.away_team_id) {
-      if (isOwnGoal) homeScore++
-      else awayScore++
-    }
+    const isOwn = g.details_json?.is_own_goal === true
+    if (g.team_id === match.home_team_id && !isOwn) homeScore++
+    else if (g.team_id === match.away_team_id && isOwn) homeScore++
+    else if (g.team_id === match.away_team_id && !isOwn) awayScore++
+    else if (g.team_id === match.home_team_id && isOwn) awayScore++
   })
 
   await admin
     .from('match_schedule')
-    .update({
-      home_score: homeScore,
-      away_score: awayScore,
-    })
+    .update({ home_score: homeScore, away_score: awayScore })
     .eq('id', matchId)
+
+  // Re-sync legacy goal_events table cleanly for this matchId
+  await admin.from('goal_events').delete().eq('match_schedule_id', matchId)
+  if (events && events.length > 0) {
+    const legacyGoalRows = events.map((e: any) => ({
+      match_schedule_id: matchId,
+      scorer_id: e.player_id,
+      assist_id: e.secondary_player_id,
+      team_id: e.team_id,
+      is_own_goal: e.details_json?.is_own_goal === true,
+      minute: e.minute || null,
+    }))
+    await admin.from('goal_events').insert(legacyGoalRows)
+  }
 }
 
 /**
- * Update Match Status (scheduled, ongoing, completed)
+ * Update Match Status (scheduled, ongoing, completed), start timestamp and period
  */
 export async function updateMatchStatusAction(
   matchId: string,
   bookingId: string,
   groupId: string,
-  status: 'scheduled' | 'ongoing' | 'completed'
+  status: 'scheduled' | 'ongoing' | 'completed',
+  startedAt?: string | null,
+  period?: string | null
 ) {
   const supabase = createClient()
   const admin = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  const { error } = await admin
+  const updatePayload: any = { status }
+  if (startedAt !== undefined) updatePayload.started_at = startedAt
+  if (period !== undefined) updatePayload.period = period
+
+  let { error } = await admin
     .from('match_schedule')
-    .update({ status })
+    .update(updatePayload)
     .eq('id', matchId)
+
+  // Defensive fallback if columns started_at or period do not exist in database yet
+  if (error && (error.message?.includes('started_at') || error.message?.includes('period'))) {
+    delete updatePayload.started_at
+    delete updatePayload.period
+    const res = await admin.from('match_schedule').update(updatePayload).eq('id', matchId)
+    error = res.error
+  }
 
   if (error) throw new Error(error.message)
 
@@ -270,6 +288,38 @@ export async function updateMatchScoreAction(
     .eq('id', matchId)
 
   if (error) throw new Error(error.message)
+
+  revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
+  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  revalidatePath(`/groups/${groupId}`)
+  return { success: true }
+}
+
+/**
+ * Update Match MVP Player ID
+ */
+export async function updateMatchMvpAction(
+  matchId: string,
+  bookingId: string,
+  groupId: string,
+  mvpPlayerId: string | null
+) {
+  const supabase = createClient()
+  const admin = createAdminClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
+  const { error } = await admin
+    .from('match_schedule')
+    .update({ mvp_player_id: mvpPlayerId, motm_player_id: mvpPlayerId })
+    .eq('id', matchId)
+
+  if (error && (error.message?.includes('mvp_player_id') || error.message?.includes('motm_player_id'))) {
+    await admin.from('match_schedule').update({ motm_player_id: mvpPlayerId }).eq('id', matchId)
+    await admin.from('match_schedule').update({ mvp_player_id: mvpPlayerId }).eq('id', matchId)
+  } else if (error) {
+    throw new Error(error.message)
+  }
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)

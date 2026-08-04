@@ -5,9 +5,13 @@
 -- 1. Add custom_scoring_settings JSONB column to groups
 ALTER TABLE groups ADD COLUMN IF NOT EXISTS custom_scoring_settings JSONB;
 
--- 2. Add duration_minutes & starting_player_ids columns to match_schedule
+-- 2. Add duration_minutes, starting_player_ids, mvp_player_id, started_at, period columns to match_schedule, selected_position to rsvps
 ALTER TABLE match_schedule ADD COLUMN IF NOT EXISTS duration_minutes INT DEFAULT 30;
 ALTER TABLE match_schedule ADD COLUMN IF NOT EXISTS starting_player_ids TEXT[];
+ALTER TABLE match_schedule ADD COLUMN IF NOT EXISTS mvp_player_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+ALTER TABLE match_schedule ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+ALTER TABLE match_schedule ADD COLUMN IF NOT EXISTS period TEXT;
+ALTER TABLE rsvps ADD COLUMN IF NOT EXISTS selected_position TEXT;
 
 -- 3. Create match_events table for live match event logging
 CREATE TABLE IF NOT EXISTS match_events (

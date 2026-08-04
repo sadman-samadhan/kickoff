@@ -40,25 +40,42 @@ interface TieSummary {
 export function KnockoutBracketCard({ matches, teams }: KnockoutBracketProps) {
   const getTeam = (teamId: string | null) => teams.find(t => t.id === teamId)
   
-  // Group matches by stage base name (e.g. "Semi-Final 1", "Final")
-  const stageGroups: Record<string, Match[]> = {}
+  // Group matches into distinct ties (1-leg or 2-leg aggregates)
+  const tiesMap: Record<string, { stageBase: string; matches: Match[] }> = {}
+
   matches.forEach(m => {
     if (!m.stage_name) return
-    let base = m.stage_name
+    const lowerStage = m.stage_name.toLowerCase().trim()
+    if (
+      lowerStage === 'league' ||
+      lowerStage.startsWith('group') ||
+      lowerStage.startsWith('match') ||
+      lowerStage === 'round-robin'
+    ) {
+      return
+    }
+
+    const hasExplicitLeg = lowerStage.includes('leg') || (m.leg !== undefined && m.leg > 0)
+    let stageBase = m.stage_name
       .replace(/\s*\(Leg\s*\d+\)/gi, '')
       .replace(/\s*Leg\s*\d+/gi, '')
       .trim()
-    if (!base) base = 'Knockout Match'
-    
-    if (!stageGroups[base]) stageGroups[base] = []
-    stageGroups[base].push(m)
+    if (!stageBase) stageBase = 'Knockout'
+
+    // Group into aggregate ONLY if explicit Leg indicator is present; otherwise each match is a 1-leg card
+    const tieKey = hasExplicitLeg
+      ? `${stageBase}___${[m.home_team_id || 'tbd1', m.away_team_id || 'tbd2'].sort().join('___')}`
+      : `${stageBase}___${m.id}`
+
+    if (!tiesMap[tieKey]) {
+      tiesMap[tieKey] = { stageBase, matches: [] }
+    }
+    tiesMap[tieKey].matches.push(m)
   })
 
   // Calculate tie aggregate / winner for each stage group
-  const ties: TieSummary[] = Object.keys(stageGroups).map(stageBase => {
-    const groupMatches = stageGroups[stageBase]
+  const ties: TieSummary[] = Object.values(tiesMap).map(({ stageBase, matches: groupMatches }) => {
     const firstMatch = groupMatches[0]
-    
     const homeTeamId = firstMatch?.home_team_id || null
     const awayTeamId = firstMatch?.away_team_id || null
     const isCompleted = groupMatches.every(m => m.status === 'completed' && m.home_score !== null && m.away_score !== null)
@@ -70,20 +87,21 @@ export function KnockoutBracketCard({ matches, teams }: KnockoutBracketProps) {
     if (groupMatches.length === 1) {
       // 1-Leg Match
       const m = groupMatches[0]
-      if (m.home_score !== null) homeScoreDisplay = String(m.home_score)
-      if (m.away_score !== null) awayScoreDisplay = String(m.away_score)
+      if (m.home_score !== null && m.home_score !== undefined) homeScoreDisplay = String(m.home_score)
+      if (m.away_score !== null && m.away_score !== undefined) awayScoreDisplay = String(m.away_score)
 
-      if (isCompleted) {
-        if ((m.home_score || 0) > (m.away_score || 0)) winnerId = homeTeamId
-        else if ((m.away_score || 0) > (m.home_score || 0)) winnerId = awayTeamId
-        else winnerId = homeTeamId // Tie fallback
+      if (isCompleted && m.home_score !== null && m.away_score !== null) {
+        if (m.home_score > m.away_score) winnerId = homeTeamId
+        else if (m.away_score > m.home_score) winnerId = awayTeamId
       }
     } else {
       // 2-Leg Match: aggregate
       const teamScores: Record<string, number> = {}
       const teamsInTie = new Set<string>()
 
+      let allLegsScored = true
       groupMatches.forEach(m => {
+        if (m.home_score === null || m.away_score === null) allLegsScored = false
         if (m.home_team_id) {
           teamsInTie.add(m.home_team_id)
           teamScores[m.home_team_id] = (teamScores[m.home_team_id] || 0) + (m.home_score || 0)
@@ -98,15 +116,14 @@ export function KnockoutBracketCard({ matches, teams }: KnockoutBracketProps) {
       const t1 = homeTeamId || teamList[0]
       const t2 = awayTeamId || teamList[1]
 
-      if (t1 && teamScores[t1] !== undefined) homeScoreDisplay = String(teamScores[t1])
-      if (t2 && teamScores[t2] !== undefined) awayScoreDisplay = String(teamScores[t2])
+      if (t1 && teamScores[t1] !== undefined && allLegsScored) homeScoreDisplay = String(teamScores[t1])
+      if (t2 && teamScores[t2] !== undefined && allLegsScored) awayScoreDisplay = String(teamScores[t2])
 
       if (isCompleted && t1 && t2) {
         const s1 = teamScores[t1] || 0
         const s2 = teamScores[t2] || 0
         if (s1 > s2) winnerId = t1
         else if (s2 > s1) winnerId = t2
-        else winnerId = t1
       }
     }
 
@@ -125,19 +142,34 @@ export function KnockoutBracketCard({ matches, teams }: KnockoutBracketProps) {
   // Categorize ties into rounds
   const roundOf16Ties = ties.filter(t => t.stageBase.toLowerCase().includes('round of 16'))
   const quarterTies = ties.filter(t => t.stageBase.toLowerCase().includes('quarter'))
+  const qualifierTies = ties.filter(t => t.stageBase.toLowerCase().includes('qualifier') || t.stageBase.toLowerCase().includes('eliminator'))
   const semiTies = ties.filter(t => t.stageBase.toLowerCase().includes('semi'))
   const finalTies = ties.filter(t => {
     const lower = t.stageBase.toLowerCase()
     return lower.includes('final') && !lower.includes('semi') && !lower.includes('quarter') && !lower.includes('3rd')
   })
   const thirdPlaceTies = ties.filter(t => t.stageBase.toLowerCase().includes('3rd'))
+  const otherKnockoutTies = ties.filter(t => {
+    const lower = t.stageBase.toLowerCase()
+    return (
+      !roundOf16Ties.includes(t) &&
+      !quarterTies.includes(t) &&
+      !qualifierTies.includes(t) &&
+      !semiTies.includes(t) &&
+      !finalTies.includes(t) &&
+      !thirdPlaceTies.includes(t) &&
+      (lower.includes('knockout') || lower.includes('playoff'))
+    )
+  })
 
   const rounds = [
     { title: 'Round of 16', ties: roundOf16Ties },
     { title: 'Quarter-Finals', ties: quarterTies },
+    { title: 'Playoffs / Qualifiers', ties: qualifierTies },
     { title: 'Semi-Finals', ties: semiTies },
     { title: 'Final', ties: finalTies },
-    { title: '3rd Place', ties: thirdPlaceTies }
+    { title: '3rd Place Playoff', ties: thirdPlaceTies },
+    { title: 'Knockouts', ties: otherKnockoutTies }
   ].filter(r => r.ties.length > 0)
 
   if (rounds.length === 0) {
@@ -158,7 +190,7 @@ export function KnockoutBracketCard({ matches, teams }: KnockoutBracketProps) {
 
     return (
       <div
-        key={tie.stageBase}
+        key={tie.matches[0]?.id || `${tie.stageBase}_${tie.homeTeamId}`}
         className={`rounded-xl border shadow-sm p-3 flex flex-col gap-2 transition-all ${
           isFinalCard
             ? 'bg-gradient-to-b from-amber-50/70 to-white border-amber-300 shadow-md ring-2 ring-amber-400/20'
@@ -284,6 +316,18 @@ export function KnockoutBracketCard({ matches, teams }: KnockoutBracketProps) {
         </div>
       )}
 
+      {/* QUALIFIERS / PLAYOFFS (e.g. IPL Format) */}
+      {qualifierTies.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-[10px] font-black text-center text-neutral-400 uppercase tracking-widest bg-neutral-50 py-1 px-3 rounded-md border border-neutral-100">
+            Playoffs / Qualifiers
+          </div>
+          <div className={`grid ${qualifierTies.length > 1 ? 'grid-cols-2' : 'grid-cols-1 max-w-xs mx-auto'} gap-2.5`}>
+            {qualifierTies.map(tie => renderTieCard(tie))}
+          </div>
+        </div>
+      )}
+
       {/* 3. FINAL (Centered Below) */}
       {finalTies.length > 0 && (
         <div className="space-y-2">
@@ -304,6 +348,18 @@ export function KnockoutBracketCard({ matches, teams }: KnockoutBracketProps) {
           </div>
           <div className="max-w-xs mx-auto">
             {thirdPlaceTies.map(tie => renderTieCard(tie))}
+          </div>
+        </div>
+      )}
+
+      {/* 5. OTHER KNOCKOUT MATCHES (if any) */}
+      {otherKnockoutTies.length > 0 && (
+        <div className="space-y-2 pt-2 border-t border-neutral-100">
+          <div className="text-[10px] font-black text-center text-neutral-400 uppercase tracking-widest bg-neutral-50 py-1 px-3 rounded-md border border-neutral-100">
+            Knockouts
+          </div>
+          <div className={`grid ${otherKnockoutTies.length > 1 ? 'grid-cols-2' : 'grid-cols-1 max-w-xs mx-auto'} gap-2.5`}>
+            {otherKnockoutTies.map(tie => renderTieCard(tie))}
           </div>
         </div>
       )}

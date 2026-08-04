@@ -49,15 +49,26 @@ export default async function GameDetailsPage({
     .eq('booking_id', params.bookingId)
 
   const { data: homeTp } = match.home_team_id
-    ? await supabaseAdmin.from('team_players').select('player_id, profiles(*)').eq('team_id', match.home_team_id)
+    ? await supabaseAdmin
+        .from('team_players')
+        .select('player_id, profiles(*)')
+        .eq('team_id', match.home_team_id)
     : { data: [] }
 
   const { data: awayTp } = match.away_team_id
-    ? await supabaseAdmin.from('team_players').select('player_id, profiles(*)').eq('team_id', match.away_team_id)
+    ? await supabaseAdmin
+        .from('team_players')
+        .select('player_id, profiles(*)')
+        .eq('team_id', match.away_team_id)
     : { data: [] }
 
-  const homeRegistered = (homeTp || []).map((t: any) => ({ ...t.profiles, id: t.player_id })).filter((p: any) => !p.is_suspended)
-  const awayRegistered = (awayTp || []).map((t: any) => ({ ...t.profiles, id: t.player_id })).filter((p: any) => !p.is_suspended)
+  const homeRegistered = (homeTp || [])
+    .map((t: any) => (t.profiles ? { ...t.profiles, id: t.player_id } : null))
+    .filter((p: any) => p && !p.is_suspended)
+
+  const awayRegistered = (awayTp || [])
+    .map((t: any) => (t.profiles ? { ...t.profiles, id: t.player_id } : null))
+    .filter((p: any) => p && !p.is_suspended)
 
   // Resolve Guest Players from team guest_members cleanly without duplicates
   const guestRsvps = (rsvps || []).filter((r: any) => r.status === 'in' && (r.player_id === null || r.guest_name))
@@ -82,7 +93,7 @@ export default async function GameDetailsPage({
       }
     })
 
-    return list
+    return list.sort((a: any, b: any) => (a.full_name || '').localeCompare(b.full_name || ''))
   }
 
   const homeGuests = resolveTeamGuests(homeTeam?.guest_members)

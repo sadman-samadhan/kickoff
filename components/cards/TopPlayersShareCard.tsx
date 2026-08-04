@@ -120,9 +120,10 @@ export default function TopPlayersShareCard({
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 overflow-y-auto">
-          <div className="bg-neutral-900 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 my-auto">
-            <div className="flex justify-between items-center px-5 py-4">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4">
+          <div className="bg-neutral-900 w-full max-w-sm max-h-[88vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col my-auto animate-in zoom-in-95 duration-200">
+            {/* Fixed Header */}
+            <div className="flex justify-between items-center px-5 py-4 shrink-0 border-b border-neutral-800">
               <h3 className="font-bold text-white text-lg flex items-center gap-2">
                 <Award className="w-5 h-5 text-amber-400" /> Top Players Share Card
               </h3>
@@ -131,7 +132,8 @@ export default function TopPlayersShareCard({
               </button>
             </div>
 
-            <div className="px-4 pb-4">
+            {/* Scrollable Card Container */}
+            <div className="p-4 overflow-y-auto flex-1 min-h-0 bg-neutral-900">
               <div
                 ref={cardRef}
                 className="rounded-2xl overflow-hidden relative text-white"
@@ -276,13 +278,13 @@ export default function TopPlayersShareCard({
               </div>
             </div>
 
-            {/* Modal Actions */}
-            <div className="px-4 pb-5 flex gap-3">
+            {/* Fixed Action Buttons */}
+            <div className="p-4 shrink-0 border-t border-neutral-800 flex gap-3 bg-neutral-900">
               <Button
                 onClick={handleDownload}
                 disabled={isGenerating}
                 variant="outline"
-                className="flex-1 h-12 rounded-xl bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700"
+                className="flex-1 h-11 rounded-xl bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700 font-bold text-xs"
               >
                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
                 Save
@@ -290,7 +292,7 @@ export default function TopPlayersShareCard({
               <Button
                 onClick={handleShare}
                 disabled={isGenerating}
-                className="flex-1 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                className="flex-1 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
               >
                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Share2 className="w-4 h-4 mr-2" />}
                 Share

@@ -8,8 +8,9 @@ import { format, parseISO } from 'date-fns'
 import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal, Star, MinusCircle, Share2, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { rsvpAction } from '../../actions'
-import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction, reorderMatchesAction, addManualMatchAction } from './actions'
+import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction, reorderMatchesAction, addManualMatchAction, updateRsvpPositionAction } from './actions'
 import { calculateFplPoints } from '@/lib/fpl'
+import { getGroupScoringSettings, calculateTournamentPlayerPoints, calculateMatchPlayerPitchTime, PlayerPointsBreakdown } from '@/lib/tournamentScoring'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ConfirmModal from '@/components/modals/ConfirmModal'
@@ -34,11 +35,13 @@ export default function MatchClient({
   teams,
   matchSchedule,
   goalEvents,
+  matchEvents = [],
   currentUser,
   groupId,
   userRole,
   groupMembers = [],
-  initialHasRated = false
+  initialHasRated = false,
+  initialTab = 'players'
 }: any) {
   const router = useRouter()
 
@@ -53,7 +56,7 @@ export default function MatchClient({
     .map((p: any) => ({
       id: p.player_id ?? `guest_${p.id}`,
       name: p.profiles?.full_name || p.guest_name || 'Guest',
-      position: p.profiles?.preferred_position || p.guest_position || 'ATT',
+      position: p.selected_position || p.profiles?.preferred_position || p.guest_position || 'ATT',
       isGuest: !p.player_id,
       rsvpId: p.id
     }))
@@ -65,8 +68,8 @@ export default function MatchClient({
   allPlayersForTeam.filter((p: any) => p.isGuest).forEach((p: any) => { guestNamesMap[p.rsvpId] = p.name })
   const sortOrder: Record<string, number> = { 'GK': 1, 'DEF': 2, 'MID': 3, 'ATT': 4 }
   const sortedInPlayers = [...allConfirmedPlayers].sort((a: any, b: any) => {
-    const posA = a.profiles?.preferred_position || a.guest_position || 'ATT'
-    const posB = b.profiles?.preferred_position || b.guest_position || 'ATT'
+    const posA = a.selected_position || a.profiles?.preferred_position || a.guest_position || 'ATT'
+    const posB = b.selected_position || b.profiles?.preferred_position || b.guest_position || 'ATT'
     return (sortOrder[posA] || 5) - (sortOrder[posB] || 5)
   })
 
@@ -194,13 +197,14 @@ export default function MatchClient({
       if (tp.profiles?.full_name) addedNames.add(tp.profiles.full_name.toLowerCase())
       const isCaptain = team.captain_id === tp.player_id
       const rsvp = rsvps.find((r: any) => r.player_id === tp.player_id)
-      const pos = rsvp?.profiles?.preferred_position || 'Field Player'
+      const pos = rsvp?.selected_position || rsvp?.profiles?.preferred_position || 'Field Player'
       list.push({
         id: tp.player_id,
         name: tp.profiles?.full_name || 'Player',
         position: pos,
         isCaptain,
-        isGuest: false
+        isGuest: false,
+        avatarUrl: tp.profiles?.avatar_url || rsvp?.profiles?.avatar_url || null
       })
     })
 
@@ -222,7 +226,8 @@ export default function MatchClient({
           name,
           position: pos,
           isCaptain,
-          isGuest: true
+          isGuest: true,
+          avatarUrl: null
         })
       }
     })
@@ -471,9 +476,11 @@ export default function MatchClient({
   // Add Member State
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false)
   const [selectedMembersToAdd, setSelectedMembersToAdd] = useState<string[]>([])
+  const [selectedMemberPositions, setSelectedMemberPositions] = useState<Record<string, string>>({})
   const [memberSearchQuery, setMemberSearchQuery] = useState('')
   const [isAddingMember, setIsAddingMember] = useState(false)
   const [removingPlayerId, setRemovingPlayerId] = useState<string | null>(null)
+  const [updatingPosRsvpId, setUpdatingPosRsvpId] = useState<string | null>(null)
 
   const handleRemovePlayer = async (rsvpId: string) => {
     setRemovingPlayerId(rsvpId)
@@ -487,14 +494,27 @@ export default function MatchClient({
     }
   }
 
+  const handleUpdateRsvpPosition = async (rsvpId: string, newPos: string) => {
+    setUpdatingPosRsvpId(rsvpId)
+    try {
+      await updateRsvpPositionAction(rsvpId, booking.id, groupId, newPos)
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setUpdatingPosRsvpId(null)
+    }
+  }
+
   const handleAdminAddMember = async (e: React.FormEvent) => {
     e.preventDefault()
     if (selectedMembersToAdd.length === 0) return
     setIsAddingMember(true)
     try {
-      await adminAddRsvpAction(booking.id, groupId, selectedMembersToAdd, booking.max_players)
+      await adminAddRsvpAction(booking.id, groupId, selectedMembersToAdd, booking.max_players, selectedMemberPositions)
       setIsAddMemberOpen(false)
       setSelectedMembersToAdd([])
+      setSelectedMemberPositions({})
       setMemberSearchQuery('')
       router.refresh()
     } catch (e) {
@@ -581,6 +601,17 @@ export default function MatchClient({
 
   // Matchday Report Tab State
   const [activeReportTab, setActiveReportTab] = useState<'points' | 'players'>('points')
+  const [selectedPlayerForBreakdown, setSelectedPlayerForBreakdown] = useState<any | null>(null)
+
+  // Main Matchday Page Tabs
+  const validTab = (['players', 'teams', 'fixture', 'report'].includes(initialTab) ? initialTab : 'players') as 'players' | 'teams' | 'fixture' | 'report'
+  const [matchdayTab, setMatchdayTab] = useState<'players' | 'teams' | 'fixture' | 'report'>(validTab)
+
+  useEffect(() => {
+    if (initialTab && ['players', 'teams', 'fixture', 'report'].includes(initialTab)) {
+      setMatchdayTab(initialTab as any)
+    }
+  }, [initialTab])
 
   const canCancel = userRole === 'admin' || currentUser.id === booking.created_by
   const matchDateTimeStr = `${booking.match_date}T${booking.match_time || '00:00:00'}`
@@ -628,9 +659,27 @@ export default function MatchClient({
     }
   })
 
-  // Calculate stats from completed matches
+  // Helper to identify knockout / playoff stage matches
+  const isKnockoutMatch = (match: any) => {
+    if (!match.stage_name) return false
+    const stage = match.stage_name.toLowerCase()
+    return (
+      stage.includes('final') ||
+      stage.includes('semi') ||
+      stage.includes('quarter') ||
+      stage.includes('qualifier') ||
+      stage.includes('eliminator') ||
+      stage.includes('playoff') ||
+      stage.includes('3rd') ||
+      stage.includes('knockout')
+    )
+  }
+
+  const isKnockoutSchedule = matchSchedule.length > 0 && matchSchedule.every((m: any) => isKnockoutMatch(m))
+
+  // Calculate stats from completed LEAGUE matches (excluding knockout/playoff matches)
   matchSchedule.forEach((match: any) => {
-    if (match.status === 'completed') {
+    if (match.status === 'completed' && !isKnockoutMatch(match)) {
       const homeStats = pointsTable[match.home_team_id]
       const awayStats = pointsTable[match.away_team_id]
 
@@ -683,21 +732,28 @@ export default function MatchClient({
     position: string
     isGuest: boolean
     teamId: string
+    avatarUrl?: string | null
     goals: number
     ownGoals: number
     assists: number
     cleanSheets: number
     appearances: number
     motmCount: number
+    yellowCards: number
+    redCards: number
+    penaltySaves: number
+    goalsConcededOnPitch?: number
+    breakdown?: PlayerPointsBreakdown
     fplPoints: number
     teamPoints: number
   }
 
+  const customScoringSettings = getGroupScoringSettings((booking.groups as any)?.custom_scoring_settings)
   const playerStatsMap: Record<string, PlayerStats> = {}
 
   // Initialize with all players that participated (registered + guests)
   allPlayersForTeam.forEach(p => {
-    const rsvpObj = rsvps.find((r: any) => r.id === p.rsvpId)
+    const rsvpObj = rsvps.find((r: any) => r.id === p.rsvpId || r.player_id === p.id)
     const teamId = rsvpObj ? getPlayerTeamId(rsvpObj) : ''
     const teamStats = sortedPointsTable.find(t => t.id === teamId)
     const pos = p.position || 'ATT'
@@ -708,12 +764,17 @@ export default function MatchClient({
       position: pos,
       isGuest: p.isGuest,
       teamId: teamId,
+      avatarUrl: rsvpObj?.profiles?.avatar_url || null,
       goals: 0,
       ownGoals: 0,
       assists: 0,
       cleanSheets: 0,
       appearances: 0,
       motmCount: 0,
+      yellowCards: 0,
+      redCards: 0,
+      penaltySaves: 0,
+      goalsConcededOnPitch: 0,
       fplPoints: 0,
       teamPoints: teamStats ? teamStats.points : 0
     }
@@ -757,7 +818,30 @@ export default function MatchClient({
     }
   })
 
-  // Calculate appearances, clean sheets, and MOTM awards
+  // Calculate cards and penalty saves from matchEvents
+  ;(matchEvents || []).forEach((e: any) => {
+    let pKey = e.player_id
+    if (!pKey && e.details_json?.guest_player_id) {
+      const guestIdStr = String(e.details_json.guest_player_id)
+      const found = allPlayersForTeam.find(p => p.isGuest && (p.id === guestIdStr || p.id.includes(guestIdStr)))
+      if (found) pKey = found.id
+    }
+
+    if (pKey && playerStatsMap[pKey]) {
+      if (e.event_type === 'card') {
+        const cardType = e.details_json?.card_type
+        if (cardType === 'yellow') {
+          playerStatsMap[pKey].yellowCards += 1
+        } else if (cardType === 'red') {
+          playerStatsMap[pKey].redCards += 1
+        }
+      } else if (e.event_type === 'penalty_save') {
+        playerStatsMap[pKey].penaltySaves += 1
+      }
+    }
+  })
+
+  // Calculate appearances, clean sheets, goals conceded, and MOTM/MVP awards
   matchSchedule.forEach((match: any) => {
     if (match.status === 'completed') {
       const homeScore = match.home_score || 0
@@ -784,31 +868,55 @@ export default function MatchClient({
           }
         }
 
-        // MOTM bonus check
-        if (match.motm_player_id && match.motm_player_id === p.id) {
+        // MOTM / MVP bonus check
+        const isMotmWinner = (match.motm_player_id && match.motm_player_id === p.id) || (match.mvp_player_id && match.mvp_player_id === p.id)
+        if (isMotmWinner) {
           p.motmCount += 1
         } else if (match.motm_guest_name && p.isGuest && match.motm_guest_name === p.name) {
           p.motmCount += 1
         }
       })
+
+      // Calculate goals conceded on pitch for this match
+      const mEvents = (matchEvents || []).filter((e: any) => e.match_schedule_id === match.id)
+      const homePids = Object.values(playerStatsMap).filter(p => p.teamId === match.home_team_id).map(p => p.id)
+      const awayPids = Object.values(playerStatsMap).filter(p => p.teamId === match.away_team_id).map(p => p.id)
+      const startingPids = match.starting_player_ids || [...homePids, ...awayPids]
+      const duration = match.duration_minutes || 30
+
+      const pitchResult = calculateMatchPlayerPitchTime(mEvents, duration, homePids, awayPids, startingPids)
+      Object.entries(pitchResult.goalsConcededOnPitch).forEach(([pid, gc]) => {
+        if (playerStatsMap[pid]) {
+          playerStatsMap[pid].goalsConcededOnPitch = (playerStatsMap[pid].goalsConcededOnPitch || 0) + gc
+        }
+      })
     }
   })
 
-  // Calculate final FPL Points for each player
+  // Calculate final Group Custom Points & Breakdown for each player
   Object.values(playerStatsMap).forEach(p => {
-    p.fplPoints = calculateFplPoints({
-      position: p.position,
-      goals: p.goals,
-      assists: p.assists,
-      cleanSheets: p.cleanSheets,
-      ownGoals: p.ownGoals,
-      appearances: p.appearances,
-      motmCount: p.motmCount
-    })
+    const { totalPoints, breakdown } = calculateTournamentPlayerPoints(
+      p.position,
+      {
+        goals: p.goals,
+        assists: p.assists,
+        cleanSheets: p.cleanSheets,
+        penaltySaves: p.penaltySaves,
+        goalsConcededOnPitch: p.goalsConcededOnPitch || 0,
+        ownGoals: p.ownGoals,
+        yellowCards: p.yellowCards,
+        redCards: p.redCards,
+        motmCount: p.motmCount,
+        appearances: p.appearances,
+      },
+      customScoringSettings
+    )
+    p.fplPoints = totalPoints
+    p.breakdown = breakdown
   })
 
   const sortedTopPlayers = Object.values(playerStatsMap)
-    .filter(p => p.fplPoints > 0 || p.appearances > 0)
+    .filter(p => p.fplPoints !== 0 || p.appearances > 0 || p.goals > 0 || p.assists > 0 || p.ownGoals > 0)
     .sort((a, b) => {
       if (b.fplPoints !== a.fplPoints) return b.fplPoints - a.fplPoints
       if (b.goals !== a.goals) return b.goals - a.goals
@@ -837,19 +945,38 @@ export default function MatchClient({
     topScorerText = `${topPlayer.name} (${topPlayer.goals} Goal${topPlayer.goals > 1 ? 's' : ''})`
   }
 
+  const myProfile = groupMembers.find((m: any) => m.player_id === currentUser.id)?.profiles
+  const [isPositionModalOpen, setIsPositionModalOpen] = useState(false)
+  const [selectedPosInput, setSelectedPosInput] = useState<string>('')
+
   const handleRsvp = async (status: string) => {
     if (status === 'out' && myRsvp === 'in' && waitlistPlayers.length > 0) {
       setIsConfirmOutOpen(true)
       return
     }
-    await executeRsvp(status)
+    if (status === 'in') {
+      const prefPos = myProfile?.preferred_position || 'Field Player'
+      const secPos = myProfile?.secondary_position
+      const isFieldPlayer = prefPos === 'Field Player' || !prefPos
+      const hasSecondary = secPos && secPos !== prefPos
+
+      if (isFieldPlayer || hasSecondary) {
+        const defaultPos = myRsvpObj?.selected_position || (hasSecondary ? prefPos : 'MID')
+        setSelectedPosInput(defaultPos)
+        setIsPositionModalOpen(true)
+        return
+      }
+    }
+    await executeRsvp(status, myProfile?.preferred_position || 'MID')
   }
 
-  const executeRsvp = async (status: string) => {
+  const executeRsvp = async (status: string, positionOverride?: string) => {
     setIsRsvpLoading(true)
     setIsConfirmOutOpen(false)
+    setIsPositionModalOpen(false)
     try {
-      await rsvpAction(booking.id, groupId, status, booking.max_players)
+      const posToSave = positionOverride || selectedPosInput || myProfile?.preferred_position || 'MID'
+      await rsvpAction(booking.id, groupId, status, booking.max_players, posToSave)
       router.refresh()
     } catch (e) {
       console.error(e)
@@ -1150,7 +1277,35 @@ export default function MatchClient({
         </div>
       )}
 
-      {/* 2. PLAYER LIST CARD */}
+      {/* MAIN MATCHDAY TABS */}
+      <div className="flex bg-neutral-100 p-1.5 rounded-2xl overflow-x-auto gap-1 sticky top-0 z-20">
+        {[
+          { key: 'players' as const, label: '👥 Players', count: allConfirmedPlayers.length },
+          { key: 'teams' as const, label: '🛡️ Teams', count: teams.length },
+          { key: 'fixture' as const, label: '📋 Fixture', count: matchSchedule.length },
+          { key: 'report' as const, label: '📊 Report' },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setMatchdayTab(tab.key)}
+            className={`flex-1 py-2.5 px-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap flex items-center justify-center gap-1 ${
+              matchdayTab === tab.key ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'
+            }`}
+          >
+            {tab.label}
+            {tab.count !== undefined && (
+              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                matchdayTab === tab.key ? 'bg-emerald-100 text-emerald-700' : 'bg-neutral-200 text-neutral-500'
+              }`}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* TAB: CONFIRMED PLAYERS */}
+      {matchdayTab === 'players' && (
       <div data-tour="match-players" className="bg-white rounded-2xl border border-neutral-100 shadow-sm">
         <div className="p-4 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50 rounded-t-2xl">
           <h3 className="font-bold text-neutral-900 flex items-center gap-2">
@@ -1189,7 +1344,7 @@ export default function MatchClient({
         <div className="divide-y divide-neutral-50">
           {sortedInPlayers.map((rsvp: any) => {
             const playerTeam = getPlayerTeam(rsvp)
-            const playerPos = rsvp.profiles?.preferred_position || rsvp.guest_position || 'Field Player'
+            const playerPos = rsvp.selected_position || rsvp.profiles?.preferred_position || rsvp.guest_position || 'Field Player'
             const rowStyle = playerTeam?.jersey_color
               ? { backgroundColor: hexToRgba(playerTeam.jersey_color, 0.25) }
               : undefined
@@ -1208,10 +1363,23 @@ export default function MatchClient({
                       {rsvp.profiles?.full_name || rsvp.guest_name || 'Anonymous Player'}
                       {rsvp.guest_name && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded uppercase tracking-wider flex-shrink-0">Guest</span>}
                     </span>
-                    <div className="mt-0.5">
+                    <div className="mt-0.5 flex items-center gap-1.5">
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${getPositionColor(playerPos)}`}>
                         {playerPos}
                       </span>
+                      {(userRole === 'admin' || rsvp.player_id === currentUser.id) && (
+                        <select
+                          value={['GK', 'DEF', 'MID', 'ATT'].includes(playerPos) ? playerPos : 'MID'}
+                          disabled={updatingPosRsvpId === rsvp.id}
+                          onChange={(e) => handleUpdateRsvpPosition(rsvp.id, e.target.value)}
+                          className="text-[10px] font-bold bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 rounded px-1 py-0.5 text-neutral-700 outline-none focus:ring-1 focus:ring-green-500 cursor-pointer"
+                        >
+                          <option value="GK">GK</option>
+                          <option value="DEF">DEF</option>
+                          <option value="MID">MID</option>
+                          <option value="ATT">ATT</option>
+                        </select>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1300,9 +1468,10 @@ export default function MatchClient({
           </>
         )}
       </div>
+      )}
 
-      {/* 4. TEAMS SECTION */}
-      {displayStatus !== 'cancelled' && (
+      {/* TAB: TEAMS */}
+      {matchdayTab === 'teams' && displayStatus !== 'cancelled' && (
         <div data-tour="match-teams" className="bg-white rounded-2xl border border-neutral-100 shadow-sm">
           <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center rounded-t-2xl">
             <h3 className="font-bold text-neutral-900 flex items-center gap-2">
@@ -1495,7 +1664,7 @@ export default function MatchClient({
                       </div>
                     </div>
                   ) : (
-                    <div key={team.id} className="border rounded-xl" style={{ borderColor: team.jersey_color }}>
+                    <div key={team.id} className="border rounded-xl" style={{ borderColor: team.jersey_color === '#ffffff' || team.jersey_color?.toLowerCase() === '#fff' ? '#d4d4d4' : team.jersey_color }}>
                       <div
                         onClick={() => setExpandedTeamId(expandedTeamId === team.id ? null : team.id)}
                         className="p-3 flex items-center justify-between cursor-pointer hover:bg-neutral-50/50 transition-colors rounded-xl"
@@ -1547,17 +1716,37 @@ export default function MatchClient({
                           {team.team_players?.length === 0 && (!team.guest_members || team.guest_members.length === 0) && (
                             <div className="text-neutral-400 italic py-1">No players assigned yet.</div>
                           )}
-                          {team.team_players?.map((tp: any) => {
+                          {[...(team.team_players || [])]
+                            .sort((a: any, b: any) => {
+                              const rA = rsvps.find((r: any) => r.player_id === a.player_id)
+                              const rB = rsvps.find((r: any) => r.player_id === b.player_id)
+                              const posA = rA?.selected_position || rA?.profiles?.preferred_position || 'ATT'
+                              const posB = rB?.selected_position || rB?.profiles?.preferred_position || 'ATT'
+                              return (POS_ORDER[posA] || 5) - (POS_ORDER[posB] || 5)
+                            })
+                            .map((tp: any) => {
                             const isCaptain = team.captain_id === tp.player_id
                             const rsvp = rsvps.find((r: any) => r.player_id === tp.player_id)
-                            const pos = rsvp?.profiles?.preferred_position || 'Field Player'
+                            const pos = rsvp?.selected_position || rsvp?.profiles?.preferred_position || 'Field Player'
+                            const avatarUrl = tp.profiles?.avatar_url || rsvp?.profiles?.avatar_url || null
+                            const fullName = tp.profiles?.full_name || 'Player'
+                            const initials = fullName.charAt(0).toUpperCase()
                             return (
-                              <div key={tp.player_id} className="flex justify-between items-center py-1 border-b border-neutral-100/50 last:border-0">
-                                <span className="font-semibold flex items-center gap-1">
-                                  {tp.profiles?.full_name || 'Player'}
-                                  {isCaptain && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase">C</span>}
-                                </span>
-                                <span className={`text-[9px] font-bold px-1 py-0.5 rounded border uppercase tracking-wider ${getPositionColor(pos)}`}>
+                              <div key={tp.player_id} className="flex justify-between items-center py-1.5 border-b border-neutral-100/50 last:border-0">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {avatarUrl ? (
+                                    <img src={avatarUrl} className="w-6 h-6 rounded-full object-cover border border-neutral-200 shrink-0" alt={fullName} />
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-full font-bold flex items-center justify-center bg-neutral-200 text-neutral-600 text-[10px] shrink-0">
+                                      {initials}
+                                    </div>
+                                  )}
+                                  <span className="font-semibold flex items-center gap-1.5 truncate text-neutral-900">
+                                    {fullName}
+                                    {isCaptain && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase">C</span>}
+                                  </span>
+                                </div>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider shrink-0 ${getPositionColor(pos)}`}>
                                   {pos}
                                 </span>
                               </div>
@@ -1568,13 +1757,20 @@ export default function MatchClient({
                             if (!rsvp) return null
                             const isCaptain = team.captain_id === `guest_${rsvp.id}`
                             const pos = rsvp.guest_position || 'Field Player'
+                            const guestName = rsvp.guest_name || 'Guest'
+                            const initials = guestName.charAt(0).toUpperCase()
                             return (
-                              <div key={gId} className="flex justify-between items-center py-1 border-b border-neutral-100/50 last:border-0">
-                                <span className="font-semibold text-neutral-600 flex items-center gap-1">
-                                  {rsvp.guest_name} <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded">Guest</span>
-                                  {isCaptain && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase">C</span>}
-                                </span>
-                                <span className={`text-[9px] font-bold px-1 py-0.5 rounded border uppercase tracking-wider ${getPositionColor(pos)}`}>
+                              <div key={gId} className="flex justify-between items-center py-1.5 border-b border-neutral-100/50 last:border-0">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-6 h-6 rounded-full font-bold flex items-center justify-center bg-amber-100 text-amber-800 text-[10px] shrink-0 border border-amber-200">
+                                    {initials}
+                                  </div>
+                                  <span className="font-semibold text-neutral-600 flex items-center gap-1.5 truncate">
+                                    {guestName} <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded">Guest</span>
+                                    {isCaptain && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase">C</span>}
+                                  </span>
+                                </div>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider shrink-0 ${getPositionColor(pos)}`}>
                                   {pos}
                                 </span>
                               </div>
@@ -1591,8 +1787,8 @@ export default function MatchClient({
         </div>
       )}
 
-      {/* 5. MATCH SCHEDULE */}
-      {teams.length > 0 && (
+      {/* TAB: FIXTURE */}
+      {matchdayTab === 'fixture' && teams.length > 0 && (
         <div data-tour="match-schedule" className="bg-white rounded-2xl border border-neutral-100 shadow-sm">
           <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center rounded-t-2xl">
             <h3 className="font-bold text-neutral-900 flex items-center gap-2">
@@ -1693,108 +1889,231 @@ export default function MatchClient({
                           </button>
                         </div>
                       )}
-                      <div className={`flex-1 rounded-xl border transition-colors overflow-hidden ${isCompleted ? 'bg-neutral-50 border-neutral-200' : 'bg-white border-green-100 hover:border-green-300 shadow-sm'}`}>
-                        <div
-                          onClick={() => handleExpandMatch(match)}
-                          className="p-3 flex justify-between items-center cursor-pointer"
-                        >
-                          <div className="flex-1 flex justify-end items-center gap-2">
-                            <span className="font-bold text-sm text-neutral-800">{getTeamName(match.home_team_id)}</span>
-                            {isCompleted && <span className="text-lg font-black">{match.home_score}</span>}
-                          </div>
+                      {(() => {
+                        const isOngoing = match.status === 'ongoing'
+                        const matchEvents = goalEvents.filter((g: any) => g.match_schedule_id === match.id)
+                        const dynamicHomeScore = isOngoing ? matchEvents.filter((e: any) => {
+                          const isOwn = e.details_json?.is_own_goal === true
+                          if (e.team_id === match.home_team_id && !isOwn) return true
+                          if (e.team_id === match.away_team_id && isOwn) return true
+                          return false
+                        }).length : 0
+                        const dynamicAwayScore = isOngoing ? matchEvents.filter((e: any) => {
+                          const isOwn = e.details_json?.is_own_goal === true
+                          if (e.team_id === match.away_team_id && !isOwn) return true
+                          if (e.team_id === match.home_team_id && isOwn) return true
+                          return false
+                        }).length : 0
 
-                          <div className="flex flex-col items-center mx-2">
-                            {match.stage_name && (
-                              <span className="text-[8px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 mb-0.5">
-                                {match.stage_name}
-                              </span>
-                            )}
-                            <div className="px-2.5 py-0.5 bg-neutral-100 text-[10px] font-bold text-neutral-500 rounded">
-                              VS
-                            </div>
-                          </div>
-
-                          <div className="flex-1 flex justify-start items-center gap-2">
-                            {isCompleted && <span className="text-lg font-black">{match.away_score}</span>}
-                            <span className="font-bold text-sm text-neutral-800">{getTeamName(match.away_team_id)}</span>
-                          </div>
-
-                          <Link
-                            href={`/groups/${groupId}/match/${booking.id}/game/${match.id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="ml-3 shrink-0"
+                        return (
+                          <div
+                            className={`flex-1 rounded-xl border transition-colors overflow-hidden ${
+                              isCompleted ? 'bg-neutral-50 border-neutral-200' :
+                              isOngoing ? 'bg-white border-blue-200 shadow-sm' :
+                              'bg-white border-green-100 hover:border-green-300 shadow-sm'
+                            }`}
                           >
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-[9px] font-bold rounded-lg bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                            <div
+                              onClick={() => handleExpandMatch(match)}
+                              className="p-3 flex justify-between items-center cursor-pointer"
                             >
-                              Match Details ➔
-                            </Button>
-                          </Link>
-                        </div>
+                              <div className="flex-1 flex justify-end items-center gap-2">
+                                <span className="font-bold text-sm text-neutral-800">{getTeamName(match.home_team_id)}</span>
+                                {(isCompleted || isOngoing) && (
+                                  <span className="text-lg font-black text-neutral-900">
+                                    {isOngoing ? (match.home_score ?? dynamicHomeScore) : match.home_score}
+                                  </span>
+                                )}
+                              </div>
 
-                        {isExpanded && (
-                          <div className="p-4 border-t border-neutral-100 bg-white">
-                            <div className="flex justify-between items-center gap-4 mb-6">
-                              <div className="flex-1 text-center">
-                                <div className="text-xs font-bold text-neutral-500 mb-2 uppercase truncate">{getTeamName(match.home_team_id)}</div>
-                                <input
-                                  type="number" min="0"
-                                  className="w-16 h-16 text-center text-3xl font-black bg-neutral-100 rounded-2xl border-none focus:ring-2 focus:ring-green-500"
-                                  value={scoreForms[match.id]?.homeScore ?? (match.home_score || 0)}
-                                  onChange={e => setScoreForms({ ...scoreForms, [match.id]: { ...scoreForms[match.id], homeScore: parseInt(e.target.value) || 0 } })}
-                                />
+                              <div className="flex flex-col items-center mx-2">
+                                {match.stage_name && (
+                                  <span className="text-[8px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 mb-0.5">
+                                    {match.stage_name}
+                                  </span>
+                                )}
+                                {isOngoing ? (
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <div className="px-2.5 py-0.5 bg-neutral-100 text-[10px] font-bold text-neutral-500 rounded">
+                                      VS
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                                      <span className="text-[9px] font-black text-red-600 uppercase tracking-wider">Live</span>
+                                    </div>
+                                  </div>
+                                ) : isCompleted ? (
+                                  <div className="px-2 py-0.5 bg-neutral-800 text-[9px] font-black text-white rounded uppercase tracking-wider">
+                                    Full Time
+                                  </div>
+                                ) : (
+                                  <div className="px-2.5 py-0.5 bg-neutral-100 text-[10px] font-bold text-neutral-500 rounded">
+                                    VS
+                                  </div>
+                                )}
                               </div>
-                              <span className="text-xl font-black text-neutral-300">-</span>
-                              <div className="flex-1 text-center">
-                                <div className="text-xs font-bold text-neutral-500 mb-2 uppercase truncate">{getTeamName(match.away_team_id)}</div>
-                                <input
-                                  type="number" min="0"
-                                  className="w-16 h-16 text-center text-3xl font-black bg-neutral-100 rounded-2xl border-none focus:ring-2 focus:ring-green-500"
-                                  value={scoreForms[match.id]?.awayScore ?? (match.away_score || 0)}
-                                  onChange={e => setScoreForms({ ...scoreForms, [match.id]: { ...scoreForms[match.id], awayScore: parseInt(e.target.value) || 0 } })}
-                                />
+
+                              <div className="flex-1 flex justify-start items-center gap-2">
+                                {(isCompleted || isOngoing) && (
+                                  <span className="text-lg font-black text-neutral-900">
+                                    {isOngoing ? (match.away_score ?? dynamicAwayScore) : match.away_score}
+                                  </span>
+                                )}
+                                <span className="font-bold text-sm text-neutral-800">{getTeamName(match.away_team_id)}</span>
                               </div>
+
+                              <Link
+                                href={`/groups/${groupId}/match/${booking.id}/game/${match.id}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="ml-3 shrink-0"
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className={`h-7 text-[9px] font-bold rounded-lg ${
+                                    isOngoing
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                      : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                  }`}
+                                >
+                                  Match Details ➔
+                                </Button>
+                              </Link>
                             </div>
 
-                            {/* MOTM Selection */}
-                            {allMatchPlayers.length > 0 && (
-                              <div className="mb-4 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
-                                <div className="text-xs font-bold text-amber-900 mb-1.5 flex items-center gap-1.5">
-                                  <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /> Man of the Match (MOTM)
-                                  <span className="text-[10px] text-amber-700 font-normal">(+1 Bonus Point)</span>
-                                </div>
-                                <CustomSelect
-                                  value={motmForms[match.id]?.playerId ? motmForms[match.id].playerId : (motmForms[match.id]?.guestName ? `guest_${motmForms[match.id].guestName}` : '')}
-                                  onChange={(val) => {
-                                    if (!val) {
-                                      setMotmForms({ ...motmForms, [match.id]: { playerId: '', guestName: '' } })
-                                    } else if (val.startsWith('guest_')) {
-                                      setMotmForms({ ...motmForms, [match.id]: { playerId: '', guestName: val.replace('guest_', '') } })
-                                    } else {
-                                      setMotmForms({ ...motmForms, [match.id]: { playerId: val, guestName: '' } })
+                            {isExpanded && (
+                              <div className="p-4 border-t border-neutral-100 bg-white space-y-3">
+                                {(() => {
+                                  const rawMatchGoals = goalEvents.filter((g: any) => g.match_schedule_id === match.id)
+                                  const matchGoals: any[] = []
+                                  const seenKeys = new Set<string>()
+
+                                  rawMatchGoals.forEach((g: any) => {
+                                    const sId = g.scorer_id || g.details_json?.guest_player_id || g.guest_scorer_name || 'unknown'
+                                    const isOwn = g.is_own_goal || g.details_json?.is_own_goal === true
+                                    const min = g.minute || 0
+                                    const key = `${sId}_${isOwn}_${min}`
+                                    if (!seenKeys.has(key)) {
+                                      seenKeys.add(key)
+                                      matchGoals.push(g)
                                     }
-                                  }}
-                                  placeholder="Select MOTM..."
-                                  buttonClassName="w-full px-3 py-1.5 border border-amber-200 rounded-lg text-xs bg-white focus:ring-2 focus:ring-amber-500 outline-none"
-                                  options={[
-                                    { value: '', label: 'None Selected' },
-                                    ...allMatchPlayers.map(p => ({
-                                      value: p.isGuest ? `guest_${p.name}` : p.id,
-                                      label: `⭐ ${p.name} (${p.position})`
-                                    }))
-                                  ]}
-                                />
+                                  })
+
+                                  const homeTeamPlayerIds = new Set((homeTeam?.team_players || []).map((tp: any) => tp.player_id))
+                                  const awayTeamPlayerIds = new Set((awayTeam?.team_players || []).map((tp: any) => tp.player_id))
+
+                                  const getScorerLastName = (g: any) => {
+                                    const fullName = g.profiles?.full_name || g.guest_scorer_name
+                                    if (fullName) {
+                                      const parts = fullName.trim().split(/\s+/)
+                                      return parts.length > 1 ? parts[parts.length - 1] : parts[0]
+                                    }
+                                    return 'Player'
+                                  }
+
+                                  const getAssistLastName = (g: any) => {
+                                    const fullName = g.assist?.full_name || g.guest_assist_name
+                                    if (fullName) {
+                                      const parts = fullName.trim().split(/\s+/)
+                                      return parts.length > 1 ? parts[parts.length - 1] : parts[0]
+                                    }
+                                    return null
+                                  }
+
+                                  const homeScorers = matchGoals.filter((g: any) => {
+                                    const isOwn = g.is_own_goal || g.details_json?.is_own_goal
+                                    const belongsToHome = g.team_id ? g.team_id === match.home_team_id : (g.scorer_id && homeTeamPlayerIds.has(g.scorer_id))
+                                    return isOwn ? !belongsToHome : belongsToHome
+                                  })
+
+                                  const awayScorers = matchGoals.filter((g: any) => {
+                                    const isOwn = g.is_own_goal || g.details_json?.is_own_goal
+                                    const belongsToAway = g.team_id ? g.team_id === match.away_team_id : (g.scorer_id && awayTeamPlayerIds.has(g.scorer_id))
+                                    return isOwn ? !belongsToAway : belongsToAway
+                                  })
+
+                                  const mvpName = (() => {
+                                    const mvpId = match.mvp_player_id || match.motm_player_id
+                                    if (!mvpId) return null
+                                    const cleanId = mvpId.replace('guest_', '').trim()
+                                    const foundRsvp = rsvps.find((r: any) => r.player_id === mvpId || r.id === cleanId || r.guest_name === mvpId)
+                                    if (foundRsvp) return foundRsvp.profiles?.full_name || foundRsvp.guest_name || null
+                                    const foundPlayer = allPlayersForTeam.find((p: any) => p.id === mvpId || p.rsvpId === cleanId || p.name === mvpId)
+                                    if (foundPlayer) return foundPlayer.name
+                                    return null
+                                  })()
+
+                                  return (
+                                    <>
+                                      <div className="text-[10px] font-black text-neutral-400 uppercase tracking-widest text-center">
+                                        Goal Scorers
+                                      </div>
+
+                                      {homeScorers.length === 0 && awayScorers.length === 0 ? (
+                                        <p className="text-xs text-neutral-400 italic text-center py-1">No goals recorded yet</p>
+                                      ) : (
+                                        <div className="grid grid-cols-[1fr_auto_1fr] gap-2 text-xs">
+                                          {/* Home Team Scorers */}
+                                          <div className="space-y-1 text-left font-semibold text-neutral-800">
+                                            {homeScorers.map((g: any, idx: number) => {
+                                              const isOwn = g.is_own_goal || g.details_json?.is_own_goal
+                                              const sName = getScorerLastName(g)
+                                              const aName = getAssistLastName(g)
+                                              return (
+                                                <div key={g.id || idx} className="truncate">
+                                                  <span>{sName} {g.minute ? `${g.minute}'` : ''}</span>
+                                                  {isOwn && <span className="text-amber-500 font-bold text-[9px] ml-1">(OG)</span>}
+                                                  {aName && !isOwn && <span className="text-neutral-400 font-normal text-[10px]"> (ast: {aName})</span>}
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+
+                                          {/* Ball Divider */}
+                                          <div className="text-neutral-400 text-xs self-center">⚽</div>
+
+                                          {/* Away Team Scorers */}
+                                          <div className="space-y-1 text-right font-semibold text-neutral-800">
+                                            {awayScorers.map((g: any, idx: number) => {
+                                              const isOwn = g.is_own_goal || g.details_json?.is_own_goal
+                                              const sName = getScorerLastName(g)
+                                              const aName = getAssistLastName(g)
+                                              return (
+                                                <div key={g.id || idx} className="truncate">
+                                                  <span>{sName} {g.minute ? `${g.minute}'` : ''}</span>
+                                                  {isOwn && <span className="text-amber-500 font-bold text-[9px] ml-1">(OG)</span>}
+                                                  {aName && !isOwn && <span className="text-neutral-400 font-normal text-[10px]"> (ast: {aName})</span>}
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* MVP Badge */}
+                                      {mvpName && (
+                                        <div className="pt-2 border-t border-neutral-100 flex items-center justify-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50/60 py-1.5 rounded-xl border border-amber-200/60">
+                                          <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                                          <span>Match MVP: {mvpName}</span>
+                                        </div>
+                                      )}
+
+                                      {/* Match Details Link */}
+                                      <div className="pt-1 text-center">
+                                        <Link href={`/groups/${groupId}/match/${booking.id}/game/${match.id}`}>
+                                          <Button size="sm" variant="ghost" className="w-full text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl">
+                                            View Match Details & Log Events ➔
+                                          </Button>
+                                        </Link>
+                                      </div>
+                                    </>
+                                  )
+                                })()}
                               </div>
                             )}
-
-                            <Button className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl text-sm font-bold mb-2" onClick={() => handleSaveScore(match.id)} disabled={isScoreLoading}>
-                              {isScoreLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Score & Complete'}
-                            </Button>
                           </div>
-                        )}
-                      </div>
+                        )
+                      })()}
                     </div>
                   )
                 })}
@@ -1804,8 +2123,8 @@ export default function MatchClient({
         </div>
       )}
 
-      {/* MATCHDAY REPORT SECTION */}
-      {teams.length > 0 && (() => {
+      {/* TAB: MATCHDAY REPORT */}
+      {matchdayTab === 'report' && teams.length > 0 && (() => {
         const isKnockoutSchedule = matchSchedule.some((m: any) => m.stage_name && (m.stage_name.includes('Semi') || m.stage_name.includes('Final') || m.stage_name.includes('Quarter') || m.stage_name.includes('Round')))
 
         return (
@@ -1823,7 +2142,7 @@ export default function MatchClient({
                   onClick={() => setActiveReportTab('points')}
                   className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeReportTab === 'points' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'}`}
                 >
-                  {isKnockoutSchedule ? '🌿 Knockout Bracket' : '📊 Points Table'}
+                  📊 Points Table
                 </button>
                 <button
                   type="button"
@@ -1835,11 +2154,8 @@ export default function MatchClient({
               </div>
 
               {activeReportTab === 'points' ? (
-                isKnockoutSchedule ? (
-                  <KnockoutBracketCard matches={matchSchedule} teams={teams} />
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
                       <thead>
                         <tr className="border-b border-neutral-100 text-neutral-400 font-bold uppercase tracking-wider">
                           <th className="py-2.5 px-1 text-center w-8">#</th>
@@ -1874,9 +2190,21 @@ export default function MatchClient({
                         ))}
                       </tbody>
                     </table>
+
+                    {/* KNOCKOUT STAGE BRACKET / PLAYOFF TREE GRAPH */}
+                    {matchSchedule.some((m: any) => isKnockoutMatch(m)) && (
+                      <div className="mt-5 pt-4 border-t border-neutral-100 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/60 inline-flex items-center gap-1.5">
+                            <Trophy className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+                            Knockout Stage & Playoff Tree
+                          </h4>
+                        </div>
+                        <KnockoutBracketCard matches={matchSchedule.filter(isKnockoutMatch)} teams={teams} />
+                      </div>
+                    )}
                   </div>
-                )
-              ) : (
+                ) : (
                 <div className="overflow-x-auto">
                   {sortedTopPlayers.length > 0 ? (
                     <table className="w-full text-left border-collapse text-xs">
@@ -1892,29 +2220,47 @@ export default function MatchClient({
                       </thead>
                       <tbody className="divide-y divide-neutral-50">
                         {sortedTopPlayers.map((player) => (
-                          <tr key={player.id} className="hover:bg-neutral-50/50 transition-colors">
+                          <tr
+                            key={player.id}
+                            onClick={() => setSelectedPlayerForBreakdown(player)}
+                            className="hover:bg-emerald-50/50 transition-colors cursor-pointer group"
+                            title="Click to view points breakdown"
+                          >
                             <td className="py-3 px-2 font-bold text-neutral-800">
-                              <div className="flex flex-col">
-                                <span className="flex items-center gap-1 truncate">
-                                  {player.name}
-                                  {player.isGuest && (
-                                    <span className="text-[8px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase tracking-wider">
-                                      Guest
-                                    </span>
-                                  )}
-                                  {player.motmCount > 0 && (
-                                    <span className="text-amber-500 font-bold text-[10px]" title="Man of the Match (+1 Bonus)">
-                                      ⭐
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="text-[9px] font-semibold text-neutral-400 uppercase">{player.position}</span>
+                              <div className="flex items-center gap-2">
+                                {player.avatarUrl ? (
+                                  <img src={player.avatarUrl} className="w-7 h-7 rounded-full object-cover border border-neutral-200 shrink-0" alt={player.name} />
+                                ) : (
+                                  <div className={`w-7 h-7 rounded-full font-bold flex items-center justify-center border text-xs shrink-0 ${player.isGuest ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                    {player.name.charAt(0)}
+                                  </div>
+                                )}
+                                <div className="flex flex-col truncate">
+                                  <span className="flex items-center gap-1 truncate font-bold text-neutral-900 group-hover:text-emerald-700 transition-colors">
+                                    {player.name}
+                                    {player.isGuest && (
+                                      <span className="text-[8px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase tracking-wider">
+                                        Guest
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="text-[9px] font-semibold text-neutral-400 uppercase">{player.position}</span>
+                                </div>
                               </div>
                             </td>
                             <td className="py-3 px-2 text-neutral-500 truncate max-w-[90px]">
                               {getTeamName(player.teamId)}
                             </td>
-                            <td className="py-3 px-2 text-center font-black text-emerald-700 bg-emerald-50/50 rounded-lg">{player.fplPoints}</td>
+                            <td className={`py-3 px-2 text-center font-black rounded-lg transition-colors ${
+                              player.fplPoints < 0
+                                ? 'text-red-700 bg-red-50/80 group-hover:bg-red-100'
+                                : 'text-emerald-700 bg-emerald-50/80 group-hover:bg-emerald-100'
+                            }`}>
+                              <div className="flex items-center justify-center gap-0.5">
+                                <span>{player.fplPoints}</span>
+                                <span className={`text-[9px] opacity-60 group-hover:opacity-100 transition-opacity ${player.fplPoints < 0 ? 'text-red-600' : 'text-emerald-600'}`}>ℹ️</span>
+                              </div>
+                            </td>
                             <td className="py-3 px-2 text-center font-black text-neutral-900">{player.goals}</td>
                             <td className="py-3 px-2 text-center font-bold text-neutral-600">{player.assists}</td>
                             <td className="py-3 px-2 text-center font-bold text-neutral-600">{player.cleanSheets}</td>
@@ -1929,6 +2275,119 @@ export default function MatchClient({
                   )}
                 </div>
               )}
+
+              {/* POINTS BREAKDOWN MODAL */}
+              {selectedPlayerForBreakdown && (() => {
+                const p = selectedPlayerForBreakdown
+                const bd = p.breakdown
+                const teamName = getTeamName(p.teamId)
+
+                const items = bd ? [
+                  { key: 'goals', ...bd.goalPts, icon: '⚽' },
+                  { key: 'assists', ...bd.assistPts, icon: '👟' },
+                  { key: 'cleanSheets', ...bd.cleanSheetPts, icon: '🛡️' },
+                  { key: 'penaltySaves', ...bd.penaltySavePts, icon: '🧤' },
+                  { key: 'conceded', ...bd.concededPts, icon: '🛑' },
+                  { key: 'ownGoals', ...bd.ownGoalPts, icon: '🚨' },
+                  { key: 'yellowCards', ...bd.yellowPts, icon: '🟨' },
+                  { key: 'redCards', ...bd.redPts, icon: '🟥' },
+                  { key: 'motm', ...bd.mvpPts, icon: '⭐' },
+                  { key: 'appearances', ...bd.appearancePts, icon: '🏃' },
+                ] : []
+
+                return (
+                  <div className="fixed inset-0 bg-neutral-900/70 backdrop-blur-md flex items-center justify-center p-4 z-[90] animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl p-5 max-w-sm w-full shadow-2xl space-y-4 relative overflow-hidden">
+                      {/* Modal Header */}
+                      <div className="flex justify-between items-start pb-3 border-b border-neutral-100">
+                        <div className="flex items-center gap-3">
+                          {p.avatarUrl ? (
+                            <img src={p.avatarUrl} className="w-12 h-12 rounded-full object-cover border-2 border-emerald-500 shadow-sm shrink-0" alt={p.name} />
+                          ) : (
+                            <div className={`w-12 h-12 rounded-full font-black flex items-center justify-center text-base border-2 shadow-sm shrink-0 ${p.isGuest ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300'}`}>
+                              {p.name.charAt(0)}
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="font-black text-base text-neutral-900 leading-tight">{p.name}</h3>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-neutral-100 text-neutral-600 rounded">
+                                {p.position}
+                              </span>
+                              {teamName && (
+                                <span className="text-xs text-neutral-500 font-bold truncate max-w-[120px]">
+                                  • {teamName}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setSelectedPlayerForBreakdown(null)}
+                          className="text-neutral-400 hover:text-neutral-600 p-1.5 rounded-full hover:bg-neutral-100 transition-colors"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      {/* Total Points Banner */}
+                      <div className={`rounded-2xl p-3.5 flex justify-between items-center shadow-md ${
+                        p.fplPoints < 0
+                          ? 'bg-gradient-to-r from-red-600 to-rose-700 text-white'
+                          : 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white'
+                      }`}>
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-wider text-white/90">Group Points Earned</div>
+                          <div className="text-xs text-white/80 font-medium mt-0.5">Custom Scoring Rules</div>
+                        </div>
+                        <div className="text-2xl font-black bg-white/10 px-3 py-1 rounded-xl border border-white/20">
+                          {p.fplPoints} pts
+                        </div>
+                      </div>
+
+                      {/* Itemized Points Breakdown List */}
+                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        <div className="text-[10px] font-black uppercase tracking-wider text-neutral-400 px-1">
+                          Scoring Formula Breakdown
+                        </div>
+                        {items.map((item) => {
+                          const isNonZero = item.count !== 0 && item.total !== 0
+                          return (
+                            <div
+                              key={item.key}
+                              className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition-colors ${
+                                isNonZero
+                                  ? 'bg-neutral-50 border-neutral-200 font-semibold'
+                                  : 'bg-neutral-50/40 border-neutral-100 text-neutral-400 opacity-60'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm">{item.icon}</span>
+                                <div>
+                                  <span className="font-bold text-neutral-800">{item.label}</span>
+                                  <span className="text-[10px] text-neutral-400 block font-normal">
+                                    {item.count} × {item.weight > 0 ? `+${item.weight}` : item.weight} pts
+                                  </span>
+                                </div>
+                              </div>
+                              <div className={`font-black ${item.total > 0 ? 'text-emerald-600' : item.total < 0 ? 'text-red-600' : 'text-neutral-400'}`}>
+                                {item.total > 0 ? `+${item.total}` : item.total} pts
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <Button
+                        onClick={() => setSelectedPlayerForBreakdown(null)}
+                        className="w-full bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl text-xs font-bold py-2.5"
+                      >
+                        Close Breakdown
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })()}
 
               {activeReportTab === 'points' ? (
                 <MatchdayShareCard
@@ -2198,20 +2657,42 @@ export default function MatchClient({
       )}
 
       {/* Confirm Out Modal */}
-      {isConfirmOutOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <h3 className="font-bold text-xl text-neutral-900 mb-2">Are you sure?</h3>
-            <p className="text-neutral-600 mb-6 text-sm leading-relaxed">Your spot will be given to the next person on the waitlist. You will lose your guaranteed spot.</p>
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => setIsConfirmOutOpen(false)}>Cancel</Button>
-              <Button className="flex-1 h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white" onClick={() => executeRsvp('out')}>
-                Yes, I&apos;m Out
-              </Button>
+      {isConfirmOutOpen && (() => {
+        const myAssignedTeam = teams.find((t: any) => t.team_players?.some((tp: any) => tp.player_id === currentUser.id))
+        const isBlocked = myAssignedTeam && userRole !== 'admin'
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+              <h3 className="font-bold text-xl text-neutral-900 mb-2">
+                {isBlocked ? `Assigned to ${myAssignedTeam.name}` : 'Are you sure?'}
+              </h3>
+              <p className="text-neutral-600 mb-6 text-sm leading-relaxed">
+                {isBlocked
+                  ? `You are already assigned to ${myAssignedTeam.name} for this match. You cannot opt out directly. Please contact a Group Admin to opt out.`
+                  : myAssignedTeam
+                  ? `You are assigned to ${myAssignedTeam.name}. As an admin, opting out will remove you from the team.`
+                  : waitlistPlayers.length > 0
+                  ? 'Your spot will automatically be given to the next person on the waitlist. You will lose your guaranteed spot.'
+                  : 'Are you sure you want to change your status to I\'m Out?'}
+              </p>
+              <div className="flex gap-3">
+                {isBlocked ? (
+                  <Button className="w-full h-12 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold" onClick={() => setIsConfirmOutOpen(false)}>
+                    Got it
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" className="flex-1 h-12 rounded-xl font-bold" onClick={() => setIsConfirmOutOpen(false)}>Cancel</Button>
+                    <Button className="flex-1 h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold" onClick={() => executeRsvp('out')}>
+                      {isRsvpLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Yes, I\'m Out'}
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Cancel Match Modal */}
       {isCancelModalOpen && (
@@ -2294,6 +2775,10 @@ export default function MatchClient({
                   <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
                     {filteredMembers.map((m: any) => {
                       const isSelected = selectedMembersToAdd.includes(m.player_id)
+                      const prof = (m.profiles as any) || {}
+                      const hasSecondary = prof.secondary_position && prof.secondary_position !== prof.preferred_position
+                      const chosenPos = selectedMemberPositions[m.player_id] || prof.preferred_position || 'MID'
+
                       const handleToggle = () => {
                         if (isSelected) {
                           setSelectedMembersToAdd(prev => prev.filter(id => id !== m.player_id))
@@ -2304,11 +2789,39 @@ export default function MatchClient({
                       return (
                         <div
                           key={m.player_id}
-                          onClick={handleToggle}
-                          className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-green-50 border-green-200 text-green-800' : 'bg-neutral-50 border-neutral-100 hover:bg-neutral-100/50 text-neutral-800'}`}
+                          className={`p-2.5 rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-green-50 border-green-200 text-green-800' : 'bg-neutral-50 border-neutral-100 hover:bg-neutral-100/50 text-neutral-800'}`}
                         >
-                          <span className="font-semibold text-sm">{(m.profiles as any).full_name || 'Player'}</span>
-                          {isSelected && <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />}
+                          <div onClick={handleToggle} className="flex items-center justify-between">
+                            <span className="font-semibold text-sm">{prof.full_name || 'Player'}</span>
+                            {isSelected && <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />}
+                          </div>
+                          {isSelected && hasSecondary && (
+                            <div className="flex gap-1.5 mt-2 pt-2 border-t border-green-200/60" onClick={e => e.stopPropagation()}>
+                              <span className="text-[10px] font-bold text-green-700 self-center mr-1">Position:</span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMemberPositions(prev => ({ ...prev, [m.player_id]: prof.preferred_position || 'MID' }))}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                                  chosenPos === (prof.preferred_position || 'MID')
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'
+                                }`}
+                              >
+                                Primary ({prof.preferred_position || 'MID'})
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMemberPositions(prev => ({ ...prev, [m.player_id]: prof.secondary_position }))}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                                  chosenPos === prof.secondary_position
+                                    ? 'bg-blue-600 text-white border-blue-600'
+                                    : 'bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50'
+                                }`}
+                              >
+                                Secondary ({prof.secondary_position})
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )
                     })}
@@ -2399,8 +2912,8 @@ export default function MatchClient({
         const displayDomain = appUrl.replace(/https?:\/\//, '').replace(/\/$/, '')
 
         return (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 overflow-y-auto">
-            <div className="bg-neutral-900 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4">
+            <div className="bg-neutral-900 w-full max-w-sm max-h-[88vh] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
               <div className="flex justify-between items-center px-5 py-4 shrink-0 border-b border-neutral-800">
                 <h3 className="font-bold text-white text-lg">Share Squad</h3>
                 <button onClick={() => setSharingTeam(null)} className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400">
@@ -2409,10 +2922,10 @@ export default function MatchClient({
               </div>
 
               {/* Card Container to Capture */}
-              <div className="p-4 overflow-y-auto max-h-[60vh] flex justify-center bg-neutral-900">
+              <div className="p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 bg-neutral-900">
                 <div
                   ref={teamCardRef}
-                  className="w-[320px] rounded-2xl overflow-hidden relative shadow-lg shrink-0"
+                  className="w-[320px] mx-auto rounded-2xl relative shadow-lg"
                   style={{
                     background: teamTheme.gradient,
                     padding: '24px 20px',
@@ -2494,30 +3007,48 @@ export default function MatchClient({
                           No squad members assigned yet.
                         </p>
                       ) : (
-                        teamPlayers.map((player: any) => (
-                          <div
-                            key={player.id}
-                            className="flex justify-between items-center py-1.5 border-b last:border-none"
-                            style={{ borderColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(255, 255, 255, 0.05)' }}
-                          >
-                            <span
-                              className="text-xs font-bold flex items-center gap-1"
-                              style={{ color: teamTheme.text }}
+                        teamPlayers.map((player: any) => {
+                          const avatarUrl = player.avatarUrl || null
+                          const initials = (player.name || 'P').charAt(0).toUpperCase()
+                          return (
+                            <div
+                              key={player.id}
+                              className="flex justify-between items-center py-1.5 border-b last:border-none gap-2"
+                              style={{ borderColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(255, 255, 255, 0.05)' }}
                             >
-                              {player.name}
-                              {player.isCaptain && <span className="text-[8px] font-black bg-amber-400 text-neutral-900 px-1 py-0.2 rounded uppercase">C</span>}
-                              {player.isGuest && (
+                              <div className="flex items-center gap-2 min-w-0">
+                                {avatarUrl ? (
+                                  <img src={avatarUrl} className="w-5 h-5 rounded-full object-cover border border-white/40 shrink-0" alt={player.name} />
+                                ) : (
+                                  <div
+                                    className="w-5 h-5 rounded-full font-bold flex items-center justify-center text-[9px] shrink-0"
+                                    style={{
+                                      backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.15)' : 'rgba(255, 255, 255, 0.2)',
+                                      color: teamTheme.text
+                                    }}
+                                  >
+                                    {initials}
+                                  </div>
+                                )}
                                 <span
-                                  className="text-[8px] font-medium px-1 rounded"
-                                  style={{
-                                    backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.1)',
-                                    color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.6)'
-                                  }}
+                                  className="text-xs font-bold flex items-center gap-1 truncate"
+                                  style={{ color: teamTheme.text }}
                                 >
-                                  Guest
+                                  {player.name}
+                                  {player.isCaptain && <span className="text-[8px] font-black bg-amber-400 text-neutral-900 px-1 py-0.2 rounded uppercase">C</span>}
+                                  {player.isGuest && (
+                                    <span
+                                      className="text-[8px] font-medium px-1 rounded shrink-0"
+                                      style={{
+                                        backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.1)',
+                                        color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.6)'
+                                      }}
+                                    >
+                                      Guest
+                                    </span>
+                                  )}
                                 </span>
-                              )}
-                            </span>
+                              </div>
                             <span
                               className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider"
                               style={{
@@ -2529,8 +3060,9 @@ export default function MatchClient({
                               {player.position}
                             </span>
                           </div>
-                        ))
-                      )}
+                        )
+                      })
+                    )}
                     </div>
 
                     {/* Footer Url */}
@@ -2579,8 +3111,8 @@ export default function MatchClient({
         const groupName = (booking.groups as any).name || 'Match'
 
         return (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 overflow-y-auto">
-            <div className="bg-neutral-900 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4">
+            <div className="bg-neutral-900 w-full max-w-sm max-h-[88vh] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
               <div className="flex justify-between items-center px-5 py-4 shrink-0 border-b border-neutral-800">
                 <h3 className="font-bold text-white text-lg">Share Schedule</h3>
                 <button onClick={() => setSharingSchedule(false)} className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400">
@@ -2589,10 +3121,10 @@ export default function MatchClient({
               </div>
 
               {/* Card Container to Capture */}
-              <div className="p-4 overflow-y-auto max-h-[60vh] flex justify-center bg-neutral-900">
+              <div className="p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 bg-neutral-900">
                 <div
                   ref={scheduleCardRef}
-                  className="w-[320px] rounded-2xl overflow-hidden relative shadow-lg shrink-0"
+                  className="w-[320px] mx-auto rounded-2xl relative shadow-lg"
                   style={{
                     background: 'linear-gradient(135deg, #0b1528 0%, #030712 100%)',
                     padding: '24px 20px',
@@ -2763,6 +3295,91 @@ export default function MatchClient({
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* POSITION CHOICE MODAL */}
+      {isPositionModalOpen && myProfile && (
+        <div className="fixed inset-0 bg-neutral-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[70] animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-neutral-100">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center mb-4">
+              <Shield className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-neutral-900 mb-1">Confirm Match Position</h3>
+            <p className="text-xs text-neutral-500 mb-5">
+              You have a secondary position registered in your profile. Select which position you will play in for this match.
+            </p>
+
+            {myProfile?.secondary_position && myProfile?.secondary_position !== myProfile?.preferred_position && myProfile?.preferred_position !== 'Field Player' ? (
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPosInput(myProfile.preferred_position || 'MID')}
+                  className={`p-4 rounded-2xl border-2 transition-all text-center ${
+                    selectedPosInput === (myProfile.preferred_position || 'MID')
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600/30'
+                      : 'border-neutral-200 bg-neutral-50 text-neutral-600 hover:border-neutral-300'
+                  }`}
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 mb-1">Primary</div>
+                  <div className="text-xl font-black">{myProfile.preferred_position || 'MID'}</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedPosInput(myProfile.secondary_position!)}
+                  className={`p-4 rounded-2xl border-2 transition-all text-center ${
+                    selectedPosInput === myProfile.secondary_position
+                      ? 'border-blue-600 bg-blue-50 text-blue-900 ring-2 ring-blue-600/30'
+                      : 'border-neutral-200 bg-neutral-50 text-neutral-600 hover:border-neutral-300'
+                  }`}
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-blue-700 mb-1">Secondary</div>
+                  <div className="text-xl font-black">{myProfile.secondary_position}</div>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5 mb-6">
+                {[
+                  { pos: 'GK', name: 'Goalkeeper', color: 'bg-emerald-50 text-emerald-900 border-emerald-600' },
+                  { pos: 'DEF', name: 'Defender', color: 'bg-blue-50 text-blue-900 border-blue-600' },
+                  { pos: 'MID', name: 'Midfielder', color: 'bg-amber-50 text-amber-900 border-amber-600' },
+                  { pos: 'ATT', name: 'Attacker', color: 'bg-rose-50 text-rose-900 border-rose-600' }
+                ].map(item => (
+                  <button
+                    key={item.pos}
+                    type="button"
+                    onClick={() => setSelectedPosInput(item.pos)}
+                    className={`p-3 rounded-2xl border-2 font-bold text-center transition-all ${
+                      selectedPosInput === item.pos
+                        ? `${item.color} ring-2 ring-emerald-600/30`
+                        : 'bg-neutral-50 border-neutral-200 text-neutral-700 hover:border-neutral-300'
+                    }`}
+                  >
+                    <div className="text-xs uppercase opacity-75">{item.name}</div>
+                    <div className="text-lg font-black">{item.pos}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setIsPositionModalOpen(false)}
+                className="flex-1 h-12 rounded-xl text-neutral-600 font-bold"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => executeRsvp('in', selectedPosInput)}
+                disabled={isRsvpLoading}
+                className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md"
+              >
+                {isRsvpLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Confirm'}
+              </Button>
+            </div>
           </div>
         </div>
       )}
