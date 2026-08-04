@@ -2,7 +2,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getGroupScoringSettings, calculateTournamentPlayerPoints } from '@/lib/tournamentScoring'
+import { getGroupScoringSettings, calculateTournamentPlayerPoints, calculateMatchPlayerPitchTime } from '@/lib/tournamentScoring'
 
 export async function GET(req: Request, { params }: { params: { groupId: string } }) {
   const supabaseAuth = createClient()
@@ -93,7 +93,26 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
       return !isDnp
     }).length
 
-    const motmCount = matchSchedules.filter(ms => ms.status === 'completed' && ms.motm_player_id === pId).length
+    const motmCount = matchSchedules.filter(ms => ms.status === 'completed' && (ms.motm_player_id === pId || ms.mvp_player_id === pId)).length
+
+    // Calculate goals conceded on pitch across all completed matches for this player
+    let pGoalsConcededOnPitch = 0
+    matchSchedules.forEach(ms => {
+      if (ms.status !== 'completed') return
+      const isHome = myTeams.includes(ms.home_team_id)
+      const isAway = myTeams.includes(ms.away_team_id)
+      if (!isHome && !isAway) return
+      if ((ms.dnp_player_ids || []).includes(pId)) return
+
+      const msEvents = matchEvents.filter(e => e.match_schedule_id === ms.id)
+      const homeTeamPids = teamPlayers.filter(tp => tp.team_id === ms.home_team_id).map(tp => tp.player_id)
+      const awayTeamPids = teamPlayers.filter(tp => tp.team_id === ms.away_team_id).map(tp => tp.player_id)
+      const startingPids = ms.starting_player_ids || [...homeTeamPids, ...awayTeamPids]
+      const duration = ms.duration_minutes || 30
+
+      const pitchResult = calculateMatchPlayerPitchTime(msEvents, duration, homeTeamPids, awayTeamPids, startingPids)
+      pGoalsConcededOnPitch += (pitchResult.goalsConcededOnPitch[pId] || 0)
+    })
 
     const { totalPoints: fplPoints } = calculateTournamentPlayerPoints(
       m.profiles?.preferred_position,
@@ -102,7 +121,7 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
         assists: pAssists,
         cleanSheets: pCleanSheets,
         penaltySaves: pPenaltySaves,
-        goalsConcededOnPitch: 0,
+        goalsConcededOnPitch: pGoalsConcededOnPitch,
         ownGoals: pOwnGoals,
         yellowCards: pYellowCards,
         redCards: pRedCards,

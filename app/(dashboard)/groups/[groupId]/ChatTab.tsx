@@ -3,7 +3,6 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Send, Loader2 } from 'lucide-react'
 

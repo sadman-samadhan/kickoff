@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { rsvpAction } from '../../actions'
 import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction, reorderMatchesAction, addManualMatchAction, updateRsvpPositionAction } from './actions'
 import { calculateFplPoints } from '@/lib/fpl'
-import { getGroupScoringSettings, calculateTournamentPlayerPoints, PlayerPointsBreakdown } from '@/lib/tournamentScoring'
+import { getGroupScoringSettings, calculateTournamentPlayerPoints, calculateMatchPlayerPitchTime, PlayerPointsBreakdown } from '@/lib/tournamentScoring'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ConfirmModal from '@/components/modals/ConfirmModal'
@@ -203,7 +203,8 @@ export default function MatchClient({
         name: tp.profiles?.full_name || 'Player',
         position: pos,
         isCaptain,
-        isGuest: false
+        isGuest: false,
+        avatarUrl: tp.profiles?.avatar_url || rsvp?.profiles?.avatar_url || null
       })
     })
 
@@ -225,7 +226,8 @@ export default function MatchClient({
           name,
           position: pos,
           isCaptain,
-          isGuest: true
+          isGuest: true,
+          avatarUrl: null
         })
       }
     })
@@ -722,6 +724,7 @@ export default function MatchClient({
     yellowCards: number
     redCards: number
     penaltySaves: number
+    goalsConcededOnPitch?: number
     breakdown?: PlayerPointsBreakdown
     fplPoints: number
     teamPoints: number
@@ -753,6 +756,7 @@ export default function MatchClient({
       yellowCards: 0,
       redCards: 0,
       penaltySaves: 0,
+      goalsConcededOnPitch: 0,
       fplPoints: 0,
       teamPoints: teamStats ? teamStats.points : 0
     }
@@ -819,7 +823,7 @@ export default function MatchClient({
     }
   })
 
-  // Calculate appearances, clean sheets, and MOTM awards
+  // Calculate appearances, clean sheets, goals conceded, and MOTM/MVP awards
   matchSchedule.forEach((match: any) => {
     if (match.status === 'completed') {
       const homeScore = match.home_score || 0
@@ -846,11 +850,26 @@ export default function MatchClient({
           }
         }
 
-        // MOTM bonus check
-        if (match.motm_player_id && match.motm_player_id === p.id) {
+        // MOTM / MVP bonus check
+        const isMotmWinner = (match.motm_player_id && match.motm_player_id === p.id) || (match.mvp_player_id && match.mvp_player_id === p.id)
+        if (isMotmWinner) {
           p.motmCount += 1
         } else if (match.motm_guest_name && p.isGuest && match.motm_guest_name === p.name) {
           p.motmCount += 1
+        }
+      })
+
+      // Calculate goals conceded on pitch for this match
+      const mEvents = (matchEvents || []).filter((e: any) => e.match_schedule_id === match.id)
+      const homePids = Object.values(playerStatsMap).filter(p => p.teamId === match.home_team_id).map(p => p.id)
+      const awayPids = Object.values(playerStatsMap).filter(p => p.teamId === match.away_team_id).map(p => p.id)
+      const startingPids = match.starting_player_ids || [...homePids, ...awayPids]
+      const duration = match.duration_minutes || 30
+
+      const pitchResult = calculateMatchPlayerPitchTime(mEvents, duration, homePids, awayPids, startingPids)
+      Object.entries(pitchResult.goalsConcededOnPitch).forEach(([pid, gc]) => {
+        if (playerStatsMap[pid]) {
+          playerStatsMap[pid].goalsConcededOnPitch = (playerStatsMap[pid].goalsConcededOnPitch || 0) + gc
         }
       })
     }
@@ -865,7 +884,7 @@ export default function MatchClient({
         assists: p.assists,
         cleanSheets: p.cleanSheets,
         penaltySaves: p.penaltySaves,
-        goalsConcededOnPitch: 0,
+        goalsConcededOnPitch: p.goalsConcededOnPitch || 0,
         ownGoals: p.ownGoals,
         yellowCards: p.yellowCards,
         redCards: p.redCards,
@@ -1691,13 +1710,25 @@ export default function MatchClient({
                             const isCaptain = team.captain_id === tp.player_id
                             const rsvp = rsvps.find((r: any) => r.player_id === tp.player_id)
                             const pos = rsvp?.selected_position || rsvp?.profiles?.preferred_position || 'Field Player'
+                            const avatarUrl = tp.profiles?.avatar_url || rsvp?.profiles?.avatar_url || null
+                            const fullName = tp.profiles?.full_name || 'Player'
+                            const initials = fullName.charAt(0).toUpperCase()
                             return (
-                              <div key={tp.player_id} className="flex justify-between items-center py-1 border-b border-neutral-100/50 last:border-0">
-                                <span className="font-semibold flex items-center gap-1">
-                                  {tp.profiles?.full_name || 'Player'}
-                                  {isCaptain && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase">C</span>}
-                                </span>
-                                <span className={`text-[9px] font-bold px-1 py-0.5 rounded border uppercase tracking-wider ${getPositionColor(pos)}`}>
+                              <div key={tp.player_id} className="flex justify-between items-center py-1.5 border-b border-neutral-100/50 last:border-0">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {avatarUrl ? (
+                                    <img src={avatarUrl} className="w-6 h-6 rounded-full object-cover border border-neutral-200 shrink-0" alt={fullName} />
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-full font-bold flex items-center justify-center bg-neutral-200 text-neutral-600 text-[10px] shrink-0">
+                                      {initials}
+                                    </div>
+                                  )}
+                                  <span className="font-semibold flex items-center gap-1.5 truncate text-neutral-900">
+                                    {fullName}
+                                    {isCaptain && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase">C</span>}
+                                  </span>
+                                </div>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider shrink-0 ${getPositionColor(pos)}`}>
                                   {pos}
                                 </span>
                               </div>
@@ -1708,13 +1739,20 @@ export default function MatchClient({
                             if (!rsvp) return null
                             const isCaptain = team.captain_id === `guest_${rsvp.id}`
                             const pos = rsvp.guest_position || 'Field Player'
+                            const guestName = rsvp.guest_name || 'Guest'
+                            const initials = guestName.charAt(0).toUpperCase()
                             return (
-                              <div key={gId} className="flex justify-between items-center py-1 border-b border-neutral-100/50 last:border-0">
-                                <span className="font-semibold text-neutral-600 flex items-center gap-1">
-                                  {rsvp.guest_name} <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded">Guest</span>
-                                  {isCaptain && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase">C</span>}
-                                </span>
-                                <span className={`text-[9px] font-bold px-1 py-0.5 rounded border uppercase tracking-wider ${getPositionColor(pos)}`}>
+                              <div key={gId} className="flex justify-between items-center py-1.5 border-b border-neutral-100/50 last:border-0">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-6 h-6 rounded-full font-bold flex items-center justify-center bg-amber-100 text-amber-800 text-[10px] shrink-0 border border-amber-200">
+                                    {initials}
+                                  </div>
+                                  <span className="font-semibold text-neutral-600 flex items-center gap-1.5 truncate">
+                                    {guestName} <span className="text-[8px] bg-amber-100 text-amber-700 px-1 rounded">Guest</span>
+                                    {isCaptain && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1 py-0.2 rounded uppercase">C</span>}
+                                  </span>
+                                </div>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider shrink-0 ${getPositionColor(pos)}`}>
                                   {pos}
                                 </span>
                               </div>
@@ -1977,11 +2015,12 @@ export default function MatchClient({
                                   })
 
                                   const mvpName = (() => {
-                                    if (!match.mvp_player_id) return null
-                                    const cleanId = match.mvp_player_id.replace('guest_', '').trim()
-                                    const foundRsvp = rsvps.find((r: any) => r.player_id === match.mvp_player_id || r.id === cleanId || r.guest_name === match.mvp_player_id)
+                                    const mvpId = match.mvp_player_id || match.motm_player_id
+                                    if (!mvpId) return null
+                                    const cleanId = mvpId.replace('guest_', '').trim()
+                                    const foundRsvp = rsvps.find((r: any) => r.player_id === mvpId || r.id === cleanId || r.guest_name === mvpId)
                                     if (foundRsvp) return foundRsvp.profiles?.full_name || foundRsvp.guest_name || null
-                                    const foundPlayer = allPlayersForTeam.find((p: any) => p.id === match.mvp_player_id || p.rsvpId === cleanId || p.name === match.mvp_player_id)
+                                    const foundPlayer = allPlayersForTeam.find((p: any) => p.id === mvpId || p.rsvpId === cleanId || p.name === mvpId)
                                     if (foundPlayer) return foundPlayer.name
                                     return null
                                   })()
@@ -2846,8 +2885,8 @@ export default function MatchClient({
         const displayDomain = appUrl.replace(/https?:\/\//, '').replace(/\/$/, '')
 
         return (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 overflow-y-auto">
-            <div className="bg-neutral-900 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4">
+            <div className="bg-neutral-900 w-full max-w-sm max-h-[88vh] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
               <div className="flex justify-between items-center px-5 py-4 shrink-0 border-b border-neutral-800">
                 <h3 className="font-bold text-white text-lg">Share Squad</h3>
                 <button onClick={() => setSharingTeam(null)} className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400">
@@ -2856,10 +2895,10 @@ export default function MatchClient({
               </div>
 
               {/* Card Container to Capture */}
-              <div className="p-4 overflow-y-auto max-h-[60vh] flex justify-center bg-neutral-900">
+              <div className="p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 bg-neutral-900">
                 <div
                   ref={teamCardRef}
-                  className="w-[320px] rounded-2xl overflow-hidden relative shadow-lg shrink-0"
+                  className="w-[320px] mx-auto rounded-2xl relative shadow-lg"
                   style={{
                     background: teamTheme.gradient,
                     padding: '24px 20px',
@@ -2941,30 +2980,48 @@ export default function MatchClient({
                           No squad members assigned yet.
                         </p>
                       ) : (
-                        teamPlayers.map((player: any) => (
-                          <div
-                            key={player.id}
-                            className="flex justify-between items-center py-1.5 border-b last:border-none"
-                            style={{ borderColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(255, 255, 255, 0.05)' }}
-                          >
-                            <span
-                              className="text-xs font-bold flex items-center gap-1"
-                              style={{ color: teamTheme.text }}
+                        teamPlayers.map((player: any) => {
+                          const avatarUrl = player.avatarUrl || null
+                          const initials = (player.name || 'P').charAt(0).toUpperCase()
+                          return (
+                            <div
+                              key={player.id}
+                              className="flex justify-between items-center py-1.5 border-b last:border-none gap-2"
+                              style={{ borderColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(255, 255, 255, 0.05)' }}
                             >
-                              {player.name}
-                              {player.isCaptain && <span className="text-[8px] font-black bg-amber-400 text-neutral-900 px-1 py-0.2 rounded uppercase">C</span>}
-                              {player.isGuest && (
+                              <div className="flex items-center gap-2 min-w-0">
+                                {avatarUrl ? (
+                                  <img src={avatarUrl} className="w-5 h-5 rounded-full object-cover border border-white/40 shrink-0" alt={player.name} />
+                                ) : (
+                                  <div
+                                    className="w-5 h-5 rounded-full font-bold flex items-center justify-center text-[9px] shrink-0"
+                                    style={{
+                                      backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.15)' : 'rgba(255, 255, 255, 0.2)',
+                                      color: teamTheme.text
+                                    }}
+                                  >
+                                    {initials}
+                                  </div>
+                                )}
                                 <span
-                                  className="text-[8px] font-medium px-1 rounded"
-                                  style={{
-                                    backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.1)',
-                                    color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.6)'
-                                  }}
+                                  className="text-xs font-bold flex items-center gap-1 truncate"
+                                  style={{ color: teamTheme.text }}
                                 >
-                                  Guest
+                                  {player.name}
+                                  {player.isCaptain && <span className="text-[8px] font-black bg-amber-400 text-neutral-900 px-1 py-0.2 rounded uppercase">C</span>}
+                                  {player.isGuest && (
+                                    <span
+                                      className="text-[8px] font-medium px-1 rounded shrink-0"
+                                      style={{
+                                        backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.1)',
+                                        color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.6)'
+                                      }}
+                                    >
+                                      Guest
+                                    </span>
+                                  )}
                                 </span>
-                              )}
-                            </span>
+                              </div>
                             <span
                               className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider"
                               style={{
@@ -2976,8 +3033,9 @@ export default function MatchClient({
                               {player.position}
                             </span>
                           </div>
-                        ))
-                      )}
+                        )
+                      })
+                    )}
                     </div>
 
                     {/* Footer Url */}
@@ -3026,8 +3084,8 @@ export default function MatchClient({
         const groupName = (booking.groups as any).name || 'Match'
 
         return (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4 overflow-y-auto">
-            <div className="bg-neutral-900 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4">
+            <div className="bg-neutral-900 w-full max-w-sm max-h-[88vh] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
               <div className="flex justify-between items-center px-5 py-4 shrink-0 border-b border-neutral-800">
                 <h3 className="font-bold text-white text-lg">Share Schedule</h3>
                 <button onClick={() => setSharingSchedule(false)} className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400">
@@ -3036,10 +3094,10 @@ export default function MatchClient({
               </div>
 
               {/* Card Container to Capture */}
-              <div className="p-4 overflow-y-auto max-h-[60vh] flex justify-center bg-neutral-900">
+              <div className="p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 bg-neutral-900">
                 <div
                   ref={scheduleCardRef}
-                  className="w-[320px] rounded-2xl overflow-hidden relative shadow-lg shrink-0"
+                  className="w-[320px] mx-auto rounded-2xl relative shadow-lg"
                   style={{
                     background: 'linear-gradient(135deg, #0b1528 0%, #030712 100%)',
                     padding: '24px 20px',

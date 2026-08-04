@@ -3,7 +3,6 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import Image from 'next/image'
 import { format, parseISO } from 'date-fns'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'

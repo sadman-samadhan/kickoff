@@ -311,11 +311,12 @@ export async function updateMatchMvpAction(
 
   const { error } = await admin
     .from('match_schedule')
-    .update({ mvp_player_id: mvpPlayerId })
+    .update({ mvp_player_id: mvpPlayerId, motm_player_id: mvpPlayerId })
     .eq('id', matchId)
 
-  if (error && error.message?.includes('mvp_player_id')) {
-    console.warn('mvp_player_id column missing on match_schedule table')
+  if (error && (error.message?.includes('mvp_player_id') || error.message?.includes('motm_player_id'))) {
+    await admin.from('match_schedule').update({ motm_player_id: mvpPlayerId }).eq('id', matchId)
+    await admin.from('match_schedule').update({ mvp_player_id: mvpPlayerId }).eq('id', matchId)
   } else if (error) {
     throw new Error(error.message)
   }

@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   Clock,
   Trash2,
-  Users,
   Loader2,
   Play,
   Pause,
@@ -17,9 +16,6 @@ import {
   Crown,
   Share2,
   X,
-  Check,
-  Shield,
-  Sparkles,
   Download
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -28,7 +24,6 @@ import {
   deleteMatchEventAction,
   updateMatchDurationAction,
   updateMatchStatusAction,
-  updateMatchScoreAction,
   updateStartingLineupAction,
   updateMatchMvpAction
 } from './gameActions'
@@ -196,6 +191,7 @@ export default function GameDetailsClient({
     if (elapsedSeconds >= maxAllowedSeconds) {
       handleNextPeriod()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elapsedSeconds, timerState, halfDuration])
 
   const getCurrentMatchMinute = () => {
@@ -540,9 +536,10 @@ export default function GameDetailsClient({
   const handleSelectMvp = async (pid: string) => {
     if (!isAdmin) return
     setIsUpdatingMvp(true)
-    setSelectedMvpId(pid)
+    const nextId = selectedMvpId === pid ? null : pid
+    setSelectedMvpId(nextId)
     try {
-      await updateMatchMvpAction(matchId, bookingId, groupId, pid)
+      await updateMatchMvpAction(matchId, bookingId, groupId, nextId)
     } catch (e: any) {
       alert(e.message || 'Failed to update MVP')
     } finally {
@@ -833,9 +830,22 @@ export default function GameDetailsClient({
                 <span className="text-xs font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
                   <Crown className="w-4 h-4 text-amber-500" /> Select Match MVP
                 </span>
-                {isUpdatingMvp && <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />}
+                <div className="flex items-center gap-2">
+                  {selectedMvpId && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleSelectMvp(selectedMvpId)}
+                      disabled={isUpdatingMvp}
+                      className="text-[11px] font-bold text-red-600 hover:text-red-700 hover:bg-red-50 h-7 px-2.5 rounded-lg border border-red-200/60"
+                    >
+                      Clear MVP
+                    </Button>
+                  )}
+                  {isUpdatingMvp && <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />}
+                </div>
               </div>
-              <p className="text-[11px] text-amber-700 font-medium">Match finished! Select the player of the match.</p>
+              <p className="text-[11px] text-amber-700 font-medium">Match finished! Tap a player to select MVP, or tap a selected MVP to clear.</p>
 
               {/* Home Team MVP Row */}
               <div className="space-y-1">
@@ -1523,128 +1533,178 @@ export default function GameDetailsClient({
         )
       })()}
 
+      {/* LOG PENALTY SAVE MODAL */}
+      {penModal.isOpen && (
+        <div className="fixed inset-0 bg-neutral-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[70]">
+          <div className="bg-white rounded-3xl p-5 max-w-sm w-full shadow-2xl space-y-3">
+            <h3 className="font-bold text-base text-neutral-900">🧤 Log Penalty Save</h3>
+
+            <div>
+              <label className="text-xs font-bold text-neutral-600 block mb-1">Player</label>
+              <OptionSelector
+                options={allPlayers.map((p) => ({
+                  value: p.id,
+                  label: p.full_name,
+                  avatarUrl: p.avatar_url,
+                }))}
+                value={penModal.playerId}
+                onChange={(val) => setPenModal((prev) => ({ ...prev, playerId: val }))}
+                placeholder="Select Goalkeeper / Player..."
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-neutral-600">Minute:</label>
+              <input
+                type="number"
+                className="w-20 p-2 bg-neutral-50 border rounded-xl font-bold text-xs text-center"
+                value={penModal.minute}
+                onChange={(e) => setPenModal((prev) => ({ ...prev, minute: parseInt(e.target.value) || 0 }))}
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setPenModal((prev) => ({ ...prev, isOpen: false }))}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                onClick={handleLogPenaltySave}
+                disabled={isLogging}
+              >
+                {isLogging ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Log Penalty Save'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SHAREABLE MATCH CARD MODAL */}
       {isShareModalOpen && (
-        <div className="fixed inset-0 bg-neutral-900/70 backdrop-blur-md flex items-center justify-center p-4 z-[80] animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl p-5 max-w-sm w-full shadow-2xl space-y-4 relative overflow-hidden">
-            <div className="flex justify-between items-center pb-2 border-b">
-              <h3 className="font-bold text-base text-neutral-900">Share Match Card</h3>
+        <div className="fixed inset-0 bg-neutral-950/75 backdrop-blur-md flex items-center justify-center p-4 z-[80] animate-in fade-in duration-200">
+          <div className="bg-neutral-900 rounded-3xl max-w-sm w-full max-h-[88vh] shadow-2xl flex flex-col my-auto border border-neutral-800 overflow-hidden">
+            {/* Fixed Header */}
+            <div className="flex justify-between items-center px-5 py-4 shrink-0 border-b border-neutral-800">
+              <h3 className="font-bold text-base text-white">Share Match Card</h3>
               <button
                 onClick={() => setIsShareModalOpen(false)}
-                className="text-neutral-400 hover:text-neutral-600 p-1"
+                className="text-neutral-400 hover:text-white p-1 rounded-full hover:bg-neutral-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* DOM Element to Capture with html-to-image */}
-            <div
-              ref={shareCardRef}
-              className="bg-neutral-900 text-white rounded-3xl p-5 shadow-xl border border-neutral-800 space-y-4 relative"
-            >
-              {/* Match Card Top Badge */}
-              <div className="text-center space-y-1">
-                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                  Match Summary • #{match.match_number}
-                </span>
-                <h3 className="text-base font-black text-white pt-1">{match.stage_name || 'Group Stage'}</h3>
-              </div>
-
-              {/* Score Display */}
-              <div className="flex items-center justify-around py-3 bg-neutral-850/80 rounded-2xl border border-neutral-800">
-                <div className="text-center">
-                  <div
-                    className="w-11 h-11 rounded-2xl mx-auto mb-1 flex items-center justify-center font-black text-white text-sm shadow border"
-                    style={{ backgroundColor: homeTeam?.jersey_color || '#16a34a', borderColor: 'rgba(255,255,255,0.2)' }}
-                  >
-                    {(homeTeam?.name || 'H').charAt(0)}
-                  </div>
-                  <span className="text-xs font-bold text-neutral-200 block truncate max-w-[90px]">{homeTeam?.name}</span>
+            {/* Scrollable Card Container */}
+            <div className="p-4 overflow-y-auto flex-1 min-h-0 bg-neutral-900">
+              {/* DOM Element to Capture with html-to-image */}
+              <div
+                ref={shareCardRef}
+                className="bg-neutral-950 text-white rounded-3xl p-5 shadow-xl border border-neutral-800 space-y-4 relative"
+              >
+                {/* Match Card Top Badge */}
+                <div className="text-center space-y-1">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                    Match Summary • #{match.match_number}
+                  </span>
+                  <h3 className="text-base font-black text-white pt-1">{match.stage_name || 'Group Stage'}</h3>
                 </div>
 
-                <div className="text-center">
-                  <div className="text-3xl font-black tracking-tight text-white">
-                    {dynamicHomeScore} - {dynamicAwayScore}
+                {/* Score Display */}
+                <div className="flex items-center justify-around py-3 bg-neutral-900/90 rounded-2xl border border-neutral-800">
+                  <div className="text-center">
+                    <div
+                      className="w-11 h-11 rounded-2xl mx-auto mb-1 flex items-center justify-center font-black text-white text-sm shadow border"
+                      style={{ backgroundColor: homeTeam?.jersey_color || '#16a34a', borderColor: 'rgba(255,255,255,0.2)' }}
+                    >
+                      {(homeTeam?.name || 'H').charAt(0)}
+                    </div>
+                    <span className="text-xs font-bold text-neutral-200 block truncate max-w-[90px]">{homeTeam?.name}</span>
                   </div>
-                  <span className="text-[9px] font-extrabold uppercase tracking-widest text-emerald-400">FULL-TIME</span>
+
+                  <div className="text-center">
+                    <div className="text-3xl font-black tracking-tight text-white">
+                      {dynamicHomeScore} - {dynamicAwayScore}
+                    </div>
+                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-emerald-400">FULL-TIME</span>
+                  </div>
+
+                  <div className="text-center">
+                    <div
+                      className="w-11 h-11 rounded-2xl mx-auto mb-1 flex items-center justify-center font-black text-white text-sm shadow border"
+                      style={{ backgroundColor: awayTeam?.jersey_color || '#2563eb', borderColor: 'rgba(255,255,255,0.2)' }}
+                    >
+                      {(awayTeam?.name || 'A').charAt(0)}
+                    </div>
+                    <span className="text-xs font-bold text-neutral-200 block truncate max-w-[90px]">{awayTeam?.name}</span>
+                  </div>
                 </div>
 
-                <div className="text-center">
-                  <div
-                    className="w-11 h-11 rounded-2xl mx-auto mb-1 flex items-center justify-center font-black text-white text-sm shadow border"
-                    style={{ backgroundColor: awayTeam?.jersey_color || '#2563eb', borderColor: 'rgba(255,255,255,0.2)' }}
-                  >
-                    {(awayTeam?.name || 'A').charAt(0)}
+                {/* Match MVP Badge */}
+                {selectedMvpPlayer && (
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-2.5 text-center space-y-0.5">
+                    <div className="flex items-center justify-center gap-1 text-amber-400 font-black text-xs uppercase tracking-wider">
+                      <Crown className="w-3.5 h-3.5" /> Match MVP
+                    </div>
+                    <div className="text-sm font-black text-white">{selectedMvpPlayer.full_name}</div>
                   </div>
-                  <span className="text-xs font-bold text-neutral-200 block truncate max-w-[90px]">{awayTeam?.name}</span>
-                </div>
-              </div>
+                )}
 
-              {/* Match MVP Badge */}
-              {selectedMvpPlayer && (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-2.5 text-center space-y-0.5">
-                  <div className="flex items-center justify-center gap-1 text-amber-400 font-black text-xs uppercase tracking-wider">
-                    <Crown className="w-3.5 h-3.5" /> Match MVP
-                  </div>
-                  <div className="text-sm font-black text-white">{selectedMvpPlayer.full_name}</div>
-                </div>
-              )}
-
-              {/* Scorers Summary */}
-              <div className="space-y-1.5 pt-1 border-t border-neutral-800">
-                <span className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block text-center">
-                  Goal Scorers
-                </span>
-                <div className="grid grid-cols-[1fr_auto_1fr] gap-2 text-[11px]">
-                  <div className="space-y-1 text-left text-neutral-300 font-semibold">
-                    {homeScorers.length > 0 ? (
-                      homeScorers.map((s) => (
-                        <div key={s.id}>
-                          {s.lastName} {s.minute}&apos; {s.isOwnGoal && '(OG)'}
-                        </div>
-                      ))
-                    ) : (
-                      <span className="text-neutral-600 text-[10px] italic">No goals</span>
-                    )}
-                  </div>
-                  <div className="text-center text-neutral-600">⚽</div>
-                  <div className="space-y-1 text-right text-neutral-300 font-semibold">
-                    {awayScorers.length > 0 ? (
-                      awayScorers.map((s) => (
-                        <div key={s.id}>
-                          {s.lastName} {s.minute}&apos; {s.isOwnGoal && '(OG)'}
-                        </div>
-                      ))
-                    ) : (
-                      <span className="text-neutral-600 text-[10px] italic">No goals</span>
-                    )}
+                {/* Scorers Summary */}
+                <div className="space-y-1.5 pt-1 border-t border-neutral-800">
+                  <span className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block text-center">
+                    Goal Scorers
+                  </span>
+                  <div className="grid grid-cols-[1fr_auto_1fr] gap-2 text-[11px]">
+                    <div className="space-y-1 text-left text-neutral-300 font-semibold">
+                      {homeScorers.length > 0 ? (
+                        homeScorers.map((s) => (
+                          <div key={s.id}>
+                            {s.lastName} {s.minute}&apos; {s.isOwnGoal && '(OG)'}
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-neutral-500 text-[10px] italic">No goals</span>
+                      )}
+                    </div>
+                    <div className="text-center text-neutral-500">⚽</div>
+                    <div className="space-y-1 text-right text-neutral-300 font-semibold">
+                      {awayScorers.length > 0 ? (
+                        awayScorers.map((s) => (
+                          <div key={s.id}>
+                            {s.lastName} {s.minute}&apos; {s.isOwnGoal && '(OG)'}
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-neutral-500 text-[10px] italic">No goals</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Action Buttons: Share to Social & Download PNG */}
-            <div className="flex gap-2 pt-1">
+            {/* Fixed Action Buttons */}
+            <div className="p-4 shrink-0 border-t border-neutral-800 flex gap-3 bg-neutral-900">
+              <Button
+                onClick={handleDownloadMatchCardImage}
+                disabled={isGeneratingShareImage}
+                variant="outline"
+                className="flex-1 h-11 rounded-xl bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700 font-bold text-xs flex items-center justify-center gap-1.5"
+              >
+                <Download className="w-4 h-4" /> Save
+              </Button>
               <Button
                 onClick={handleShareMatchCardImage}
                 disabled={isGeneratingShareImage}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl h-11 shadow-md flex items-center justify-center gap-1.5 text-xs"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl h-11 flex items-center justify-center gap-1.5 text-xs"
               >
                 {isGeneratingShareImage ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
-                    <Share2 className="w-4 h-4" /> Share Card
+                    <Share2 className="w-4 h-4" /> Share
                   </>
                 )}
-              </Button>
-              <Button
-                onClick={handleDownloadMatchCardImage}
-                disabled={isGeneratingShareImage}
-                variant="outline"
-                className="flex-1 rounded-xl font-bold h-11 text-neutral-700 border-neutral-200 flex items-center justify-center gap-1.5 text-xs"
-              >
-                <Download className="w-4 h-4" /> Download
               </Button>
             </div>
           </div>

@@ -168,6 +168,7 @@ export async function updateMatchScoreAction(
     dnp_player_ids: fantasyData?.dnpPlayerIds || [],
     dnp_guest_names: fantasyData?.dnpGuestNames || [],
     motm_player_id: fantasyData?.motmPlayerId || null,
+    mvp_player_id: fantasyData?.motmPlayerId || null,
     motm_guest_name: fantasyData?.motmGuestName || null
   }).eq('id', matchScheduleId)
 
