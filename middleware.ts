@@ -4,17 +4,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
-  // ─── Skip auth for static/public assets ───
-  if (
-    pathname === '/manifest.json' ||
-    pathname === '/sw.js' ||
-    pathname === '/favicon.ico' ||
-    pathname.startsWith('/icons') ||
-    pathname.startsWith('/_next')
-  ) {
-    return NextResponse.next()
-  }
-
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -28,7 +17,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({
             request,
           })
@@ -40,11 +29,11 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-
+  // Refreshes the session cookie and reads the signed-in user from the access token.
+  // With asymmetric JWT signing keys enabled in Supabase this is checked locally (no network call);
+  // otherwise it falls back to asking Supabase Auth, same as before.
+  const { data } = await supabase.auth.getClaims()
+  const isSignedIn = !!data?.claims?.sub
 
   // ─── Public routes: magic link RSVP ───
   if (pathname.startsWith('/rsvp')) {
@@ -52,7 +41,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // ─── Redirect logged-in users from landing page to dashboard ───
-  if (pathname === '/' && user) {
+  if (pathname === '/' && isSignedIn) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
@@ -65,7 +54,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/match-history') ||
     pathname.startsWith('/profile')
 
-  if (isProtectedRoute && !user) {
+  if (isProtectedRoute && !isSignedIn) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
@@ -74,7 +63,7 @@ export async function middleware(request: NextRequest) {
   // ─── Redirect logged-in users away from auth pages ───
   const isAuthRoute = pathname === '/login' || pathname === '/register'
 
-  if (isAuthRoute && user) {
+  if (isAuthRoute && isSignedIn) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
@@ -85,6 +74,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icons|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Skip API routes (they check auth themselves), static files, the service worker and its chunks.
+    '/((?!api/|_next/static|_next/image|favicon.ico|icons/|images/|manifest.json|sw.js|workbox-|worker-|swe-worker-|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|woff2?|map)$).*)',
   ],
 }

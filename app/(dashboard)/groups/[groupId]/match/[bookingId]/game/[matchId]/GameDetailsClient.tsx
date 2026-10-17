@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { toPng } from 'html-to-image'
+import { toPng } from '@/lib/toPng'
 import {
   ChevronLeft,
   Clock,

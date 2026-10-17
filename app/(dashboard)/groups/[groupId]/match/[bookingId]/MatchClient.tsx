@@ -14,12 +14,14 @@ import { getGroupScoringSettings, calculateTournamentPlayerPoints, calculateMatc
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ConfirmModal from '@/components/modals/ConfirmModal'
-import MatchdayShareCard from '@/components/cards/MatchdayShareCard'
-import TopPlayersShareCard from '@/components/cards/TopPlayersShareCard'
+import dynamic from 'next/dynamic'
+// Share cards (and their QR code library) load in their own chunk.
+const MatchdayShareCard = dynamic(() => import('@/components/cards/MatchdayShareCard'))
+const TopPlayersShareCard = dynamic(() => import('@/components/cards/TopPlayersShareCard'))
 import { KnockoutBracketCard } from '@/components/cards/KnockoutBracketCard'
 import { CustomSelect } from '@/components/ui/select'
 import { TourGuide } from '@/components/ui/TourGuide'
-import { toPng } from 'html-to-image'
+import { toPng } from '@/lib/toPng'
 
 const PRESET_COLORS = [
   { label: 'Red', value: '#ef4444' },
@@ -115,7 +117,6 @@ export default function MatchClient({
       await updateTeamAction(editingTeamId, booking.id, groupId, { ...editTeamForm, guestNames: guestNamesMap })
       setEditingTeamId(null)
       setEditTeamForm(null)
-      router.refresh()
     } catch (e) { console.error(e) }
     finally { setIsEditTeamLoading(false) }
   }
@@ -129,7 +130,6 @@ export default function MatchClient({
       onConfirm: async () => {
         try {
           await deleteTeamAction(teamId, booking.id, groupId)
-          router.refresh()
         } catch (e) { console.error(e) }
       }
     })
@@ -486,7 +486,6 @@ export default function MatchClient({
     setRemovingPlayerId(rsvpId)
     try {
       await adminRemoveRsvpAction(booking.id, groupId, rsvpId)
-      router.refresh()
     } catch (e) {
       console.error(e)
     } finally {
@@ -498,7 +497,6 @@ export default function MatchClient({
     setUpdatingPosRsvpId(rsvpId)
     try {
       await updateRsvpPositionAction(rsvpId, booking.id, groupId, newPos)
-      router.refresh()
     } catch (e) {
       console.error(e)
     } finally {
@@ -516,7 +514,6 @@ export default function MatchClient({
       setSelectedMembersToAdd([])
       setSelectedMemberPositions({})
       setMemberSearchQuery('')
-      router.refresh()
     } catch (e) {
       console.error(e)
     } finally {
@@ -537,7 +534,6 @@ export default function MatchClient({
       await addGuestAction(booking.id, groupId, guestForm.name.trim(), guestForm.position)
       setIsAddGuestOpen(false)
       setGuestForm({ name: '', position: 'Field Player' })
-      router.refresh()
     } catch (e) {
       console.error(e)
     } finally {
@@ -555,7 +551,6 @@ export default function MatchClient({
     try {
       await updateMaxPlayersAction(booking.id, groupId, maxPlayersInput)
       setIsEditingMaxPlayers(false)
-      router.refresh()
     } catch (e) {
       console.error(e)
     } finally {
@@ -970,7 +965,6 @@ export default function MatchClient({
     try {
       const posToSave = positionOverride || selectedPosInput || myProfile?.preferred_position || 'MID'
       await rsvpAction(booking.id, groupId, status, booking.max_players, posToSave)
-      router.refresh()
     } catch (e) {
       console.error(e)
     } finally {
@@ -983,7 +977,6 @@ export default function MatchClient({
     try {
       await saveTeamsAction(booking.id, groupId, teamForm.map(t => ({ ...t, guestNames: guestNamesMap })))
       setIsAddingTeams(false)
-      router.refresh()
     } catch (e) {
       console.error(e)
     } finally {
@@ -1032,7 +1025,6 @@ export default function MatchClient({
       setManualHomeTeamId('')
       setManualAwayTeamId('')
       setManualStageName('Match')
-      router.refresh()
     } catch (e) {
       console.error(e)
     } finally {

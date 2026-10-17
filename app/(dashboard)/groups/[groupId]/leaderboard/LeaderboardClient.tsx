@@ -29,11 +29,12 @@ export default function LeaderboardClient({ groupId, groupName }: { groupId: str
     fetchTop()
   }, [groupId])
 
+  // Load once; sorting happens in the browser (the stats are expensive to compute).
   useEffect(() => {
     async function fetchPlayers() {
       setLoading(true)
       try {
-        const res = await fetch(`/api/stats/group/${groupId}?sort=${sortBy}`)
+        const res = await fetch(`/api/stats/group/${groupId}`)
         const data = await res.json()
         setPlayers(data.players || [])
       } catch (e) {
@@ -43,12 +44,20 @@ export default function LeaderboardClient({ groupId, groupName }: { groupId: str
       }
     }
     fetchPlayers()
-  }, [groupId, sortBy])
+  }, [groupId])
 
-  const filteredPlayers = players.filter(p => {
-    if (positionFilter === 'All') return true
-    return p.preferred_position === positionFilter
-  })
+  const byPoints = (a: any, b: any) => (b.fpl_points || 0) - (a.fpl_points || 0)
+  const sorters: Record<string, (a: any, b: any) => number> = {
+    points: (a, b) => byPoints(a, b) || (b.goals || 0) - (a.goals || 0) || String(a.full_name || '').localeCompare(String(b.full_name || '')),
+    goals: (a, b) => (b.goals || 0) - (a.goals || 0) || byPoints(a, b),
+    assists: (a, b) => (b.assists || 0) - (a.assists || 0) || byPoints(a, b),
+    clean_sheets: (a, b) => (b.clean_sheets || 0) - (a.clean_sheets || 0) || byPoints(a, b),
+    matches: (a, b) => (b.matches_played || 0) - (a.matches_played || 0) || byPoints(a, b),
+  }
+
+  const filteredPlayers = players
+    .filter(p => positionFilter === 'All' || p.preferred_position === positionFilter)
+    .sort(sorters[sortBy] || sorters.points)
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 max-w-xl mx-auto min-h-screen pb-24">

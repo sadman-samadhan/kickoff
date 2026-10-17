@@ -10,7 +10,8 @@ import { Goal, Target, Shield, Activity, Camera, ChevronDown, ChevronUp, Loader2
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { Toast } from '@/components/ui/Toast'
-import StatShareCard from '@/components/cards/StatShareCard'
+import dynamic from 'next/dynamic'
+const StatShareCard = dynamic(() => import('@/components/cards/StatShareCard'))
 import { TourGuide } from '@/components/ui/TourGuide'
 import { submitAdminAppealAction } from '@/app/(dashboard)/admin/actions'
 
