@@ -1232,6 +1232,15 @@ export default function MatchClient({
             ) : teams.length === 0 ? (
               isAddingTeams ? (
                 <div className="space-y-4">
+                  {userRole === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingTeams(false)}
+                      className="-ml-1 flex min-h-11 items-center gap-1 rounded-xl px-1 text-sm font-bold text-neutral-600 hover:text-neutral-900"
+                    >
+                      <ChevronRight className="h-4 w-4 rotate-180" aria-hidden /> Back to options (auction, auto teams)
+                    </button>
+                  )}
                   {teamForm.map((t, idx) => (
                     <div key={idx} className="p-4 bg-neutral-50 rounded-xl border border-neutral-200 space-y-3">
                       <h4 className="font-bold text-sm text-neutral-700">Team {idx + 1}</h4>
@@ -1307,6 +1316,9 @@ export default function MatchClient({
                       {isTeamsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Teams'}
                     </Button>
                   </div>
+                  <Button variant="ghost" className="w-full text-neutral-600" onClick={() => setIsAddingTeams(false)} disabled={isTeamsLoading}>
+                    Cancel
+                  </Button>
                 </div>
               ) : (
                 userRole === 'admin' ? (
