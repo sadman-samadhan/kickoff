@@ -55,8 +55,8 @@ describe('migrations on top of the production baseline', () => {
     expect(err).toBeNull()
   })
 
-  it('indexes from 0003 exist (when present on this branch)', async () => {
+  it('creates every index from 0003', async () => {
     const r = await db.query<{ n: number }>(`select count(*)::int as n from pg_indexes where schemaname = 'public' and indexname like '%_idx'`)
-    expect(r.rows[0].n).toBeGreaterThanOrEqual(0)
+    expect(r.rows[0].n).toBe(22)
   })
 })
