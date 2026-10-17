@@ -5,13 +5,14 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { format, parseISO } from 'date-fns'
-import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal, Star, MinusCircle, Share2, Download, Gavel } from 'lucide-react'
+import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal, Star, MinusCircle, Share2, Download, Gavel, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { rsvpAction } from '../../actions'
 import { saveTeamsAction, generateScheduleAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction, reorderMatchesAction, addManualMatchAction, updateRsvpPositionAction } from './actions'
 import { calculateFplPoints } from '@/lib/fpl'
 import { getGroupScoringSettings, calculateTournamentPlayerPoints, calculateMatchPlayerPitchTime, PlayerPointsBreakdown } from '@/lib/tournamentScoring'
 import Link from 'next/link'
+import { AutoTeamsSheet } from '@/components/match/AutoTeamsSheet'
 import { useRouter } from 'next/navigation'
 import ConfirmModal from '@/components/modals/ConfirmModal'
 import dynamic from 'next/dynamic'
@@ -50,6 +51,7 @@ export default function MatchClient({
   // While an auction is running, its teams belong to the auction screen, not this page.
   const auctionOpen = !!auction && !auction.finalized_at
   const auctionPath = `/groups/${groupId}/match/${booking.id}/auction`
+  const [isAutoTeamsOpen, setIsAutoTeamsOpen] = useState(false)
 
   // Players parsing
   const inPlayers = rsvps.filter((r: any) => r.status === 'in' && r.player_id !== null)
@@ -1466,6 +1468,20 @@ export default function MatchClient({
                     </Link>
                     <button
                       type="button"
+                      onClick={() => setIsAutoTeamsOpen(true)}
+                      className="w-full flex items-center gap-3 rounded-2xl border border-green-200 bg-green-50 p-4 text-left"
+                    >
+                      <span className="w-11 h-11 rounded-xl bg-white flex items-center justify-center shrink-0">
+                        <Sparkles className="w-5 h-5 text-green-600" />
+                      </span>
+                      <span className="flex-1">
+                        <span className="block font-black text-neutral-900">Auto-make balanced teams</span>
+                        <span className="block text-xs text-neutral-600">Suggested from past results — review and tweak before saving</span>
+                      </span>
+                      <ChevronRight className="w-5 h-5 text-neutral-400" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setIsAddingTeams(true)}
                       className="w-full flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white p-4 text-left"
                     >
@@ -2454,6 +2470,15 @@ export default function MatchClient({
           <p className="font-bold text-green-800">Thanks for rating!</p>
           <p className="text-xs text-green-600 mt-1">Your feedback helps the community.</p>
         </div>
+      )}
+
+      {isAutoTeamsOpen && (
+        <AutoTeamsSheet
+          bookingId={booking.id}
+          groupId={groupId}
+          playerCount={allPlayersForTeam.length}
+          onClose={() => setIsAutoTeamsOpen(false)}
+        />
       )}
 
       {/* Confirm Out Modal */}
