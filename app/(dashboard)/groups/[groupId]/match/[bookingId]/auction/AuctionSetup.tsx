@@ -70,6 +70,7 @@ export default function AuctionSetup({ data }: { data: SetupData }) {
             .filter((t) => (tierCounts[t.name] ?? 0) > 0 && (tierCounts[t.name] ?? 0) < teams.length)
             .map((t) => `${t.name} has ${tierCounts[t.name]} players but there are ${teams.length} teams — every team needs one.`),
           tiers.filter((t) => (tierCounts[t.name] ?? 0) > 0).length > squadSize && 'There are more tiers than players per team.',
+          tiers.some((t) => t.basePrice != null && t.basePrice > rules.basePrice) && "With one-from-each-tier on, a tier can't open higher than the base price (a team could spend so much it can't afford a player it must take).",
         ]
       : []),
   ].filter(Boolean) as string[]

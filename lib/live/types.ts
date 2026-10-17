@@ -49,6 +49,8 @@ export type LiveMatch = {
 
 export type LiveMatchState = {
   serverNow: number
+  /** For share cards. */
+  context?: { group: string | null; date: string | null; venue: string | null }
   match: LiveMatch
   home: LiveTeam | null
   away: LiveTeam | null

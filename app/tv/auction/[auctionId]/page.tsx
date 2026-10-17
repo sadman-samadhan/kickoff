@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import '@/app/auction.css'
-import { auctionFontVars } from '@/components/auction/fonts'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthUser, getGroupRole } from '@/lib/groupAuth'
 import { loadAuctionState } from '@/lib/auction/state'
@@ -20,7 +19,7 @@ export default async function TvAuctionPage({ params }: { params: { auctionId: s
   const state = await loadAuctionState({ auctionId: params.auctionId }, { userId: user.id, isAdmin: role === 'admin' })
   if (!state) redirect('/dashboard')
   return (
-    <div className={`ka min-h-dvh ${auctionFontVars}`}>
+    <div className={`ka min-h-dvh`}>
       <TvScreen initial={{ ...state, myTeamId: null }} />
     </div>
   )

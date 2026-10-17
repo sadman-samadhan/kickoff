@@ -15,15 +15,15 @@ import Link from 'next/link'
 import { AutoTeamsSheet } from '@/components/match/AutoTeamsSheet'
 import { useRouter } from 'next/navigation'
 import { useMatchdayLive } from '@/components/live/useMatchdayLive'
+import { PageTitle, Tabs } from '@/components/ui/kit'
 import ConfirmModal from '@/components/modals/ConfirmModal'
 import dynamic from 'next/dynamic'
 // Share cards (and their QR code library) load in their own chunk.
-const MatchdayShareCard = dynamic(() => import('@/components/cards/MatchdayShareCard'))
-const TopPlayersShareCard = dynamic(() => import('@/components/cards/TopPlayersShareCard'))
+const ShareSheet = dynamic(() => import('@/components/share/ShareSheet').then((m) => m.ShareSheet))
+import { FixturesCard, StandingsCard, TeamSheetCard, TopPlayersCard } from '@/components/share/cards'
 import { KnockoutBracketCard } from '@/components/cards/KnockoutBracketCard'
 import { CustomSelect } from '@/components/ui/select'
 import { TourGuide } from '@/components/ui/TourGuide'
-import { toPng } from '@/lib/toPng'
 
 const PRESET_COLORS = [
   { label: 'Red', value: '#ef4444' },
@@ -50,8 +50,8 @@ export default function MatchClient({
   renderedAt = 0
 }: any) {
   const router = useRouter()
-  // Live scores on the Fixture list while any fixture is still to be finished.
-  useMatchdayLive(booking.id, matchSchedule.length > 0 && matchSchedule.some((m: any) => m.status !== 'completed'), renderedAt)
+  // Live scores on the Fixture list (and corrections made after full time).
+  useMatchdayLive(booking.id, { hasFixtures: matchSchedule.length > 0, live: matchSchedule.some((m: any) => m.status === 'ongoing'), renderedAt })
   const canScore = (m: any) =>
     userRole === 'admin' || teams.some((t: any) => (t.id === m.home_team_id || t.id === m.away_team_id) && t.captain_id === currentUser?.id)
   // While an auction is running, its teams belong to the auction screen, not this page.
@@ -150,13 +150,10 @@ export default function MatchClient({
   // Assign Player to Team State
   const [assigningPlayerId, setAssigningPlayerId] = useState<string | null>(null)
   const [sharingTeam, setSharingTeam] = useState<any>(null)
-  const [isGeneratingTeamImage, setIsGeneratingTeamImage] = useState(false)
-  const teamCardRef = useRef<HTMLDivElement>(null)
 
   // Schedule Share State
   const [sharingSchedule, setSharingSchedule] = useState(false)
-  const [isGeneratingScheduleImage, setIsGeneratingScheduleImage] = useState(false)
-  const scheduleCardRef = useRef<HTMLDivElement>(null)
+  const [sharingReport, setSharingReport] = useState<'points' | 'players' | null>(null)
 
   const [orderedSchedule, setOrderedSchedule] = useState<any[]>(matchSchedule)
   const [isReordering, setIsReordering] = useState(false)
@@ -253,186 +250,8 @@ export default function MatchClient({
     })
   }
 
-  const getTeamGradient = (hexColor: string) => {
-    let color = hexColor || '#16a34a'
-    if (!color.startsWith('#')) color = '#' + color
-
-    let r = parseInt(color.slice(1, 3), 16)
-    let g = parseInt(color.slice(3, 5), 16)
-    let b = parseInt(color.slice(5, 7), 16)
-
-    if (isNaN(r) || isNaN(g) || isNaN(b)) {
-      r = 22; g = 163; b = 74;
-      color = '#16a34a'
-    }
-
-    const contrastColor = getContrastColor(color)
-    const isLight = contrastColor === '#0f172a'
-
-    let startColor = ''
-    let endColor = color
-
-    if (isLight) {
-      // Light background: blend team color with white to make it soft
-      const rLight = Math.round(r * 0.3 + 255 * 0.7)
-      const gLight = Math.round(g * 0.3 + 255 * 0.7)
-      const bLight = Math.round(b * 0.3 + 255 * 0.7)
-      startColor = '#' + [rLight, gLight, bLight].map(x => x.toString(16).padStart(2, '0')).join('')
-
-      if (color.toLowerCase() === '#ffffff') {
-        startColor = '#f8fafc'
-        endColor = '#e2e8f0'
-      }
-    } else {
-      // Dark background: blend team color with black for a rich dark shade
-      const rDark = Math.round(r * 0.15)
-      const gDark = Math.round(g * 0.15)
-      const bDark = Math.round(b * 0.15)
-      startColor = '#' + [rDark, gDark, bDark].map(x => x.toString(16).padStart(2, '0')).join('')
-
-      if (color.toLowerCase() === '#000000') {
-        startColor = '#090d16'
-        endColor = '#1e293b'
-      }
-    }
-
-    return {
-      gradient: `linear-gradient(135deg, ${startColor} 0%, ${endColor} 100%)`,
-      glow: `rgba(${r}, ${g}, ${b}, 0.35)`,
-      accent: color,
-      text: contrastColor,
-      isLight
-    }
-  }
-
-  const getContrastColor = (hexColor: string) => {
-    let color = hexColor || '#16a34a'
-    if (!color.startsWith('#')) color = '#' + color
-    const r = parseInt(color.slice(1, 3), 16)
-    const g = parseInt(color.slice(3, 5), 16)
-    const b = parseInt(color.slice(5, 7), 16)
-    if (isNaN(r) || isNaN(g) || isNaN(b)) return '#ffffff'
-    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000
-    return (yiq >= 128) ? '#0f172a' : '#ffffff'
-  }
-
   const handleOpenShareTeam = (team: any) => {
     setSharingTeam(team)
-  }
-
-  const handleShareTeam = async () => {
-    if (!teamCardRef.current || !sharingTeam) return
-    setIsGeneratingTeamImage(true)
-    try {
-      const dataUrl = await toPng(teamCardRef.current, {
-        quality: 1,
-        pixelRatio: 3,
-        cacheBust: true,
-      })
-
-      const response = await fetch(dataUrl)
-      const blob = await response.blob()
-      const file = new File([blob], `khelahobe-team-${sharingTeam.name.replace(/\s+/g, '-').toLowerCase()}.png`, { type: 'image/png' })
-
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: `${sharingTeam.name} Squad — KhelaHobe`,
-          text: `Check out our squad ${sharingTeam.name} on KhelaHobe! ⚽`,
-          files: [file],
-        })
-      } else {
-        const link = document.createElement('a')
-        link.href = dataUrl
-        link.download = `khelahobe-team-${sharingTeam.name.replace(/\s+/g, '-').toLowerCase()}.png`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-      }
-    } catch (e) {
-      console.error('Share team failed:', e)
-    } finally {
-      setIsGeneratingTeamImage(false)
-    }
-  }
-
-  const handleDownloadTeam = async () => {
-    if (!teamCardRef.current || !sharingTeam) return
-    setIsGeneratingTeamImage(true)
-    try {
-      const dataUrl = await toPng(teamCardRef.current, {
-        quality: 1,
-        pixelRatio: 3,
-        cacheBust: true,
-      })
-      const link = document.createElement('a')
-      link.href = dataUrl
-      link.download = `khelahobe-team-${sharingTeam.name.replace(/\s+/g, '-').toLowerCase()}.png`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-    } catch (e) {
-      console.error('Download team failed:', e)
-    } finally {
-      setIsGeneratingTeamImage(false)
-    }
-  }
-
-  const handleShareSchedule = async () => {
-    if (!scheduleCardRef.current) return
-    setIsGeneratingScheduleImage(true)
-    try {
-      const dataUrl = await toPng(scheduleCardRef.current, {
-        quality: 1,
-        pixelRatio: 3,
-        cacheBust: true,
-      })
-
-      const response = await fetch(dataUrl)
-      const blob = await response.blob()
-      const file = new File([blob], `khelahobe-schedule-${booking.id}.png`, { type: 'image/png' })
-
-      const groupName = (booking.groups as any).name || 'Match'
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: `${groupName} Schedule — KhelaHobe`,
-          text: `Check out the schedule & scores on KhelaHobe! ⚽`,
-          files: [file],
-        })
-      } else {
-        const link = document.createElement('a')
-        link.href = dataUrl
-        link.download = `khelahobe-schedule-${booking.id}.png`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-      }
-    } catch (e) {
-      console.error('Share schedule failed:', e)
-    } finally {
-      setIsGeneratingScheduleImage(false)
-    }
-  }
-
-  const handleDownloadSchedule = async () => {
-    if (!scheduleCardRef.current) return
-    setIsGeneratingScheduleImage(true)
-    try {
-      const dataUrl = await toPng(scheduleCardRef.current, {
-        quality: 1,
-        pixelRatio: 3,
-        cacheBust: true,
-      })
-      const link = document.createElement('a')
-      link.href = dataUrl
-      link.download = `khelahobe-schedule-${booking.id}.png`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-    } catch (e) {
-      console.error('Download schedule failed:', e)
-    } finally {
-      setIsGeneratingScheduleImage(false)
-    }
   }
 
   const handleAssignPlayer = async (rsvp: any, newTeamId: string) => {
@@ -1090,17 +909,35 @@ export default function MatchClient({
   }
 
   const getTeamName = (teamId: string) => teams.find((t: any) => t.id === teamId)?.name || 'Team'
+  // Share card banner: the winner of a completed final, else the table leader once every fixture is done,
+  // else the current leader mid-matchday; nothing before the first result.
+  const shareHeadline = (() => {
+    const final = matchSchedule.find((m: any) => m.status === 'completed' && /^final$|grand final/i.test(m.stage_name || '') && m.home_score !== m.away_score)
+    if (final) {
+      const w = teams.find((t: any) => t.id === (final.home_score > final.away_score ? final.home_team_id : final.away_team_id))
+      if (w) return { name: w.name, color: w.jersey_color, label: 'Matchday champions', line: `Won the final ${Math.max(final.home_score, final.away_score)}–${Math.min(final.home_score, final.away_score)}` }
+    }
+    const leader = sortedPointsTable[0]
+    if (!leader || !hasCompletedMatches || leader.played === 0) return null
+    const allDone = matchSchedule.length > 0 && matchSchedule.every((m: any) => m.status === 'completed')
+    const line = `${leader.points} pts · ${leader.won}W ${leader.drawn}D ${leader.lost}L · GD ${leader.goalDifference > 0 ? '+' : ''}${leader.goalDifference}`
+    return { name: leader.name, color: leader.jerseyColor, label: allDone ? 'Matchday champions' : 'Top of the table', line }
+  })()
+  const shareMeta = { group: (booking.groups as any)?.name || 'Matchday', date: format(parseISO(booking.match_date), 'EEE d MMM'), venue: booking.field_name }
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 max-w-xl mx-auto min-h-screen pb-24">
       <TourGuide page="match" />
       {/* HEADER */}
-      <div className="flex items-center gap-3 mb-2">
-        <Link href={`/groups/${groupId}`} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-neutral-200 text-neutral-500">
-          <ChevronRight className="w-6 h-6 rotate-180" />
-        </Link>
-        <h1 className="text-xl font-bold text-neutral-900 truncate">{(booking.groups as any).name} Match</h1>
-      </div>
+      <PageTitle
+        back={
+          <Link href={`/groups/${groupId}`} aria-label="Back to group" className="w-11 h-11 bg-app-surface rounded-full flex items-center justify-center border border-app-line shrink-0">
+            <ChevronRight className="w-5 h-5 rotate-180" />
+          </Link>
+        }
+        title={(booking.groups as any).name}
+        subtitle={`${format(parseISO(booking.match_date), 'EEE d MMM')} · ${booking.match_time.slice(0, 5)} · ${booking.field_name}`}
+      />
 
       {/* 1. MATCH INFO CARD */}
       <div data-tour="match-info" className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100">
@@ -1182,31 +1019,19 @@ export default function MatchClient({
       )}
 
       {/* MAIN MATCHDAY TABS */}
-      <div className="flex bg-neutral-100 p-1.5 rounded-2xl overflow-x-auto gap-1 sticky top-0 z-20">
-        {[
-          { key: 'players' as const, label: '👥 Players', count: allConfirmedPlayers.length },
-          { key: 'teams' as const, label: '🛡️ Teams', count: auctionOpen ? undefined : teams.length },
-          { key: 'fixture' as const, label: '📋 Fixture', count: matchSchedule.length },
-          { key: 'report' as const, label: '📊 Report' },
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setMatchdayTab(tab.key)}
-            className={`flex-1 py-2.5 px-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap flex items-center justify-center gap-1 ${
-              matchdayTab === tab.key ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'
-            }`}
-          >
-            {tab.label}
-            {tab.count !== undefined && (
-              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
-                matchdayTab === tab.key ? 'bg-emerald-100 text-emerald-700' : 'bg-neutral-200 text-neutral-500'
-              }`}>
-                {tab.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        stretch
+        label="Matchday sections"
+        className="sticky top-14 z-20 -mx-4 px-4 py-2 bg-app-bg"
+        value={matchdayTab}
+        onChange={setMatchdayTab}
+        items={[
+          { key: 'players', label: 'Players', count: allConfirmedPlayers.length },
+          { key: 'teams', label: 'Teams', count: auctionOpen ? undefined : teams.length },
+          { key: 'fixture', label: 'Fixture', count: matchSchedule.length },
+          { key: 'report', label: 'Report' },
+        ]}
+      />
 
       {/* TAB: CONFIRMED PLAYERS */}
       {matchdayTab === 'players' && (
@@ -2361,48 +2186,13 @@ export default function MatchClient({
                 )
               })()}
 
-              {activeReportTab === 'points' ? (
-                <MatchdayShareCard
-                  groupName={(booking.groups as any).name}
-                  matchDate={format(parseISO(booking.match_date), 'MMM d, yyyy')}
-                  fieldName={booking.field_name}
-                  champion={championName}
-                  runnersUp={runnersUpName}
-                  topScorer={topScorerText}
-                  winningColor={championColor}
-                  championStats={championStats}
-                  runnersUpStats={runnersUpStats}
-                />
-              ) : (
-                (() => {
-                  const topScorerPlayer = [...sortedTopPlayers].filter(p => p.goals > 0).sort((a, b) => b.goals - a.goals || b.fplPoints - a.fplPoints)[0] || null
-                  const topMidfielderPlayer = [...sortedTopPlayers].filter(p => p.position === 'MID').sort((a, b) => b.assists - a.assists || b.fplPoints - a.fplPoints)[0] || null
-                  const topDefenderGkPlayer = [...sortedTopPlayers].filter(p => p.position === 'DEF' || p.position === 'GK').sort((a, b) => b.cleanSheets - a.cleanSheets || b.fplPoints - a.fplPoints)[0] || null
-
-                  return (
-                    <TopPlayersShareCard
-                      groupName={(booking.groups as any).name}
-                      matchDate={format(parseISO(booking.match_date), 'MMM d, yyyy')}
-                      fieldName={booking.field_name}
-                      topPlayers={sortedTopPlayers.map(p => ({
-                        id: p.id,
-                        name: p.name,
-                        position: p.position,
-                        points: p.fplPoints,
-                        goals: p.goals,
-                        assists: p.assists,
-                        cleanSheets: p.cleanSheets,
-                        teamName: getTeamName(p.teamId),
-                        avatarUrl: (p as any).avatarUrl || undefined,
-                        motmCount: p.motmCount
-                      }))}
-                      topScorer={topScorerPlayer ? { name: topScorerPlayer.name, goals: topScorerPlayer.goals } : null}
-                      topMidfielder={topMidfielderPlayer ? { name: topMidfielderPlayer.name, assists: topMidfielderPlayer.assists, points: topMidfielderPlayer.fplPoints } : null}
-                      topDefenderGk={topDefenderGkPlayer ? { name: topDefenderGkPlayer.name, position: topDefenderGkPlayer.position, cleanSheets: topDefenderGkPlayer.cleanSheets, points: topDefenderGkPlayer.fplPoints } : null}
-                    />
-                  )
-                })()
-              )}
+              <button
+                type="button"
+                onClick={() => setSharingReport(activeReportTab)}
+                className="mt-4 w-full h-12 rounded-2xl bg-app-ink text-app-bg font-bold flex items-center justify-center gap-2"
+              >
+                <Share2 className="w-4 h-4" /> {activeReportTab === 'points' ? 'Share matchday table' : 'Share top players'}
+              </button>
             </div>
           </div>
         )
@@ -2755,345 +2545,106 @@ export default function MatchClient({
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
       />
 
-      {/* Team Share Modal */}
+      {/* Share sheets (team sheet, fixtures, matchday table, top players) */}
       {sharingTeam && (() => {
-        const teamTheme = getTeamGradient(sharingTeam.jersey_color)
-        const teamPlayers = getTeamPlayersList(sharingTeam)
-        const captainRsvp = rsvps.find((r: any) =>
-          r.player_id === sharingTeam.captain_id || `guest_${r.id}` === sharingTeam.captain_id
-        )
-        const captainName = captainRsvp
-          ? (captainRsvp.profiles?.full_name || captainRsvp.guest_name)
-          : 'Not Assigned'
-
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-        const displayDomain = appUrl.replace(/https?:\/\//, '').replace(/\/$/, '')
-
+        const players = getTeamPlayersList(sharingTeam)
+        const captain = players.find((p: any) => p.isCaptain)
         return (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4">
-            <div className="bg-neutral-900 w-full max-w-sm max-h-[88vh] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
-              <div className="flex justify-between items-center px-5 py-4 shrink-0 border-b border-neutral-800">
-                <h3 className="font-bold text-white text-lg">Share Squad</h3>
-                <button onClick={() => setSharingTeam(null)} className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Card Container to Capture */}
-              <div className="p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 bg-neutral-900">
-                <div
-                  ref={teamCardRef}
-                  className="w-[320px] mx-auto rounded-2xl relative shadow-lg"
-                  style={{
-                    background: teamTheme.gradient,
-                    padding: '24px 20px',
-                  }}
-                >
-                  {/* Decorative Background Orbs */}
-                  <div
-                    className="absolute -top-10 -right-10 w-36 h-36 rounded-full blur-[60px] pointer-events-none"
-                    style={{ background: teamTheme.glow }}
-                  />
-                  <div
-                    className="absolute -bottom-10 -left-10 w-28 h-28 rounded-full blur-[40px] pointer-events-none"
-                    style={{ background: `${teamTheme.accent}20` }}
-                  />
-
-                  {/* Grid Lines Overlay */}
-                  <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
-                    backgroundImage: `linear-gradient(${teamTheme.accent}40 1px, transparent 1px), linear-gradient(90deg, ${teamTheme.accent}40 1px, transparent 1px)`,
-                    backgroundSize: '20px 20px'
-                  }} />
-
-                  {/* Card Content */}
-                  <div
-                    className="relative z-10 flex flex-col h-full"
-                    style={{ color: teamTheme.text }}
-                  >
-                    {/* Header Branding */}
-                    <div className="flex justify-between items-center mb-6">
-                      <span
-                        className="text-[9px] font-black uppercase tracking-[0.2em]"
-                        style={{ color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.4)' : 'rgba(255, 255, 255, 0.4)' }}
-                      >
-                        KhelaHobe
-                      </span>
-                      <span
-                        className="text-[9px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded"
-                        style={{
-                          backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.15)',
-                          color: teamTheme.text
-                        }}
-                      >
-                        Match Squad
-                      </span>
-                    </div>
-
-                    {/* Team Name Title */}
-                    <div className="text-center mb-5">
-                      <h2
-                        className="text-2xl font-black tracking-tight uppercase leading-none drop-shadow-sm mb-1"
-                        style={{ color: teamTheme.text }}
-                      >
-                        {sharingTeam.name}
-                      </h2>
-                      <div
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold mt-1.5"
-                        style={{
-                          backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.1)' : 'rgba(255, 255, 255, 0.2)',
-                          color: teamTheme.text
-                        }}
-                      >
-                        <Shield className="w-3 h-3" />
-                        <span>Captain: {captainName}</span>
-                      </div>
-                    </div>
-
-                    {/* Players List */}
-                    <div
-                      className="backdrop-blur-md rounded-xl p-3 space-y-2 border"
-                      style={{
-                        backgroundColor: teamTheme.isLight ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.25)',
-                        borderColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.08)'
-                      }}
-                    >
-                      {teamPlayers.length === 0 ? (
-                        <p
-                          className="text-xs italic text-center py-4"
-                          style={{ color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.4)' : 'rgba(255, 255, 255, 0.4)' }}
-                        >
-                          No squad members assigned yet.
-                        </p>
-                      ) : (
-                        teamPlayers.map((player: any) => {
-                          const avatarUrl = player.avatarUrl || null
-                          const initials = (player.name || 'P').charAt(0).toUpperCase()
-                          return (
-                            <div
-                              key={player.id}
-                              className="flex justify-between items-center py-1.5 border-b last:border-none gap-2"
-                              style={{ borderColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(255, 255, 255, 0.05)' }}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                {avatarUrl ? (
-                                  <img src={avatarUrl} className="w-5 h-5 rounded-full object-cover border border-white/40 shrink-0" alt={player.name} />
-                                ) : (
-                                  <div
-                                    className="w-5 h-5 rounded-full font-bold flex items-center justify-center text-[9px] shrink-0"
-                                    style={{
-                                      backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.15)' : 'rgba(255, 255, 255, 0.2)',
-                                      color: teamTheme.text
-                                    }}
-                                  >
-                                    {initials}
-                                  </div>
-                                )}
-                                <span
-                                  className="text-xs font-bold flex items-center gap-1 truncate"
-                                  style={{ color: teamTheme.text }}
-                                >
-                                  {player.name}
-                                  {player.isCaptain && <span className="text-[8px] font-black bg-amber-400 text-neutral-900 px-1 py-0.2 rounded uppercase">C</span>}
-                                  {player.isGuest && (
-                                    <span
-                                      className="text-[8px] font-medium px-1 rounded shrink-0"
-                                      style={{
-                                        backgroundColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(255, 255, 255, 0.1)',
-                                        color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.6)'
-                                      }}
-                                    >
-                                      Guest
-                                    </span>
-                                  )}
-                                </span>
-                              </div>
-                            <span
-                              className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider"
-                              style={{
-                                backgroundColor: teamTheme.isLight ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.05)',
-                                borderColor: teamTheme.isLight ? 'rgba(15, 23, 42, 0.15)' : 'rgba(255, 255, 255, 0.1)',
-                                color: teamTheme.isLight ? '#0f172a' : 'rgba(255, 255, 255, 0.8)'
-                              }}
-                            >
-                              {player.position}
-                            </span>
-                          </div>
-                        )
-                      })
-                    )}
-                    </div>
-
-                    {/* Footer Url */}
-                    <div className="text-center mt-6">
-                      <span
-                        className="text-[8px] font-bold uppercase tracking-[0.15em]"
-                        style={{ color: teamTheme.isLight ? 'rgba(15, 23, 42, 0.4)' : 'rgba(255, 255, 255, 0.4)' }}
-                      >
-                        {displayDomain}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions Footer */}
-              <div className="px-5 pb-5 pt-2 flex gap-3 shrink-0 border-t border-neutral-800 bg-neutral-900">
-                <Button
-                  onClick={handleDownloadTeam}
-                  disabled={isGeneratingTeamImage}
-                  variant="outline"
-                  className="flex-1 h-12 rounded-xl bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700"
-                >
-                  {isGeneratingTeamImage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-                  Save
-                </Button>
-                <Button
-                  onClick={handleShareTeam}
-                  disabled={isGeneratingTeamImage}
-                  className="flex-1 h-12 rounded-xl text-white font-bold"
-                  style={{ backgroundColor: teamTheme.accent, color: teamTheme.text }}
-                >
-                  {isGeneratingTeamImage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Share2 className="w-4 h-4 mr-2" />}
-                  Share
-                </Button>
-              </div>
-            </div>
-          </div>
+          <ShareSheet
+            title="Share team sheet"
+            onClose={() => setSharingTeam(null)}
+            meta={{ fileName: `khelahobe-team-${String(sharingTeam.name).replace(/\s+/g, '-').toLowerCase()}.png`, title: `${sharingTeam.name} — KhelaHobe`, text: `${sharingTeam.name} team sheet ⚽` }}
+          >
+            {(o) => (
+              <TeamSheetCard
+                {...o}
+                data={{
+                  meta: shareMeta,
+                  team: { name: sharingTeam.name, color: sharingTeam.jersey_color },
+                  captain: captain?.name || null,
+                  players: players.map((p: any) => ({ name: p.name, position: ['GK', 'DEF', 'MID', 'ATT'].includes(p.position) ? p.position : null, isCaptain: p.isCaptain, isGuest: p.isGuest })),
+                }}
+              />
+            )}
+          </ShareSheet>
         )
       })()}
 
-      {/* Schedule Share Modal */}
-      {sharingSchedule && (() => {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-        const displayDomain = appUrl.replace(/https?:\/\//, '').replace(/\/$/, '')
-        const groupName = (booking.groups as any).name || 'Match'
+      {sharingSchedule && (
+        <ShareSheet
+          title="Share fixtures"
+          onClose={() => setSharingSchedule(false)}
+          meta={{ fileName: `khelahobe-fixtures-${booking.id}.png`, title: `${shareMeta.group} fixtures — KhelaHobe`, text: 'Fixtures & scores ⚽' }}
+        >
+          {(o) => (
+            <FixturesCard
+              {...o}
+              data={{
+                meta: shareMeta,
+                fixtures: matchSchedule.map((m: any) => {
+                  const h = teams.find((t: any) => t.id === m.home_team_id)
+                  const a = teams.find((t: any) => t.id === m.away_team_id)
+                  return {
+                    home: { name: h?.name || 'TBD', color: h?.jersey_color },
+                    away: { name: a?.name || 'TBD', color: a?.jersey_color },
+                    score: m.status === 'completed' || m.status === 'ongoing' ? [m.home_score ?? 0, m.away_score ?? 0] as [number, number] : null,
+                    live: m.status === 'ongoing',
+                    stage: m.stage_name,
+                  }
+                }),
+              }}
+            />
+          )}
+        </ShareSheet>
+      )}
 
-        return (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 p-4">
-            <div className="bg-neutral-900 w-full max-w-sm max-h-[88vh] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col my-auto">
-              <div className="flex justify-between items-center px-5 py-4 shrink-0 border-b border-neutral-800">
-                <h3 className="font-bold text-white text-lg">Share Schedule</h3>
-                <button onClick={() => setSharingSchedule(false)} className="p-1 rounded-full hover:bg-neutral-800 text-neutral-400">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+      {sharingReport === 'points' && (
+        <ShareSheet
+          title="Share matchday table"
+          onClose={() => setSharingReport(null)}
+          meta={{ fileName: `khelahobe-table-${booking.id}.png`, title: `${shareMeta.group} — KhelaHobe`, text: hasCompletedMatches ? `🏆 ${championName} are matchday champions!` : 'Matchday table' }}
+        >
+          {(o) => (
+            <StandingsCard
+              {...o}
+              data={{
+                meta: shareMeta,
+                rows: sortedPointsTable.map((t) => ({ name: t.name, color: t.jerseyColor, p: t.played, w: t.won, d: t.drawn, l: t.lost, gd: t.goalDifference, pts: t.points })),
+                topScorer: topScorerText !== 'TBD' ? topScorerText : null,
+                headline: shareHeadline,
+              }}
+            />
+          )}
+        </ShareSheet>
+      )}
 
-              {/* Card Container to Capture */}
-              <div className="p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 bg-neutral-900">
-                <div
-                  ref={scheduleCardRef}
-                  className="w-[320px] mx-auto rounded-2xl relative shadow-lg"
-                  style={{
-                    background: 'linear-gradient(135deg, #0b1528 0%, #030712 100%)',
-                    padding: '24px 20px',
-                  }}
-                >
-                  {/* Decorative Background Glows */}
-                  <div className="absolute -top-10 -right-10 w-36 h-36 rounded-full blur-[60px] pointer-events-none bg-green-500/10" />
-                  <div className="absolute -bottom-10 -left-10 w-28 h-28 rounded-full blur-[40px] pointer-events-none bg-blue-500/10" />
-
-                  {/* Grid Lines Overlay */}
-                  <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
-                    backgroundImage: `linear-gradient(#ffffff 1px, transparent 1px), linear-gradient(90deg, #ffffff 1px, transparent 1px)`,
-                    backgroundSize: '20px 20px'
-                  }} />
-
-                  {/* Card Content */}
-                  <div className="relative z-10 flex flex-col h-full text-white">
-                    {/* Header Branding */}
-                    <div className="flex justify-between items-center mb-5">
-                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30">KhelaHobe</span>
-                      <span className="text-[9px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded bg-green-500/10 text-green-400">
-                        Fixtures & Scores
-                      </span>
-                    </div>
-
-                    {/* Match & Venue Details */}
-                    <div className="text-center mb-5">
-                      <h2 className="text-xl font-black tracking-tight uppercase leading-none drop-shadow-sm mb-1 text-white text-center">
-                        {groupName}
-                      </h2>
-                      <div className="text-[9px] font-bold text-white/40 uppercase tracking-widest mt-1.5 flex items-center justify-center gap-1.5">
-                        <span>{format(parseISO(booking.match_date), 'MMM d, yyyy')}</span>
-                        <span>•</span>
-                        <span>{booking.field_name}</span>
-                      </div>
-                    </div>
-
-                    {/* Fixtures List */}
-                    <div className="bg-white/5 backdrop-blur-md rounded-xl p-3 border border-white/5 space-y-2.5">
-                      {matchSchedule.map((match: any) => {
-                        const isCompleted = match.status === 'completed'
-                        const homeTeam = teams.find((t: any) => t.id === match.home_team_id)
-                        const awayTeam = teams.find((t: any) => t.id === match.away_team_id)
-                        const homeName = homeTeam?.name || 'Home'
-                        const awayName = awayTeam?.name || 'Away'
-
-                        return (
-                          <div key={match.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-none">
-                            {/* Home Team */}
-                            <div className="flex-1 flex items-center justify-end gap-1.5 min-w-0">
-                              <span className="text-[11px] font-bold text-white/95 truncate text-right">{homeName}</span>
-                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white/10" style={{ backgroundColor: homeTeam?.jersey_color || '#ffffff' }} />
-                            </div>
-
-                            {/* Score/VS Badge */}
-                            <div className="px-2.5 py-0.5 rounded bg-white/5 border border-white/5 mx-2 flex-shrink-0 flex items-center justify-center min-w-[55px]">
-                              {isCompleted ? (
-                                <span className="text-[11px] font-black tracking-wider text-green-400">
-                                  {match.home_score} - {match.away_score}
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-semibold text-white/40 tracking-wider">
-                                  - : -
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Away Team */}
-                            <div className="flex-1 flex items-center justify-start gap-1.5 min-w-0">
-                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white/10" style={{ backgroundColor: awayTeam?.jersey_color || '#ffffff' }} />
-                              <span className="text-[11px] font-bold text-white/95 truncate text-left">{awayName}</span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    {/* Footer Url */}
-                    <div className="text-center mt-6">
-                      <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-white/30">
-                        {displayDomain}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions Footer */}
-              <div className="px-5 pb-5 pt-2 flex gap-3 shrink-0 border-t border-neutral-800 bg-neutral-900">
-                <Button
-                  onClick={handleDownloadSchedule}
-                  disabled={isGeneratingScheduleImage}
-                  variant="outline"
-                  className="flex-1 h-12 rounded-xl bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700"
-                >
-                  {isGeneratingScheduleImage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-                  Save
-                </Button>
-                <Button
-                  onClick={handleShareSchedule}
-                  disabled={isGeneratingScheduleImage}
-                  className="flex-1 h-12 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold"
-                >
-                  {isGeneratingScheduleImage ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Share2 className="w-4 h-4 mr-2" />}
-                  Share
-                </Button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
+      {sharingReport === 'players' && (
+        <ShareSheet
+          title="Share top players"
+          onClose={() => setSharingReport(null)}
+          meta={{ fileName: `khelahobe-top-players-${booking.id}.png`, title: `${shareMeta.group} top players — KhelaHobe` }}
+        >
+          {(o) => (
+            <TopPlayersCard
+              {...o}
+              data={{
+                meta: shareMeta,
+                title: 'Top players',
+                players: sortedTopPlayers.map((p) => ({
+                  name: p.name,
+                  team: getTeamName(p.teamId),
+                  color: teams.find((t: any) => t.id === p.teamId)?.jersey_color,
+                  position: p.position,
+                  points: p.fplPoints,
+                  goals: p.goals,
+                  assists: p.assists,
+                  cleanSheets: p.cleanSheets,
+                })),
+              }}
+            />
+          )}
+        </ShareSheet>
+      )}
 
       {/* MANUAL MATCH MODAL */}
       {isAddManualMatchOpen && (

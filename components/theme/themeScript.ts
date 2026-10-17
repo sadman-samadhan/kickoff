@@ -1,0 +1,3 @@
+// Runs in <head> before the page paints, so there's no flash of the wrong theme.
+export const THEME_KEY = 'kh-theme'
+export const themeScript = `(function(){try{var t=localStorage.getItem('${THEME_KEY}')||'system';var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var e=document.documentElement;e.classList.toggle('dark',d);e.style.colorScheme=d?'dark':'light';var c=d?'#020617':'#f4f6f1';document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('meta[name=theme-color]').forEach(function(m){m.setAttribute('content',c)})})}catch(_){}})()`

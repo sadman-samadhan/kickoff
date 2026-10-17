@@ -4,6 +4,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from 'react'
+import { BrandLogo } from '@/components/brand/BrandLogo'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -200,7 +201,7 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-neutral-50 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md">
         <div className="flex justify-center mb-6">
-          <img src="/icons/logo-removebg-preview.png" alt="Logo" className="w-40 h-40 object-contain" />
+          <BrandLogo size={72} />
         </div>
 
         <Card className="border-0 shadow-xl shadow-neutral-200/50">

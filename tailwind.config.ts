@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+    darkMode: 'class',
     content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -8,7 +9,38 @@ const config: Config = {
   ],
   theme: {
   	extend: {
+  		fontFamily: {
+  			sans: ['var(--font-body)'],
+  			display: ['var(--font-display)']
+  		},
   		colors: {
+  			// App theme (Clean Pitch light / Floodlight dark), see app/globals.css
+  			app: {
+  				bg: 'var(--app-bg)',
+  				surface: 'var(--app-surface)',
+  				soft: 'var(--app-soft)',
+  				ink: 'var(--app-ink)',
+  				muted: 'var(--app-muted)',
+  				line: 'var(--app-line)',
+  				primary: 'var(--app-primary)',
+  				'on-primary': 'var(--app-on-primary)',
+  				accent: 'var(--app-accent)',
+  				'on-accent': 'var(--app-on-accent)'
+  			},
+  			// Clean Pitch greys (a hint of pitch green). Dark mode versions: app/theme-dark.css
+  			neutral: {
+  				50: '#f8faf7',
+  				100: '#eef2ec',
+  				200: '#e2e8e0',
+  				300: '#cbd5c9',
+  				400: '#94a39a',
+  				500: '#5b6b62',
+  				600: '#4a5850',
+  				700: '#36433c',
+  				800: '#233029',
+  				900: '#14211a',
+  				950: '#0b140f'
+  			},
   			// Auction screens (Clean Pitch light / Floodlight dark), see app/auction.css
   			ka: {
   				bg: 'var(--ka-bg)',

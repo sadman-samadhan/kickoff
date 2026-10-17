@@ -2,6 +2,7 @@
 'use server'
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { auctionDropOutBlock } from '@/lib/auction/guards'
 import { revalidatePath } from 'next/cache'
 import { requireGroupMember } from '@/lib/groupAuth'
 import { notifyNewBooking } from '@/lib/notifications/booking'
@@ -69,6 +70,9 @@ export async function rsvpAction(bookingId: string, groupId: string, status: str
   }
 
   if (status === 'out') {
+    const blocked = await auctionDropOutBlock(admin, bookingId, myRsvp?.id ?? null, user.id)
+    if (blocked) throw new Error(blocked)
+
     // Check if player is assigned to a team in this booking
     const { data: bookingTeams } = await admin.from('teams').select('id, name, captain_id, team_players(*)').eq('booking_id', bookingId)
     if (bookingTeams && bookingTeams.length > 0) {

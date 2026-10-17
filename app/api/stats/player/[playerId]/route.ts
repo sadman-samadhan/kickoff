@@ -5,6 +5,7 @@ import { getAuthUser } from '@/lib/groupAuth'
 import { calculateMatchPlayerPitchTime, calculateTournamentPlayerPoints, getGroupScoringSettings } from '@/lib/tournamentScoring'
 
 const GROUP = 'bookings(group_id, groups(name, custom_scoring_settings))'
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const dynamic = 'force-dynamic'
 
@@ -13,8 +14,21 @@ export async function GET(_req: Request, { params }: { params: { playerId: strin
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const admin = createAdminClient()
+  // The id is interpolated into PostgREST or() filters below, so it must be a plain UUID.
   const pid = params.playerId
+  if (!UUID.test(pid)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const admin = createAdminClient()
+
+  // Someone else's stats: only the groups you both belong to.
+  let visibleGroups: Set<string> | null = null
+  if (pid !== user.id) {
+    const [{ data: mine }, { data: theirs }] = await Promise.all([
+      admin.from('group_members').select('group_id').eq('player_id', user.id),
+      admin.from('group_members').select('group_id').eq('player_id', pid),
+    ])
+    const m = new Set((mine || []).map((g: any) => g.group_id))
+    visibleGroups = new Set((theirs || []).map((g: any) => g.group_id).filter((g: string) => m.has(g)))
+  }
 
   const [{ data: profile }, { data: myTeams }, { data: goals }, { data: cleanSheets }, { data: myEvents }, { data: motm }] = await Promise.all([
     admin.from('profiles').select('preferred_position').eq('id', pid).maybeSingle(),
@@ -99,7 +113,7 @@ export async function GET(_req: Request, { params }: { params: { playerId: strin
       getGroupScoringSettings(b.settings),
     ).totalPoints
 
-  const perGroup = Array.from(groups.values()).filter((g) => g.group_id)
+  const perGroup = Array.from(groups.values()).filter((g) => g.group_id && (!visibleGroups || visibleGroups.has(g.group_id)))
   const sum = (k: string) => perGroup.reduce((s, g) => s + g[k], 0)
 
   return NextResponse.json(

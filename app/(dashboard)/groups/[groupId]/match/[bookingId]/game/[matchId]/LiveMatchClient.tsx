@@ -11,7 +11,10 @@ import { editedEvent, goalFor, isOwnGoal, keyFields, keyOf, mergeEvents, newId, 
 import {
   ClockText, LineupTab, MinutesTab, MvpPicker, PERIOD_LABEL, PeriodPrompt, PickRow, Sheet, TeamHalf, Timeline, Toast, eventLabel,
 } from '@/components/live/LiveParts'
-import { MatchShareCard } from '@/components/live/MatchShareCard'
+import dynamic from 'next/dynamic'
+import { MotmCard, ResultCard } from '@/components/share/cards'
+
+const ShareSheet = dynamic(() => import('@/components/share/ShareSheet').then((m) => m.ShareSheet))
 import {
   completeMatchAction, logMatchEventAction, matchClockAction, updateMatchEventAction, updateMatchMvpAction, updateStartingLineupAction,
   voidMatchEventAction, type ClockCommand, type LogEventInput,
@@ -92,7 +95,7 @@ export default function LiveMatchClient({
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [tab, setTab] = useState<Tab>('events')
   const [busy, setBusy] = useState(false)
-  const [showShare, setShowShare] = useState(false)
+  const [showShare, setShowShare] = useState<'result' | 'motm' | null>(null)
 
   // Toasts close themselves unless they're waiting on a decision.
   useEffect(() => {
@@ -159,6 +162,9 @@ export default function LiveMatchClient({
         return n
       })
       showError(r.error)
+    } else {
+      // Deleted for good: forget any optimistic copy too (it may never have shown up in a fetch).
+      setPending((x) => x.filter((e) => e.id !== id))
     }
     refresh()
   }
@@ -209,9 +215,16 @@ export default function LiveMatchClient({
       }))
     }
     setBusy(true)
-    const r = await withRetry(() => matchClockAction(matchId, bookingId, groupId, c))
+    // No automatic retry: if the connection dropped after the server applied it, a retry would apply it twice
+    // (+2 min) or fail confusingly. The refetch below shows what actually happened.
+    let r: { ok: boolean; error?: string }
+    try {
+      r = await matchClockAction(matchId, bookingId, groupId, c)
+    } catch {
+      r = { ok: false, error: 'No connection. Check the clock and try again.' }
+    }
     setBusy(false)
-    if (!r.ok) showError(r.error)
+    if (!r.ok) showError(r.error || 'Something went wrong')
     refresh()
   }
 
@@ -233,18 +246,30 @@ export default function LiveMatchClient({
 
   // ── Lineup & MVP ──
 
-  const [starters, setStarters] = useState<Set<string>>(() => new Set(match.starting_player_ids ?? allPlayers.map((p) => p.id)))
+  // Local lineup wins while this phone has unsaved toggles; otherwise follow the server (by content, so a
+  // refetch with the same lineup doesn't reset anything).
+  const serverStarters = (match.starting_player_ids ?? allPlayers.map((p) => p.id)).slice().sort().join(',')
+  const [starters, setStarters] = useState<Set<string>>(() => new Set(serverStarters ? serverStarters.split(',') : []))
+  const lineupSaves = useRef(0)
   useEffect(() => {
-    setStarters(new Set(match.starting_player_ids ?? allPlayers.map((p) => p.id)))
-  }, [match.starting_player_ids, allPlayers])
+    if (lineupSaves.current === 0) setStarters(new Set(serverStarters ? serverStarters.split(',') : []))
+  }, [serverStarters])
+
+  const startersRef = useRef(starters)
+  startersRef.current = starters
 
   async function toggleStarter(id: string) {
-    const next = new Set(starters)
+    // Build from the ref, so quick taps before a re-render don't lose each other.
+    const next = new Set(startersRef.current)
     if (next.has(id)) next.delete(id)
     else next.add(id)
+    startersRef.current = next
     setStarters(next)
+    lineupSaves.current++
     const r = await withRetry(() => updateStartingLineupAction(matchId, bookingId, groupId, Array.from(next)))
+    lineupSaves.current--
     if (!r.ok) showError(r.error)
+    if (lineupSaves.current === 0) refresh()
   }
 
   const mvpKey = match.mvp_player_id || (match.motm_guest_name ? allPlayers.find((p) => p.is_guest && p.full_name === match.motm_guest_name)?.id || null : null)
@@ -284,6 +309,22 @@ export default function LiveMatchClient({
       .filter((e) => e.event_type === 'goal' && goalFor(e, home?.id) === side)
       .sort((a, b) => a.minute - b.minute)
       .map((e) => ({ id: e.id, name: nameOf(keyOf(e)) || 'Unknown', minute: e.minute, ownGoal: isOwnGoal(e) }))
+
+  // Share cards: "Labib 27' 31'" per scorer, in minute order.
+  const scorerLines = (side: 'home' | 'away') => {
+    const byName = new Map<string, string[]>()
+    for (const g of scorersFor(side)) byName.set(g.name, [...(byName.get(g.name) || []), `${g.minute}'${g.ownGoal ? ' (OG)' : ''}`])
+    return Array.from(byName, ([n, mins]) => `${n} ${mins.join(' ')}`)
+  }
+  const mvpTally = mvpKey ? tally.get(mvpKey) : undefined
+  const potmLine = mvpTally?.goals ? `${mvpTally.goals} goal${mvpTally.goals > 1 ? 's' : ''}` : mvpTally?.assists ? `${mvpTally.assists} assist${mvpTally.assists > 1 ? 's' : ''}` : undefined
+  const ctx = state.context
+  const shareMeta = {
+    group: ctx?.group || 'KhelaHobe',
+    label: [match.match_number ? `Match ${match.match_number}` : null, match.stage_name].filter(Boolean).join(' · ') || undefined,
+    date: ctx?.date ? new Date(`${ctx.date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : undefined,
+    venue: ctx?.venue || undefined,
+  }
 
   const toastTeam = toast && 'teamId' in toast ? teamById(toast.teamId) : null
   const toastColor = toastTeam ? kit(toastTeam.jersey_color).base : undefined
@@ -376,9 +417,16 @@ export default function LiveMatchClient({
           {tab === 'lineup' && <LineupTab teams={teams} starters={starters} canLog={canLog} onToggle={toggleStarter} />}
           {tab === 'minutes' && <MinutesTab teams={teams} minutes={pitch.minutesPlayed} conceded={pitch.goalsConcededOnPitch} />}
         </div>
-        <button onClick={() => setShowShare(true)} className="mt-5 w-full h-12 rounded-2xl border border-ka-line bg-ka-surface font-bold flex items-center justify-center gap-2">
-          <Share2 className="w-4 h-4" /> Share result card
-        </button>
+        <div className={`mt-5 grid gap-2 ${mvpKey ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <button onClick={() => setShowShare('result')} className="h-12 rounded-2xl border border-ka-line bg-ka-surface font-bold flex items-center justify-center gap-2">
+            <Share2 className="w-4 h-4" /> {finished ? 'Share result' : 'Share score'}
+          </button>
+          {mvpKey && (
+            <button onClick={() => setShowShare('motm')} className="h-12 rounded-2xl border border-ka-line bg-ka-surface font-bold flex items-center justify-center gap-2">
+              <Share2 className="w-4 h-4" /> Share POTM
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Bottom: toast + period control */}
@@ -531,18 +579,50 @@ export default function LiveMatchClient({
         </Sheet>
       )}
 
-      {showShare && (
-        <MatchShareCard
-          matchNumber={match.match_number}
-          stageName={match.stage_name}
-          home={home}
-          away={away}
-          score={score}
-          homeScorers={scorersFor('home')}
-          awayScorers={scorersFor('away')}
-          mvpName={fullName(mvpKey)}
-          onClose={() => setShowShare(false)}
-        />
+      {showShare === 'result' && (
+        <ShareSheet
+          title={finished ? 'Share result' : 'Share score'}
+          onClose={() => setShowShare(null)}
+          meta={{ fileName: `khelahobe-match-${match.match_number ?? ''}.png`, title: `${home?.name} ${score.home}–${score.away} ${away?.name}`, text: `${home?.name} ${score.home}–${score.away} ${away?.name} ⚽` }}
+        >
+          {(o) => (
+            <ResultCard
+              {...o}
+              data={{
+                meta: shareMeta,
+                home: { name: home?.name || 'Home', color: home?.jersey_color, score: score.home, scorers: scorerLines('home') },
+                away: { name: away?.name || 'Away', color: away?.jersey_color, score: score.away, scorers: scorerLines('away') },
+                potm: mvpKey ? { name: nameOf(mvpKey) || 'Player', line: potmLine } : null,
+                state: finished ? 'ft' : match.period === 'half_time' ? 'ht' : 'live',
+              }}
+            />
+          )}
+        </ShareSheet>
+      )}
+
+      {showShare === 'motm' && mvpKey && (
+        <ShareSheet title="Share player of the match" onClose={() => setShowShare(null)} meta={{ fileName: `khelahobe-potm-${match.match_number ?? ''}.png`, title: `${fullName(mvpKey)} — player of the match` }}>
+          {(o) => {
+            const t = tally.get(mvpKey)
+            const team = teams.find((x) => x.players.some((p) => p.id === mvpKey))
+            const player = team?.players.find((p) => p.id === mvpKey)
+            return (
+              <MotmCard
+                {...o}
+                data={{
+                  meta: shareMeta,
+                  player: { name: nameOf(mvpKey) || 'Player', team: team?.name, color: team?.jersey_color, position: player?.preferred_position, avatarUrl: player?.avatar_url },
+                  stats: [
+                    { label: 'goals', value: t?.goals || 0 },
+                    { label: 'assists', value: t?.assists || 0 },
+                    ...(t?.saves ? [{ label: 'pen saves', value: t.saves }] : []),
+                  ],
+                  resultLine: `${home?.name} ${score.home}–${score.away} ${away?.name}`,
+                }}
+              />
+            )
+          }}
+        </ShareSheet>
       )}
     </div>
   )

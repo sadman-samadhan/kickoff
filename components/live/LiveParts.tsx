@@ -44,7 +44,9 @@ export function ClockText({ match, offsetMs, className }: { match: LiveMatch; of
 /** "Half-time?" / "Full time?" once the clock passes the period length. Nothing ends on its own. */
 export function PeriodPrompt({ match, offsetMs, onEnd }: { match: LiveMatch; offsetMs: number; onEnd: () => void }) {
   const now = useServerNow(offsetMs, 5000)
-  const [snoozedUntil, setSnoozedUntil] = useState(0)
+  // Snooze is per period: the clock restarts at 0 in the 2nd half.
+  const [snooze, setSnooze] = useState<{ period: string | null; until: number }>({ period: null, until: 0 })
+  const snoozedUntil = snooze.period === match.period ? snooze.until : 0
   const half = (match.half_minutes || 0) * 60000
   if (match.status !== 'ongoing' || !half || !match.clock_running) return null
   if (match.period !== '1st_half' && match.period !== '2nd_half') return null
@@ -54,7 +56,7 @@ export function PeriodPrompt({ match, offsetMs, onEnd }: { match: LiveMatch; off
   return (
     <div role="status" className="mx-4 mt-3 flex items-center gap-2 rounded-2xl bg-ka-warn text-ka-on-warn px-3 py-2">
       <span className="flex-1 text-sm font-bold">{isFullTime ? 'Time’s up — full time?' : 'Time’s up — half-time?'}</span>
-      <button onClick={() => setSnoozedUntil(ms + 120000)} className="h-10 px-3 rounded-xl text-sm font-bold border-2 border-current">
+      <button onClick={() => setSnooze({ period: match.period, until: ms + 120000 })} className="h-10 px-3 rounded-xl text-sm font-bold border-2 border-current">
         Keep playing
       </button>
       <button onClick={onEnd} className="h-10 px-3 rounded-xl text-sm font-bold bg-ka-on-warn text-ka-warn">

@@ -75,7 +75,7 @@ export default function LandingPage() {
               
               {/* App Preview Image */}
               <div className="relative w-full max-w-5xl mt-12 animate-in fade-in zoom-in duration-1000 delay-300">
-                <div className="rounded-2xl border border-neutral-200 bg-white shadow-2xl overflow-hidden flex items-center justify-center">
+                <div className="no-dark rounded-2xl border border-neutral-200 bg-white shadow-2xl overflow-hidden flex items-center justify-center">
                   <Image
                     src="/icons/logo-wide.png"
                     alt="KhelaHobe App Preview"

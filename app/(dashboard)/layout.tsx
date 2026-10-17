@@ -1,5 +1,6 @@
 import { BottomNav } from '@/components/layout/BottomNav'
 import { NotificationBell } from '@/components/layout/NotificationBell'
+import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { Providers } from '@/components/Providers'
 import { ChatUnreadProvider } from '@/components/providers/ChatUnreadProvider'
 import { SuspendedLayoutGuard } from '@/components/layout/SuspendedLayoutGuard'
@@ -29,7 +30,10 @@ export default async function DashboardLayout({
             <Link href="/dashboard" className="flex items-center">
               <Image src="/icons/logo.png" alt="KhelaHobe" width={40} height={40} className="rounded-lg" />
             </Link>
-            <NotificationBell userId={user.id} />
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <NotificationBell userId={user.id} />
+            </div>
           </header>
 
           {/* ── Main scrollable content ── */}

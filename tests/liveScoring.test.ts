@@ -240,3 +240,50 @@ describe('match_clock', () => {
     expect(await state()).toMatchObject({ status: 'scheduled', period: null, clock_running: false })
   })
 })
+
+describe('0006 fixes', () => {
+  it('a retry id from another match is rejected, not returned', async () => {
+    const e = await log()
+    const other = await one<{ id: string }>(
+      `insert into public.match_schedule (booking_id, home_team_id, away_team_id, match_number) values ($1, $2, $3, 2) returning id`,
+      [ids.booking, ids.home, ids.away],
+    )
+    const err = await errorOf(() =>
+      db.query(`select public.log_match_event($1, $2, 'goal', $3, $4, null, null, null, 1, '{}', $5)`, [e.event.id, other.id, ids.home, ids.h1, ids.admin]),
+    )
+    expect(err).toMatch(/already used/)
+  })
+
+  it('a deleted event cannot be edited', async () => {
+    const e = await log()
+    await db.query(`select public.void_match_event($1, $2)`, [e.event.id, ids.match])
+    expect(await errorOf(() => db.query(`select public.update_match_event($1, $2, $3, null, null, null, 3, '{}')`, [e.event.id, ids.match, ids.h2]))).toMatch(/not found/)
+  })
+
+  it('a second kick-off does not reset a running match', async () => {
+    await db.query(`select public.match_clock($1, 'start', 'halves', 12, 0)`, [ids.match])
+    await db.query(`update public.match_schedule set period = '2nd_half' where id = $1`, [ids.match])
+    expect(await errorOf(() => db.query(`select public.match_clock($1, 'start', 'halves', 20, 0)`, [ids.match]))).toMatch(/already kicked off/)
+    const m = await one<{ period: string; half_minutes: number }>(`select period, half_minutes from public.match_schedule where id = $1`, [ids.match])
+    expect(m).toEqual({ period: '2nd_half', half_minutes: 12 })
+  })
+
+  it('editing an old match keeps its legacy goals and stored score', async () => {
+    // Old data: score 3–1, but only two home goals were ever recorded as goal_events.
+    await db.query(`update public.match_schedule set home_score = 3, away_score = 1, status = 'completed' where id = $1`, [ids.match])
+    await db.query(`insert into public.goal_events (match_schedule_id, scorer_id, team_id) values ($1, $2, $3), ($1, null, $3)`, [ids.match, ids.h1, ids.home])
+    await db.query(`update public.goal_events set guest_scorer_name = 'Home Guest' where scorer_id is null and match_schedule_id = $1`, [ids.match])
+    await log({ team: ids.away, player: ids.a1 })
+    expect(await score()).toEqual({ home_score: 3, away_score: 2 })
+    const guest = await one<{ details_json: Record<string, string> }>(`select details_json from public.match_events where details_json->>'guest_player_id' = 'guest_Home Guest'`)
+    expect(guest).toBeTruthy()
+    expect(await legacyGoals()).toBe(5)
+  })
+
+  it('signed-in users cannot read match events, goals or clean sheets directly', async () => {
+    await log()
+    for (const t of ['match_events', 'goal_events', 'clean_sheets']) {
+      expect(await errorOf(() => asUser(db, ids.h1, `select * from public.${t}`))).toMatch(/permission denied/)
+    }
+  })
+})

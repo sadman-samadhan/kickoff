@@ -15,6 +15,10 @@ import { useBidSound } from '@/components/auction/useBidSound'
 import { derive, onColor, rulesOf, tierOf, type Derived } from '@/components/auction/derive'
 import { ActivityFeed, BidList, LiveHeader, OnTheBlock, PoolByTier, TeamsGrid } from '@/components/auction/panels'
 import { SoldCardModal } from '@/components/auction/SoldCard'
+import dynamic from 'next/dynamic'
+import { SquadsCard } from '@/components/share/cards'
+
+const ShareSheet = dynamic(() => import('@/components/share/ShareSheet').then((m) => m.ShareSheet))
 import { cancelAuction, controlAuction, finalizeAuction, placeAuctionBid, type AuctionControl } from './actions'
 
 type Props = { initial: AuctionState; groupId: string; bookingId: string }
@@ -33,6 +37,7 @@ export default function AuctionRoom({ initial, groupId, bookingId }: Props) {
   const d = derive(state)
   const [view, setView] = useState<'control' | 'watch'>(initial.isAdmin ? 'control' : 'watch')
   const [soldCardOpen, setSoldCardOpen] = useState(false)
+  const [squadsOpen, setSquadsOpen] = useState(false)
   const matchPath = `/groups/${groupId}/match/${bookingId}`
 
   const current = d.current
@@ -76,6 +81,11 @@ export default function AuctionRoom({ initial, groupId, bookingId }: Props) {
         <Link href={`/tv/auction/${state.auction.id}`} target="_blank" className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-ka-line bg-ka-surface px-3 text-sm font-semibold">
           <MonitorPlay className="size-4" /> TV view
         </Link>
+        {state.auction.status === 'done' && (
+          <button onClick={() => setSquadsOpen(true)} className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-ka-line bg-ka-surface px-3 text-sm font-semibold">
+            <Share2 className="size-4" /> Share squads
+          </button>
+        )}
         {current?.status === 'sold' && soldTeam && (
           <button onClick={() => setSoldCardOpen(true)} className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-ka-line bg-ka-surface px-3 text-sm font-semibold">
             <Share2 className="size-4" /> SOLD card
@@ -101,6 +111,25 @@ export default function AuctionRoom({ initial, groupId, bookingId }: Props) {
         <CaptainView state={state} d={d} refresh={refresh} />
       ) : (
         <WatchView state={state} d={d} />
+      )}
+      {squadsOpen && (
+        <ShareSheet title="Share final squads" onClose={() => setSquadsOpen(false)} meta={{ fileName: 'khelahobe-auction-squads.png', title: `${state.auction.groupName} — final squads` }}>
+          {(o) => (
+            <SquadsCard
+              {...o}
+              data={{
+                meta: { group: state.auction.groupName, label: state.auction.matchLabel || undefined },
+                teams: state.teams.map((t) => ({
+                  name: t.name,
+                  color: t.color,
+                  captain: t.captainName,
+                  spent: state.entries.filter((e) => e.soldTeamId === t.id).reduce((sum, e) => sum + (e.soldPrice || 0), 0),
+                  players: state.entries.filter((e) => e.soldTeamId === t.id).map((e) => e.name),
+                })),
+              }}
+            />
+          )}
+        </ShareSheet>
       )}
       {soldCardOpen && current && soldTeam && (
         <SoldCardModal
