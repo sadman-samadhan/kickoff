@@ -3,310 +3,221 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireMatchAdmin, requireMatchLogger } from '@/lib/groupAuth'
+import { notifyMatch } from '@/lib/live/notify'
+import type { LiveEvent } from '@/lib/live/types'
 
-/**
- * Update Match Duration (in minutes). Defaults to 30 if empty.
- */
-export async function updateMatchDurationAction(
-  matchId: string,
-  bookingId: string,
-  groupId: string,
-  durationMinutes: number
-) {
-  const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
+// Every write goes through a row-locked SQL function (migration 0005), so two phones scoring the same match
+// can't race, a retried tap can't log twice, and the score always equals the events. Results come back as
+// { ok, error } because Next hides thrown messages in production.
+// Logging doesn't revalidate pages (that would re-render the scoring screen on every tap): open screens get
+// a realtime ping and refetch instead.
 
-  const duration = durationMinutes && durationMinutes > 0 ? durationMinutes : 30
+type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
-  const { error } = await admin
-    .from('match_schedule')
-    .update({ duration_minutes: duration })
-    .eq('id', matchId)
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const fail = (e: unknown): { ok: false; error: string } => ({ ok: false, error: (e as Error)?.message || 'Something went wrong' })
 
-  if (error) throw new Error(error.message)
-
-  revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
-  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
-  return { success: true }
-}
-
-/**
- * Update Starting Lineup (Starting XI Player IDs)
- */
-export async function updateStartingLineupAction(
-  matchId: string,
-  bookingId: string,
-  groupId: string,
-  startingPlayerIds: string[]
-) {
-  const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
-
-  const { error } = await admin
-    .from('match_schedule')
-    .update({ starting_player_ids: startingPlayerIds })
-    .eq('id', matchId)
-
-  if (error && error.message?.includes('starting_player_ids')) {
-    console.warn('starting_player_ids column missing on match_schedule table')
-  } else if (error) {
-    throw new Error(error.message)
+/** "profile id" → player; "guest_<rsvp id>" → guest; "guest_<name>" (very old teams) → kept in details only. */
+function splitKey(key: string | null | undefined, detailsKey: 'guest_player_id' | 'guest_secondary_player_id') {
+  if (!key) return { player: null, guest: null, details: {} }
+  if (key.startsWith('guest_')) {
+    const rest = key.slice(6)
+    return UUID.test(rest) ? { player: null, guest: rest, details: {} } : { player: null, guest: null, details: { [detailsKey]: key } }
   }
-
-  revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
-  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
-  return { success: true }
+  if (!UUID.test(key)) throw new Error('Unknown player')
+  return { player: key, guest: null, details: {} }
 }
 
-/**
- * Log a Match Event (Goal, Card, Substitution, Penalty Save)
- */
+function refreshPages(groupId: string, bookingId: string) {
+  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
+  revalidatePath(`/groups/${groupId}`)
+}
+
+export type LogEventInput = {
+  /** Generated on the phone, so retries are harmless. */
+  id: string
+  event_type: 'goal' | 'card' | 'sub' | 'penalty_save'
+  team_id: string
+  player_key?: string | null
+  secondary_key?: string | null
+  minute: number
+  is_own_goal?: boolean
+  card_type?: 'yellow' | 'red'
+}
+
 export async function logMatchEventAction(
   matchId: string,
   bookingId: string,
   groupId: string,
-  eventData: {
-    event_type: 'goal' | 'card' | 'sub' | 'penalty_save'
-    player_id?: string | null
-    secondary_player_id?: string | null
-    team_id?: string | null
-    minute: number
-    details_json?: any
-  }
-) {
-  const { admin, match } = await requireMatchLogger(matchId, bookingId, groupId)
-  if (eventData.team_id && eventData.team_id !== match.home_team_id && eventData.team_id !== match.away_team_id) {
-    throw new Error('That team is not playing in this match')
-  }
+  input: LogEventInput,
+): Promise<Result<{ event: LiveEvent; duplicate: { by: string | null; secondsAgo: number } | null }>> {
+  try {
+    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    if (!UUID.test(input.id)) throw new Error('Bad event id')
+    const p = splitKey(input.player_key, 'guest_player_id')
+    const s = splitKey(input.secondary_key, 'guest_secondary_player_id')
+    const details: Record<string, unknown> = { ...p.details, ...s.details }
+    if (input.event_type === 'goal') details.is_own_goal = !!input.is_own_goal
+    if (input.event_type === 'card') details.card_type = input.card_type === 'red' ? 'red' : 'yellow'
 
-  const isGuestPlayer = eventData.player_id?.startsWith('guest_')
-  const isGuestSecondary = eventData.secondary_player_id?.startsWith('guest_')
-
-  const realPlayerId = isGuestPlayer ? null : (eventData.player_id || null)
-  const realSecondaryPlayerId = isGuestSecondary ? null : (eventData.secondary_player_id || null)
-
-  const mergedDetails = {
-    ...(eventData.details_json || {}),
-    ...(isGuestPlayer ? { guest_player_id: eventData.player_id } : {}),
-    ...(isGuestSecondary ? { guest_secondary_player_id: eventData.secondary_player_id } : {})
-  }
-
-  const { data: event, error } = await admin
-    .from('match_events')
-    .insert({
-      match_schedule_id: matchId,
-      event_type: eventData.event_type,
-      player_id: realPlayerId,
-      secondary_player_id: realSecondaryPlayerId,
-      team_id: eventData.team_id || null,
-      minute: eventData.minute || 0,
-      details_json: mergedDetails,
+    const { data, error } = await admin.rpc('log_match_event', {
+      p_id: input.id,
+      p_match: matchId,
+      p_type: input.event_type,
+      p_team: input.team_id,
+      p_player: p.player,
+      p_guest: p.guest,
+      p_secondary: s.player,
+      p_secondary_guest: s.guest,
+      p_minute: Math.max(0, Math.round(input.minute || 0)),
+      p_details: details,
+      p_created_by: user.id,
     })
-    .select()
-    .single()
+    if (error) throw new Error(error.message)
 
-  if (error) throw new Error(error.message)
-
-  // Sync Legacy Tables for Goals if goal event
-  if (eventData.event_type === 'goal' && eventData.team_id) {
-    const isOwnGoal = eventData.details_json?.is_own_goal === true
-    await admin.from('goal_events').insert({
-      match_schedule_id: matchId,
-      scorer_id: realPlayerId,
-      assist_id: realSecondaryPlayerId,
-      team_id: eventData.team_id,
-      is_own_goal: isOwnGoal,
-      minute: eventData.minute || null,
-    })
-
-    // Recalculate score from goal events
-    await syncMatchScoreFromEvents(admin, matchId)
-  }
-
-  revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
-  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
-  revalidatePath(`/groups/${groupId}`)
-  return { success: true, event }
-}
-
-/**
- * Delete / Undo a Match Event
- */
-export async function deleteMatchEventAction(
-  eventId: string,
-  matchId: string,
-  bookingId: string,
-  groupId: string
-) {
-  const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
-
-  // Check event type
-  const { data: event } = await admin
-    .from('match_events')
-    .select('*')
-    .eq('id', eventId)
-    .single()
-
-  if (event && event.match_schedule_id !== matchId) throw new Error('Event belongs to a different match')
-
-  if (event) {
-    await admin.from('match_events').delete().eq('id', eventId)
-
-    if (event.event_type === 'goal') {
-      await syncMatchScoreFromEvents(admin, matchId)
+    let duplicate = null
+    if (data?.possible_duplicate) {
+      const { data: d } = await admin
+        .from('match_events')
+        .select('created_at, creator:profiles!created_by(full_name)')
+        .eq('id', data.possible_duplicate)
+        .maybeSingle()
+      if (d) duplicate = { by: (d as any).creator?.full_name || null, secondsAgo: Math.max(0, Math.round((Date.now() - new Date(d.created_at).getTime()) / 1000)) }
     }
-  }
-
-  revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
-  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
-  revalidatePath(`/groups/${groupId}`)
-  return { success: true }
-}
-
-/**
- * Sync Match Score & Legacy goal_events Table from match_events
- */
-async function syncMatchScoreFromEvents(admin: any, matchId: string) {
-  const { data: match } = await admin
-    .from('match_schedule')
-    .select('home_team_id, away_team_id')
-    .eq('id', matchId)
-    .single()
-
-  if (!match) return
-
-  const { data: events } = await admin
-    .from('match_events')
-    .select('*')
-    .eq('match_schedule_id', matchId)
-    .eq('event_type', 'goal')
-
-  let homeScore = 0
-  let awayScore = 0
-
-  events?.forEach((g: any) => {
-    const isOwn = g.details_json?.is_own_goal === true
-    if (g.team_id === match.home_team_id && !isOwn) homeScore++
-    else if (g.team_id === match.away_team_id && isOwn) homeScore++
-    else if (g.team_id === match.away_team_id && !isOwn) awayScore++
-    else if (g.team_id === match.home_team_id && isOwn) awayScore++
-  })
-
-  await admin
-    .from('match_schedule')
-    .update({ home_score: homeScore, away_score: awayScore })
-    .eq('id', matchId)
-
-  // Re-sync legacy goal_events table cleanly for this matchId
-  await admin.from('goal_events').delete().eq('match_schedule_id', matchId)
-  if (events && events.length > 0) {
-    const legacyGoalRows = events.map((e: any) => ({
-      match_schedule_id: matchId,
-      scorer_id: e.player_id,
-      assist_id: e.secondary_player_id,
-      team_id: e.team_id,
-      is_own_goal: e.details_json?.is_own_goal === true,
-      minute: e.minute || null,
-    }))
-    await admin.from('goal_events').insert(legacyGoalRows)
+    await notifyMatch(matchId, bookingId, { kind: 'event', by: user.id })
+    return { ok: true, event: data.event as LiveEvent, duplicate }
+  } catch (e) {
+    return fail(e)
   }
 }
 
-/**
- * Update Match Status (scheduled, ongoing, completed), start timestamp and period
- */
-export async function updateMatchStatusAction(
+export async function updateMatchEventAction(
   matchId: string,
   bookingId: string,
   groupId: string,
-  status: 'scheduled' | 'ongoing' | 'completed',
-  startedAt?: string | null,
-  period?: string | null
-) {
-  const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
+  eventId: string,
+  input: { player_key?: string | null; secondary_key?: string | null; minute: number; is_own_goal?: boolean; card_type?: 'yellow' | 'red' },
+): Promise<Result> {
+  try {
+    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { data: ev } = await admin.from('match_events').select('event_type').eq('id', eventId).eq('match_schedule_id', matchId).maybeSingle()
+    if (!ev) throw new Error('Event not found')
+    const p = splitKey(input.player_key, 'guest_player_id')
+    const s = splitKey(input.secondary_key, 'guest_secondary_player_id')
+    const details: Record<string, unknown> = { ...p.details, ...s.details }
+    if (ev.event_type === 'goal') details.is_own_goal = !!input.is_own_goal
+    if (ev.event_type === 'card') details.card_type = input.card_type === 'red' ? 'red' : 'yellow'
 
-  const updatePayload: any = { status }
-  if (startedAt !== undefined) updatePayload.started_at = startedAt
-  if (period !== undefined) updatePayload.period = period
-
-  let { error } = await admin
-    .from('match_schedule')
-    .update(updatePayload)
-    .eq('id', matchId)
-
-  // Defensive fallback if columns started_at or period do not exist in database yet
-  if (error && (error.message?.includes('started_at') || error.message?.includes('period'))) {
-    delete updatePayload.started_at
-    delete updatePayload.period
-    const res = await admin.from('match_schedule').update(updatePayload).eq('id', matchId)
-    error = res.error
+    const { error } = await admin.rpc('update_match_event', {
+      p_event: eventId,
+      p_match: matchId,
+      p_player: p.player,
+      p_guest: p.guest,
+      p_secondary: s.player,
+      p_secondary_guest: s.guest,
+      p_minute: Math.max(0, Math.round(input.minute || 0)),
+      p_details: details,
+    })
+    if (error) throw new Error(error.message)
+    await notifyMatch(matchId, bookingId, { kind: 'event', by: user.id })
+    return { ok: true }
+  } catch (e) {
+    return fail(e)
   }
+}
 
-  if (error) throw new Error(error.message)
+/** Removes an event (kept in the table as voided, so nothing is lost). */
+export async function voidMatchEventAction(matchId: string, bookingId: string, groupId: string, eventId: string): Promise<Result> {
+  try {
+    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { error } = await admin.rpc('void_match_event', { p_event: eventId, p_match: matchId })
+    if (error) throw new Error(error.message)
+    await notifyMatch(matchId, bookingId, { kind: 'event', by: user.id })
+    return { ok: true }
+  } catch (e) {
+    return fail(e)
+  }
+}
 
-  // Check if knockout progression should trigger
-  if (status === 'completed') {
+export type ClockCommand =
+  | { cmd: 'start'; timingMode: 'halves' | 'continuous'; halfMinutes: number }
+  | { cmd: 'pause' | 'resume' | 'half_time' | 'second_half' | 'reset' }
+  | { cmd: 'adjust'; deltaMs: number }
+
+export async function matchClockAction(matchId: string, bookingId: string, groupId: string, c: ClockCommand): Promise<Result> {
+  try {
+    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { error } = await admin.rpc('match_clock', {
+      p_match: matchId,
+      p_cmd: c.cmd,
+      p_timing_mode: c.cmd === 'start' ? c.timingMode : null,
+      p_half_minutes: c.cmd === 'start' ? Math.max(1, Math.min(90, Math.round(c.halfMinutes))) : null,
+      p_delta_ms: c.cmd === 'adjust' ? Math.round(c.deltaMs) : 0,
+    })
+    if (error) throw new Error(error.message)
+    await notifyMatch(matchId, bookingId, { kind: 'clock', by: user.id })
+    if (c.cmd === 'start' || c.cmd === 'reset') refreshPages(groupId, bookingId)
+    return { ok: true }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Full time: final score from events, clean sheets, knockout progression, matchday completed when all done. */
+export async function completeMatchAction(matchId: string, bookingId: string, groupId: string): Promise<Result> {
+  try {
+    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { error } = await admin.rpc('complete_match', { p_match: matchId })
+    if (error) throw new Error(error.message)
     const { checkAndAutoPopulateKnockoutProgression } = await import('@/lib/knockoutProgression')
     await checkAndAutoPopulateKnockoutProgression(admin, bookingId)
+    await notifyMatch(matchId, bookingId, { kind: 'status', by: user.id })
+    refreshPages(groupId, bookingId)
+    revalidatePath('/dashboard')
+    return { ok: true }
+  } catch (e) {
+    return fail(e)
   }
-
-  revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
-  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
-  revalidatePath(`/groups/${groupId}`)
-  return { success: true }
 }
 
-/**
- * Manually update match score
- */
-export async function updateMatchScoreAction(
-  matchId: string,
-  bookingId: string,
-  groupId: string,
-  homeScore: number,
-  awayScore: number
-) {
-  const { admin } = await requireMatchAdmin(matchId, bookingId, groupId)
-
-  const { error } = await admin
-    .from('match_schedule')
-    .update({
-      home_score: Math.max(0, homeScore),
-      away_score: Math.max(0, awayScore),
-    })
-    .eq('id', matchId)
-
-  if (error) throw new Error(error.message)
-
-  revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
-  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
-  revalidatePath(`/groups/${groupId}`)
-  return { success: true }
+/** Who started the match (everyone else starts on the bench for pitch-time stats). */
+export async function updateStartingLineupAction(matchId: string, bookingId: string, groupId: string, startingPlayerIds: string[]): Promise<Result> {
+  try {
+    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { error } = await admin
+      .from('match_schedule')
+      .update({ starting_player_ids: startingPlayerIds.filter((x) => typeof x === 'string').slice(0, 60) })
+      .eq('id', matchId)
+    if (error) throw new Error(error.message)
+    await notifyMatch(matchId, bookingId, { kind: 'status', by: user.id })
+    return { ok: true }
+  } catch (e) {
+    return fail(e)
+  }
 }
 
-/**
- * Update Match MVP Player ID
- */
-export async function updateMatchMvpAction(
-  matchId: string,
-  bookingId: string,
-  groupId: string,
-  mvpPlayerId: string | null
-) {
-  const { admin } = await requireMatchAdmin(matchId, bookingId, groupId)
-
-  const { error } = await admin
-    .from('match_schedule')
-    .update({ mvp_player_id: mvpPlayerId, motm_player_id: mvpPlayerId })
-    .eq('id', matchId)
-
-  if (error && (error.message?.includes('mvp_player_id') || error.message?.includes('motm_player_id'))) {
-    await admin.from('match_schedule').update({ motm_player_id: mvpPlayerId }).eq('id', matchId)
-    await admin.from('match_schedule').update({ mvp_player_id: mvpPlayerId }).eq('id', matchId)
-  } else if (error) {
-    throw new Error(error.message)
+/** MVP: a registered player goes in mvp/motm_player_id; a guest is stored by name in motm_guest_name. */
+export async function updateMatchMvpAction(matchId: string, bookingId: string, groupId: string, playerKey: string | null): Promise<Result> {
+  try {
+    const { admin, user } = await requireMatchAdmin(matchId, bookingId, groupId)
+    let guestName: string | null = null
+    const k = splitKey(playerKey, 'guest_player_id')
+    if (k.guest) {
+      const { data: r } = await admin.from('rsvps').select('guest_name').eq('id', k.guest).eq('booking_id', bookingId).maybeSingle()
+      if (!r?.guest_name) throw new Error('Guest not found')
+      guestName = r.guest_name
+    } else if (playerKey && !k.player) {
+      guestName = playerKey.slice(6)
+    }
+    const { error } = await admin
+      .from('match_schedule')
+      .update({ mvp_player_id: k.player, motm_player_id: k.player, motm_guest_name: guestName })
+      .eq('id', matchId)
+    if (error) throw new Error(error.message)
+    await notifyMatch(matchId, bookingId, { kind: 'status', by: user.id })
+    refreshPages(groupId, bookingId)
+    return { ok: true }
+  } catch (e) {
+    return fail(e)
   }
-
-  revalidatePath(`/groups/${groupId}/match/${bookingId}/game/${matchId}`)
-  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
-  revalidatePath(`/groups/${groupId}`)
-  return { success: true }
 }

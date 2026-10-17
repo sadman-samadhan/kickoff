@@ -55,7 +55,7 @@ export async function proposeAutoTeams(bookingId: string, groupId: string, numTe
     const [{ data: tps }, { data: goalEvents }, { data: legacyGoals }] = await Promise.all([
       teamIds.length ? admin.from('team_players').select('team_id, player_id').in('team_id', teamIds) : Promise.resolve({ data: [] as any[] }),
       matchIds.length
-        ? admin.from('match_events').select('match_schedule_id, player_id, secondary_player_id').eq('event_type', 'goal').in('match_schedule_id', matchIds)
+        ? admin.from('match_events').select('match_schedule_id, player_id, secondary_player_id').eq('event_type', 'goal').in('match_schedule_id', matchIds).is('voided_at', null)
         : Promise.resolve({ data: [] as any[] }),
       matchIds.length ? admin.from('goal_events').select('match_schedule_id, scorer_id, assist_id').in('match_schedule_id', matchIds) : Promise.resolve({ data: [] as any[] }),
     ])
