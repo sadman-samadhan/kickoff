@@ -10,10 +10,11 @@ import { Button } from '@/components/ui/button'
 import { rsvpAction } from '../../actions'
 import { saveTeamsAction, generateScheduleAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction, reorderMatchesAction, addManualMatchAction, updateRsvpPositionAction } from './actions'
 import { calculateFplPoints } from '@/lib/fpl'
-import { getGroupScoringSettings, calculateTournamentPlayerPoints, calculateMatchPlayerPitchTime, PlayerPointsBreakdown } from '@/lib/tournamentScoring'
+import { getGroupScoringSettings, calculateTournamentPlayerPoints, calculateMatchPlayerPitchTime, countHatTricksAndWins, PlayerPointsBreakdown } from '@/lib/tournamentScoring'
 import Link from 'next/link'
 import { AutoTeamsSheet } from '@/components/match/AutoTeamsSheet'
 import { useRouter } from 'next/navigation'
+import { useMatchdayLive } from '@/components/live/useMatchdayLive'
 import ConfirmModal from '@/components/modals/ConfirmModal'
 import dynamic from 'next/dynamic'
 // Share cards (and their QR code library) load in their own chunk.
@@ -45,9 +46,14 @@ export default function MatchClient({
   groupMembers = [],
   initialHasRated = false,
   initialTab = 'players',
-  auction = null
+  auction = null,
+  renderedAt = 0
 }: any) {
   const router = useRouter()
+  // Live scores on the Fixture list while any fixture is still to be finished.
+  useMatchdayLive(booking.id, matchSchedule.length > 0 && matchSchedule.some((m: any) => m.status !== 'completed'), renderedAt)
+  const canScore = (m: any) =>
+    userRole === 'admin' || teams.some((t: any) => (t.id === m.home_team_id || t.id === m.away_team_id) && t.captain_id === currentUser?.id)
   // While an auction is running, its teams belong to the auction screen, not this page.
   const auctionOpen = !!auction && !auction.finalized_at
   const auctionPath = `/groups/${groupId}/match/${booking.id}/auction`
@@ -733,6 +739,8 @@ export default function MatchClient({
     cleanSheets: number
     appearances: number
     motmCount: number
+    hatTricks: number
+    matchWins: number
     yellowCards: number
     redCards: number
     penaltySaves: number
@@ -765,6 +773,8 @@ export default function MatchClient({
       cleanSheets: 0,
       appearances: 0,
       motmCount: 0,
+      hatTricks: 0,
+      matchWins: 0,
       yellowCards: 0,
       redCards: 0,
       penaltySaves: 0,
@@ -878,7 +888,7 @@ export default function MatchClient({
       const startingPids = match.starting_player_ids || [...homePids, ...awayPids]
       const duration = match.duration_minutes || 30
 
-      const pitchResult = calculateMatchPlayerPitchTime(mEvents, duration, homePids, awayPids, startingPids)
+      const pitchResult = calculateMatchPlayerPitchTime(mEvents, duration, homePids, awayPids, startingPids, match.home_team_id)
       Object.entries(pitchResult.goalsConcededOnPitch).forEach(([pid, gc]) => {
         if (playerStatsMap[pid]) {
           playerStatsMap[pid].goalsConcededOnPitch = (playerStatsMap[pid].goalsConcededOnPitch || 0) + gc
@@ -886,6 +896,25 @@ export default function MatchClient({
       })
     }
   })
+
+  // Hat-tricks and wins (guests included: their key is the same guest_<rsvp> id used above)
+  {
+    const scorerKey = (g: any) => {
+      if (g.scorer_id) return g.scorer_id
+      if (!g.guest_scorer_name) return null
+      const name = String(g.guest_scorer_name).toLowerCase()
+      return allPlayersForTeam.find(p => p.isGuest && p.name.toLowerCase() === name)?.id || null
+    }
+    const { hatTricks, wins } = countHatTricksAndWins(
+      matchSchedule.map((m: any) => ({ ...m, dnp_player_ids: [...(m.dnp_player_ids || []), ...Object.values(playerStatsMap).filter(p => p.isGuest && (m.dnp_guest_names || []).includes(p.name)).map(p => p.id)] })),
+      goalEvents.map((g: any) => ({ match_schedule_id: g.match_schedule_id, scorer: scorerKey(g), is_own_goal: g.is_own_goal })),
+      (teamId) => Object.values(playerStatsMap).filter(p => p.teamId === teamId).map(p => p.id),
+    )
+    Object.values(playerStatsMap).forEach(p => {
+      p.hatTricks = hatTricks[p.id] || 0
+      p.matchWins = wins[p.id] || 0
+    })
+  }
 
   // Calculate final Group Custom Points & Breakdown for each player
   Object.values(playerStatsMap).forEach(p => {
@@ -901,6 +930,8 @@ export default function MatchClient({
         yellowCards: p.yellowCards,
         redCards: p.redCards,
         motmCount: p.motmCount,
+        hatTricks: p.hatTricks,
+        matchWins: p.matchWins,
         appearances: p.appearances,
       },
       customScoringSettings
@@ -1915,7 +1946,7 @@ export default function MatchClient({
                                       : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                                   }`}
                                 >
-                                  Match Details ➔
+                                  {!isCompleted && canScore(match) ? 'Score ➔' : isOngoing ? 'Watch live ➔' : 'Details ➔'}
                                 </Button>
                               </Link>
                             </div>
@@ -2041,7 +2072,7 @@ export default function MatchClient({
                                       <div className="pt-1 text-center">
                                         <Link href={`/groups/${groupId}/match/${booking.id}/game/${match.id}`}>
                                           <Button size="sm" variant="ghost" className="w-full text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl">
-                                            View Match Details & Log Events ➔
+                                            {canScore(match) ? 'Open scoring ➔' : 'View match details ➔'}
                                           </Button>
                                         </Link>
                                       </div>
@@ -2231,6 +2262,8 @@ export default function MatchClient({
                   { key: 'yellowCards', ...bd.yellowPts, icon: '🟨' },
                   { key: 'redCards', ...bd.redPts, icon: '🟥' },
                   { key: 'motm', ...bd.mvpPts, icon: '⭐' },
+                  { key: 'hattrick', ...bd.hatTrickPts, icon: '🎩' },
+                  { key: 'wins', ...bd.matchWinPts, icon: '🏆' },
                   { key: 'appearances', ...bd.appearancePts, icon: '🏃' },
                 ] : []
 

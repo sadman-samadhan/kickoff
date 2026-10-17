@@ -1,118 +1,96 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getGroupScoringSettings, calculateTournamentPlayerPoints, calculateMatchPlayerPitchTime } from '@/lib/tournamentScoring'
+import { AuthError, requireGroupMember } from '@/lib/groupAuth'
+import { calculateMatchPlayerPitchTime, calculateTournamentPlayerPoints, countHatTricksAndWins, getGroupScoringSettings } from '@/lib/tournamentScoring'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request, { params }: { params: { groupId: string } }) {
-  const supabaseAuth = createClient()
-  const { data: { user } } = await supabaseAuth.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  let admin
+  try {
+    ;({ admin } = await requireGroupMember(params.groupId))
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: e instanceof AuthError ? e.status : 500 })
+  }
 
   const { searchParams } = new URL(req.url)
   const sort = searchParams.get('sort') || 'points'
 
-  const supabaseAdmin = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const [{ data: rawMembers }, { data: bookings }, { data: group }] = await Promise.all([
+    admin.from('group_members').select('player_id, profiles(full_name, username, avatar_url, preferred_position, secondary_position, is_suspended)').eq('group_id', params.groupId),
+    admin.from('bookings').select('id').eq('group_id', params.groupId),
+    admin.from('groups').select('custom_scoring_settings').eq('id', params.groupId).maybeSingle(),
+  ])
+  const members = (rawMembers || []).filter((m: any) => m.profiles && !m.profiles.is_suspended)
+  if (members.length === 0) return NextResponse.json({ players: [] })
 
-  const { data: rawMembers } = await supabaseAdmin
-    .from('group_members')
-    .select('player_id, profiles(*)')
-    .eq('group_id', params.groupId)
+  const bookingIds = (bookings || []).map((b: any) => b.id)
+  const [{ data: ms }, { data: teams }] = bookingIds.length
+    ? await Promise.all([
+        admin.from('match_schedule').select('*').in('booking_id', bookingIds),
+        admin.from('teams').select('id').in('booking_id', bookingIds),
+      ])
+    : [{ data: [] as any[] }, { data: [] as any[] }]
+  const matchSchedules: any[] = ms || []
+  const matchScheduleIds = matchSchedules.map((m) => m.id)
+  const teamIds = (teams || []).map((t: any) => t.id)
 
-  const members = rawMembers?.filter((m: any) => !m.profiles?.is_suspended) || []
-
-  if (!members || members.length === 0) return NextResponse.json({ players: [] })
-
-  const { data: bookings } = await supabaseAdmin.from('bookings').select('id').eq('group_id', params.groupId)
-  const bookingIds = bookings?.map(b => b.id) || []
-  
-  let matchSchedules: any[] = []
-  if (bookingIds.length > 0) {
-    const { data: ms } = await supabaseAdmin.from('match_schedule').select('*').in('booking_id', bookingIds)
-    matchSchedules = ms || []
-  }
-  const matchScheduleIds = matchSchedules.map(ms => ms.id)
-
-  let goals: any[] = []
-  let cleanSheets: any[] = []
-  let matchEvents: any[] = []
-  
-  if (matchScheduleIds.length > 0) {
-    const { data: g } = await supabaseAdmin.from('goal_events').select('*').in('match_schedule_id', matchScheduleIds)
-    goals = g || []
-    
-    const { data: cs } = await supabaseAdmin.from('clean_sheets').select('*').in('match_schedule_id', matchScheduleIds)
-    cleanSheets = cs || []
-
-    const { data: me } = await supabaseAdmin.from('match_events').select('*').in('match_schedule_id', matchScheduleIds)
-    matchEvents = me || []
-  }
-
-  let teams: any[] = []
-  let teamPlayers: any[] = []
-  if (bookingIds.length > 0) {
-    const { data: t } = await supabaseAdmin.from('teams').select('id').in('booking_id', bookingIds)
-    teams = t || []
-    if (teams.length > 0) {
-      const { data: tp } = await supabaseAdmin.from('team_players').select('*').in('team_id', teams.map(t => t.id))
-      teamPlayers = tp || []
-    }
-  }
-
-  // Fetch group custom scoring settings
-  const { data: group } = await supabaseAdmin
-    .from('groups')
-    .select('custom_scoring_settings')
-    .eq('id', params.groupId)
-    .single()
+  const [{ data: g }, { data: cs }, { data: me }, { data: tp }] = await Promise.all([
+    matchScheduleIds.length ? admin.from('goal_events').select('*').in('match_schedule_id', matchScheduleIds) : Promise.resolve({ data: [] as any[] }),
+    matchScheduleIds.length ? admin.from('clean_sheets').select('*').in('match_schedule_id', matchScheduleIds) : Promise.resolve({ data: [] as any[] }),
+    matchScheduleIds.length
+      ? admin.from('match_events').select('*').in('match_schedule_id', matchScheduleIds).is('voided_at', null)
+      : Promise.resolve({ data: [] as any[] }),
+    teamIds.length ? admin.from('team_players').select('team_id, player_id').in('team_id', teamIds) : Promise.resolve({ data: [] as any[] }),
+  ])
+  const goals: any[] = g || []
+  const cleanSheets: any[] = cs || []
+  const matchEvents: any[] = me || []
+  const teamPlayers: any[] = tp || []
 
   const customSettings = getGroupScoringSettings(group?.custom_scoring_settings)
+  const rosterOf = (teamId: string) => teamPlayers.filter((t) => t.team_id === teamId).map((t) => t.player_id)
+  const { hatTricks, wins } = countHatTricksAndWins(
+    matchSchedules,
+    goals.map((x) => ({ match_schedule_id: x.match_schedule_id, scorer: x.scorer_id, is_own_goal: x.is_own_goal })),
+    rosterOf,
+  )
+
+  // Goals conceded on pitch, per player, across completed matches (one pitch-time pass per match).
+  const conceded: Record<string, number> = {}
+  for (const m of matchSchedules) {
+    if (m.status !== 'completed') continue
+    const homePids = rosterOf(m.home_team_id)
+    const awayPids = rosterOf(m.away_team_id)
+    const dnp = new Set<string>(m.dnp_player_ids || [])
+    const pitch = calculateMatchPlayerPitchTime(
+      matchEvents.filter((e) => e.match_schedule_id === m.id),
+      m.duration_minutes || 30,
+      homePids,
+      awayPids,
+      m.starting_player_ids || [...homePids, ...awayPids],
+      m.home_team_id,
+    )
+    for (const [pid, n] of Object.entries(pitch.goalsConcededOnPitch)) if (!dnp.has(pid)) conceded[pid] = (conceded[pid] || 0) + n
+  }
 
   const playersStats = members.map((m: any) => {
     const pId = m.player_id
-    const pGoals = goals.filter(g => g.scorer_id === pId && !g.is_own_goal).length
-    const pOwnGoals = goals.filter(g => g.scorer_id === pId && g.is_own_goal).length
-    const pAssists = goals.filter(g => g.assist_id === pId).length
-    const pCleanSheets = cleanSheets.filter(cs => cs.player_id === pId).length
+    const pGoals = goals.filter((x) => x.scorer_id === pId && !x.is_own_goal).length
+    const pOwnGoals = goals.filter((x) => x.scorer_id === pId && x.is_own_goal).length
+    const pAssists = goals.filter((x) => x.assist_id === pId).length
+    const pCleanSheets = cleanSheets.filter((x) => x.player_id === pId).length
+    const mine = matchEvents.filter((e) => e.player_id === pId)
+    const pYellowCards = mine.filter((e) => e.event_type === 'card' && e.details_json?.card_type === 'yellow').length
+    const pRedCards = mine.filter((e) => e.event_type === 'card' && e.details_json?.card_type === 'red').length
+    const pPenaltySaves = mine.filter((e) => e.event_type === 'penalty_save').length
 
-    const pYellowCards = matchEvents.filter(e => e.player_id === pId && e.event_type === 'card' && e.details_json?.card_type === 'yellow').length
-    const pRedCards = matchEvents.filter(e => e.player_id === pId && e.event_type === 'card' && e.details_json?.card_type === 'red').length
-    const pPenaltySaves = matchEvents.filter(e => e.player_id === pId && e.event_type === 'penalty_save').length
-    
-    const myTeams = teamPlayers.filter(tp => tp.player_id === pId).map(tp => tp.team_id)
-    
-    // Count completed matches excluding DNP
-    const pMatches = matchSchedules.filter(ms => {
-      if (ms.status !== 'completed') return false
-      const isInTeam = myTeams.includes(ms.home_team_id) || myTeams.includes(ms.away_team_id)
-      if (!isInTeam) return false
-      const isDnp = (ms.dnp_player_ids || []).includes(pId)
-      return !isDnp
-    }).length
-
-    const motmCount = matchSchedules.filter(ms => ms.status === 'completed' && (ms.motm_player_id === pId || ms.mvp_player_id === pId)).length
-
-    // Calculate goals conceded on pitch across all completed matches for this player
-    let pGoalsConcededOnPitch = 0
-    matchSchedules.forEach(ms => {
-      if (ms.status !== 'completed') return
-      const isHome = myTeams.includes(ms.home_team_id)
-      const isAway = myTeams.includes(ms.away_team_id)
-      if (!isHome && !isAway) return
-      if ((ms.dnp_player_ids || []).includes(pId)) return
-
-      const msEvents = matchEvents.filter(e => e.match_schedule_id === ms.id)
-      const homeTeamPids = teamPlayers.filter(tp => tp.team_id === ms.home_team_id).map(tp => tp.player_id)
-      const awayTeamPids = teamPlayers.filter(tp => tp.team_id === ms.away_team_id).map(tp => tp.player_id)
-      const startingPids = ms.starting_player_ids || [...homeTeamPids, ...awayTeamPids]
-      const duration = ms.duration_minutes || 30
-
-      const pitchResult = calculateMatchPlayerPitchTime(msEvents, duration, homeTeamPids, awayTeamPids, startingPids)
-      pGoalsConcededOnPitch += (pitchResult.goalsConcededOnPitch[pId] || 0)
-    })
+    const myTeams = teamPlayers.filter((t) => t.player_id === pId).map((t) => t.team_id)
+    // Completed matches excluding DNP
+    const pMatches = matchSchedules.filter(
+      (x) => x.status === 'completed' && (myTeams.includes(x.home_team_id) || myTeams.includes(x.away_team_id)) && !(x.dnp_player_ids || []).includes(pId),
+    ).length
+    const motmCount = matchSchedules.filter((x) => x.status === 'completed' && (x.motm_player_id === pId || x.mvp_player_id === pId)).length
 
     const { totalPoints: fplPoints } = calculateTournamentPlayerPoints(
       m.profiles?.preferred_position,
@@ -121,14 +99,16 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
         assists: pAssists,
         cleanSheets: pCleanSheets,
         penaltySaves: pPenaltySaves,
-        goalsConcededOnPitch: pGoalsConcededOnPitch,
+        goalsConcededOnPitch: conceded[pId] || 0,
         ownGoals: pOwnGoals,
         yellowCards: pYellowCards,
         redCards: pRedCards,
         motmCount,
+        hatTricks: hatTricks[pId] || 0,
+        matchWins: wins[pId] || 0,
         appearances: pMatches,
       },
-      customSettings
+      customSettings,
     )
 
     return {
@@ -144,15 +124,13 @@ export async function GET(req: Request, { params }: { params: { groupId: string 
       clean_sheets: pCleanSheets,
       matches_played: pMatches,
       motm_count: motmCount,
-      fpl_points: fplPoints
+      hat_tricks: hatTricks[pId] || 0,
+      wins: wins[pId] || 0,
+      fpl_points: fplPoints,
     }
   })
 
-  // Apply User's Sorting Rules:
-  // - Overall / points: Sort by FPL Points
-  // - Defender / clean_sheets: Sort by Clean Sheets first, then FPL Points
-  // - Playmaker / assists: Sort by Assists first, then FPL Points
-  // - Scorer / goals: Sort by Goals first, then FPL Points
+  // Overall / points: FPL points. Defender / Playmaker / Scorer: that stat first, then FPL points.
   playersStats.sort((a: any, b: any) => {
     if (sort === 'points') return b.fpl_points - a.fpl_points || b.goals - a.goals || a.full_name.localeCompare(b.full_name)
     if (sort === 'goals') return b.goals - a.goals || b.fpl_points - a.fpl_points

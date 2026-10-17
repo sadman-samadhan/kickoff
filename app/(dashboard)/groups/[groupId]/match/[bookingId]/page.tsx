@@ -23,7 +23,7 @@ export default async function MatchPage({
   const [role, { data: booking }, { data: rsvps }, { data: teamsData }, { data: matchSchedule }, { data: groupMembers }, { data: userRating }, { data: auction }] =
     await Promise.all([
       getGroupRole(params.groupId),
-      supabaseAdmin.from('bookings').select('*, groups(name)').eq('id', params.bookingId).maybeSingle(),
+      supabaseAdmin.from('bookings').select('*, groups(name, custom_scoring_settings)').eq('id', params.bookingId).maybeSingle(),
       supabaseAdmin.from('rsvps').select(`*, profiles(${PROFILE_FIELDS})`).eq('booking_id', params.bookingId),
       supabaseAdmin.from('teams').select(`*, team_players(*, profiles(${PROFILE_FIELDS}))`).eq('booking_id', params.bookingId),
       supabaseAdmin.from('match_schedule').select('*').eq('booking_id', params.bookingId).order('scheduled_order', { ascending: true }),
@@ -52,6 +52,7 @@ export default async function MatchPage({
         .from('match_events')
         .select(`*, profiles!player_id(${PROFILE_FIELDS}), secondary_profile:profiles!secondary_player_id(${PROFILE_FIELDS})`)
         .in('match_schedule_id', scheduleIds)
+        .is('voided_at', null)
         .order('minute', { ascending: true }),
       supabaseAdmin
         .from('goal_events')
@@ -138,6 +139,7 @@ export default async function MatchPage({
       userRole={role}
       groupMembers={activeGroupMembers}
       initialHasRated={!!userRating}
+      renderedAt={Date.now()}
       initialTab={searchParams?.tab || 'players'}
       auction={auction}
     />

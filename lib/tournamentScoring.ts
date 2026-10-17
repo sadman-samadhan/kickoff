@@ -103,6 +103,7 @@ export interface MatchEvent {
   secondary_player_id?: string | null // assist_id or sub_on_player_id
   team_id?: string | null
   minute: number
+  voided_at?: string | null
   details_json?: {
     card_type?: 'yellow' | 'red'
     is_own_goal?: boolean
@@ -120,8 +121,10 @@ export function calculateMatchPlayerPitchTime(
   durationMinutes: number = 30,
   homeTeamPlayerIds: string[],
   awayTeamPlayerIds: string[],
-  startingPlayerIds: string[]
+  startingPlayerIds: string[],
+  homeTeamId?: string | null
 ) {
+  allEvents = allEvents.filter((e) => !e.voided_at)
   const matchDuration = durationMinutes && durationMinutes > 0 ? durationMinutes : 30
   const allPlayerIds = Array.from(new Set([...homeTeamPlayerIds, ...awayTeamPlayerIds]))
 
@@ -201,10 +204,12 @@ export function calculateMatchPlayerPitchTime(
     goalEvents.forEach((g) => {
       const gMin = g.minute
       const isOwnGoal = g.details_json?.is_own_goal === true
-      const scorerId = (g.player_id || g.details_json?.guest_player_id) ?? ''
-
-      // Goal against home team: Goal scored by away team OR own goal by home team
-      const isGoalAgainstHome = (!isOwnGoal && !homeTeamPlayerIds.includes(scorerId)) || (isOwnGoal && homeTeamPlayerIds.includes(scorerId))
+      // Goal against home team: scored by the away team, or an own goal by the home team. The event's team_id
+      // says which side logged it; only very old events without one fall back to looking up the scorer.
+      const loggedByHome = g.team_id && homeTeamId
+        ? g.team_id === homeTeamId
+        : homeTeamPlayerIds.includes((g.player_id || g.details_json?.guest_player_id) ?? '')
+      const isGoalAgainstHome = isOwnGoal ? loggedByHome : !loggedByHome
 
       const isConcededAgainstMyTeam = isHome ? isGoalAgainstHome : !isGoalAgainstHome
 
@@ -242,6 +247,8 @@ export interface PlayerPointsBreakdown {
   yellowPts: PointItem
   redPts: PointItem
   mvpPts: PointItem
+  hatTrickPts: PointItem
+  matchWinPts: PointItem
   appearancePts: PointItem
   totalPoints: number
 }
@@ -261,6 +268,8 @@ export function calculateTournamentPlayerPoints(
     yellowCards?: number
     redCards?: number
     motmCount?: number
+    hatTricks?: number
+    matchWins?: number
     appearances?: number
   },
   customSettings?: GroupScoringSettings
@@ -279,6 +288,8 @@ export function calculateTournamentPlayerPoints(
   const yellowCards = stats.yellowCards || 0
   const redCards = stats.redCards || 0
   const motmCount = stats.motmCount || 0
+  const hatTricks = stats.hatTricks || 0
+  const matchWins = stats.matchWins || 0
   const appearances = stats.appearances || 0
 
   const goalPts: PointItem = { label: 'Goals', count: goals, weight: rules.goal, total: goals * rules.goal }
@@ -290,6 +301,8 @@ export function calculateTournamentPlayerPoints(
   const yellowPts: PointItem = { label: 'Yellow Cards', count: yellowCards, weight: rules.yellowCard, total: yellowCards * rules.yellowCard }
   const redPts: PointItem = { label: 'Red Cards', count: redCards, weight: rules.redCard, total: redCards * rules.redCard }
   const mvpPts: PointItem = { label: 'Match MVP (MOTM)', count: motmCount, weight: bonus.mvp, total: motmCount * bonus.mvp }
+  const hatTrickPts: PointItem = { label: 'Hat-tricks', count: hatTricks, weight: bonus.hatTrick, total: hatTricks * bonus.hatTrick }
+  const matchWinPts: PointItem = { label: 'Match Wins', count: matchWins, weight: bonus.matchWin, total: matchWins * bonus.matchWin }
   const appearancePts: PointItem = { label: 'Appearances', count: appearances, weight: bonus.appearance, total: appearances * bonus.appearance }
 
   const totalPoints =
@@ -302,6 +315,8 @@ export function calculateTournamentPlayerPoints(
     yellowPts.total +
     redPts.total +
     mvpPts.total +
+    hatTrickPts.total +
+    matchWinPts.total +
     appearancePts.total
 
   const breakdown: PlayerPointsBreakdown = {
@@ -314,9 +329,47 @@ export function calculateTournamentPlayerPoints(
     yellowPts,
     redPts,
     mvpPts,
+    hatTrickPts,
+    matchWinPts,
     appearancePts,
     totalPoints,
   }
 
   return { totalPoints, breakdown }
+}
+
+/**
+ * Per-player hat-tricks (3+ goals, not own goals, in one match) and wins (on the winning side of a completed
+ * match, DNP excluded). `goals` are rows with match id + scorer key; `teamsOf` maps team id → player keys.
+ */
+export function countHatTricksAndWins(
+  matches: { id: string; status?: string | null; home_team_id?: string | null; away_team_id?: string | null; home_score?: number | null; away_score?: number | null; dnp_player_ids?: string[] | null }[],
+  goals: { match_schedule_id: string; scorer: string | null; is_own_goal?: boolean }[],
+  teamsOf: (teamId: string) => string[],
+) {
+  const hatTricks: Record<string, number> = {}
+  const wins: Record<string, number> = {}
+  const perMatch = new Map<string, number>()
+  for (const g of goals) {
+    if (!g.scorer || g.is_own_goal) continue
+    const k = `${g.match_schedule_id}|${g.scorer}`
+    perMatch.set(k, (perMatch.get(k) || 0) + 1)
+  }
+  perMatch.forEach((n, k) => {
+    if (n >= 3) {
+      const pid = k.split('|')[1]
+      hatTricks[pid] = (hatTricks[pid] || 0) + 1
+    }
+  })
+  for (const m of matches) {
+    if (m.status !== 'completed' || !m.home_team_id || !m.away_team_id) continue
+    const hs = m.home_score ?? 0
+    const as = m.away_score ?? 0
+    if (hs === as) continue
+    const dnp = new Set(m.dnp_player_ids || [])
+    for (const pid of teamsOf(hs > as ? m.home_team_id : m.away_team_id)) {
+      if (!dnp.has(pid)) wins[pid] = (wins[pid] || 0) + 1
+    }
+  }
+  return { hatTricks, wins }
 }

@@ -1,19 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { AuthError, requireGroupMember } from '@/lib/groupAuth'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request, { params }: { params: { groupId: string } }) {
-  const supabaseAuth = createClient()
-  const { data: { user } } = await supabaseAuth.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  let supabaseAdmin
+  try {
+    ;({ admin: supabaseAdmin } = await requireGroupMember(params.groupId))
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: e instanceof AuthError ? e.status : 500 })
+  }
 
-  const supabaseAdmin = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  const { data: rawMembers } = await supabaseAdmin.from('group_members').select('player_id, profiles(*)').eq('group_id', params.groupId)
+  const { data: rawMembers } = await supabaseAdmin.from('group_members').select('player_id, profiles(id, full_name, username, avatar_url, preferred_position, secondary_position, is_suspended)').eq('group_id', params.groupId)
   const members = rawMembers?.filter((m: any) => !m.profiles?.is_suspended) || []
   if (!members || members.length === 0) return NextResponse.json({ top_scorer: null, top_playmaker: null, best_defender: null })
 
