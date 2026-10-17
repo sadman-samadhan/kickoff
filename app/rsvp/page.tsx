@@ -171,7 +171,7 @@ export default async function RsvpPage({
             View Match Details
           </Link>
           <Link href="/login" className="w-full bg-white border border-neutral-200 text-neutral-700 rounded-xl py-3 font-bold hover:bg-neutral-50 block">
-            Login to KhelaHobe
+            Login to KhelaHbe
           </Link>
         </div>
       </div>

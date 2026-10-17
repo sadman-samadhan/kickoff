@@ -502,7 +502,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
               <Share2 className="w-4 h-4" /> Share my stats
             </button>
             {shareStatsOpen && (
-              <ShareSheet title="Share my stats" onClose={() => setShareStatsOpen(false)} meta={{ fileName: 'khelahobe-my-stats.png', title: `${profile.full_name} — KhelaHobe stats` }}>
+              <ShareSheet title="Share my stats" onClose={() => setShareStatsOpen(false)} meta={{ fileName: 'khelahbe-my-stats.png', title: `${profile.full_name} — KhelaHbe stats` }}>
                 {(o) => (
                   <PlayerStatsCard
                     {...o}

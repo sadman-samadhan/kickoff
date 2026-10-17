@@ -320,7 +320,7 @@ export default function LiveMatchClient({
   const potmLine = mvpTally?.goals ? `${mvpTally.goals} goal${mvpTally.goals > 1 ? 's' : ''}` : mvpTally?.assists ? `${mvpTally.assists} assist${mvpTally.assists > 1 ? 's' : ''}` : undefined
   const ctx = state.context
   const shareMeta = {
-    group: ctx?.group || 'KhelaHobe',
+    group: ctx?.group || 'KhelaHbe',
     label: [match.match_number ? `Match ${match.match_number}` : null, match.stage_name].filter(Boolean).join(' · ') || undefined,
     date: ctx?.date ? new Date(`${ctx.date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : undefined,
     venue: ctx?.venue || undefined,
@@ -583,7 +583,7 @@ export default function LiveMatchClient({
         <ShareSheet
           title={finished ? 'Share result' : 'Share score'}
           onClose={() => setShowShare(null)}
-          meta={{ fileName: `khelahobe-match-${match.match_number ?? ''}.png`, title: `${home?.name} ${score.home}–${score.away} ${away?.name}`, text: `${home?.name} ${score.home}–${score.away} ${away?.name} ⚽` }}
+          meta={{ fileName: `khelahbe-match-${match.match_number ?? ''}.png`, title: `${home?.name} ${score.home}–${score.away} ${away?.name}`, text: `${home?.name} ${score.home}–${score.away} ${away?.name} ⚽` }}
         >
           {(o) => (
             <ResultCard
@@ -601,7 +601,7 @@ export default function LiveMatchClient({
       )}
 
       {showShare === 'motm' && mvpKey && (
-        <ShareSheet title="Share player of the match" onClose={() => setShowShare(null)} meta={{ fileName: `khelahobe-potm-${match.match_number ?? ''}.png`, title: `${fullName(mvpKey)} — player of the match` }}>
+        <ShareSheet title="Share player of the match" onClose={() => setShowShare(null)} meta={{ fileName: `khelahbe-potm-${match.match_number ?? ''}.png`, title: `${fullName(mvpKey)} — player of the match` }}>
           {(o) => {
             const t = tally.get(mvpKey)
             const team = teams.find((x) => x.players.some((p) => p.id === mvpKey))

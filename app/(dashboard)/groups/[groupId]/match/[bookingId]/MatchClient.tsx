@@ -2553,7 +2553,7 @@ export default function MatchClient({
           <ShareSheet
             title="Share team sheet"
             onClose={() => setSharingTeam(null)}
-            meta={{ fileName: `khelahobe-team-${String(sharingTeam.name).replace(/\s+/g, '-').toLowerCase()}.png`, title: `${sharingTeam.name} — KhelaHobe`, text: `${sharingTeam.name} team sheet ⚽` }}
+            meta={{ fileName: `khelahbe-team-${String(sharingTeam.name).replace(/\s+/g, '-').toLowerCase()}.png`, title: `${sharingTeam.name} — KhelaHbe`, text: `${sharingTeam.name} team sheet ⚽` }}
           >
             {(o) => (
               <TeamSheetCard
@@ -2574,7 +2574,7 @@ export default function MatchClient({
         <ShareSheet
           title="Share fixtures"
           onClose={() => setSharingSchedule(false)}
-          meta={{ fileName: `khelahobe-fixtures-${booking.id}.png`, title: `${shareMeta.group} fixtures — KhelaHobe`, text: 'Fixtures & scores ⚽' }}
+          meta={{ fileName: `khelahbe-fixtures-${booking.id}.png`, title: `${shareMeta.group} fixtures — KhelaHbe`, text: 'Fixtures & scores ⚽' }}
         >
           {(o) => (
             <FixturesCard
@@ -2602,7 +2602,7 @@ export default function MatchClient({
         <ShareSheet
           title="Share matchday table"
           onClose={() => setSharingReport(null)}
-          meta={{ fileName: `khelahobe-table-${booking.id}.png`, title: `${shareMeta.group} — KhelaHobe`, text: hasCompletedMatches ? `🏆 ${championName} are matchday champions!` : 'Matchday table' }}
+          meta={{ fileName: `khelahbe-table-${booking.id}.png`, title: `${shareMeta.group} — KhelaHbe`, text: hasCompletedMatches ? `🏆 ${championName} are matchday champions!` : 'Matchday table' }}
         >
           {(o) => (
             <StandingsCard
@@ -2622,7 +2622,7 @@ export default function MatchClient({
         <ShareSheet
           title="Share top players"
           onClose={() => setSharingReport(null)}
-          meta={{ fileName: `khelahobe-top-players-${booking.id}.png`, title: `${shareMeta.group} top players — KhelaHobe` }}
+          meta={{ fileName: `khelahbe-top-players-${booking.id}.png`, title: `${shareMeta.group} top players — KhelaHbe` }}
         >
           {(o) => (
             <TopPlayersCard

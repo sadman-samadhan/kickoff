@@ -5,6 +5,7 @@ import { Download, Loader2, Share2, X } from 'lucide-react'
 import { formatMoney } from '@/lib/auctionRules'
 import type { AuctionEntry, AuctionTeam, AuctionTier } from '@/lib/auction/types'
 import { toPng } from '@/lib/toPng'
+import { Wordmark } from '@/components/brand/BrandLogo'
 import { initials, onColor } from './derive'
 
 type Props = { entry: AuctionEntry; team: AuctionTeam; tier: AuctionTier | null; title: string; subtitle: string }
@@ -31,7 +32,7 @@ function SoldCardArt({ entry, team, tier, title, subtitle, dark }: Props & { dar
         <span style={{ position: 'absolute', right: 26, top: 168, transform: 'rotate(-12deg)', border: '5px solid #4ade80', color: '#4ade80', borderRadius: 12, padding: '0 14px', fontFamily: 'var(--font-ka-barlow-condensed), sans-serif', fontWeight: 800, fontSize: 52, letterSpacing: '0.06em' }}>SOLD</span>
         <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#94a3b8', position: 'relative' }}>
           <span>{subtitle}</span>
-          <span style={{ fontFamily: 'var(--font-ka-barlow-condensed), sans-serif', fontWeight: 800, fontSize: 16, letterSpacing: '0.06em', color: '#f8fafc' }}>KHELA<span style={{ color: '#4ade80' }}>HOBE</span></span>
+          <span style={{ color: '#f8fafc', ['--app-primary' as string]: '#4ade80' }}><Wordmark size={18} /></span>
         </div>
       </div>
     )
@@ -53,7 +54,7 @@ function SoldCardArt({ entry, team, tier, title, subtitle, dark }: Props & { dar
       <span style={{ position: 'absolute', right: 22, top: 70, transform: 'rotate(10deg)', background: ink, color: team.color, borderRadius: 10, padding: '4px 14px', fontFamily: 'var(--font-ka-archivo), sans-serif', fontWeight: 800, fontSize: 38, letterSpacing: '0.06em' }}>SOLD</span>
       <div style={{ marginTop: 'auto', background: ink, color: team.color, padding: '12px 24px', display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
         <span>{subtitle}</span>
-        <span style={{ fontFamily: 'var(--font-ka-archivo), sans-serif', fontWeight: 800, fontSize: 14 }}>khelahobe</span>
+        <span style={{ ['--app-primary' as string]: '#15803d' }}><Wordmark size={16} /></span>
       </div>
     </div>
   )

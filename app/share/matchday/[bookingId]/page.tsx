@@ -12,7 +12,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const s = UUID.test(params.bookingId) ? await loadMatchdaySummary(params.bookingId) : null
-  if (!s) return { title: 'KhelaHobe', robots: { index: false } }
+  if (!s) return { title: 'KhelaHbe', robots: { index: false } }
   const title = `${s.group} · ${prettyDate(s.date)}`
   const description = describeMatchday(s)
   const image = appUrl(`/api/og/matchday/${s.bookingId}`)
@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title,
       description,
       images: [{ url: image, width: 1200, height: 630 }],
-      siteName: 'KhelaHobe',
+      siteName: 'KhelaHbe',
       type: 'website',
       url: appUrl(`/share/matchday/${s.bookingId}`),
     },
@@ -56,7 +56,7 @@ export default async function SharedMatchday({ params }: Props) {
         )}
         <p className="text-sm">{describeMatchday(s)}</p>
         <Link href="/login" className="h-12 rounded-2xl bg-app-primary text-app-on-primary font-bold flex items-center justify-center">
-          Sign in to KhelaHobe
+          Sign in to KhelaHbe
         </Link>
       </div>
     </main>

@@ -49,10 +49,10 @@ export async function toggleUserSuspensionAction(
       const { Resend } = await import('resend')
       const resend = new Resend(process.env.RESEND_API_KEY)
       await resend.emails.send({
-        from: 'KhelaHobe Admin <notifications@khelahbe.vercel.app>',
+        from: 'KhelaHbe Admin <notifications@khelahbe.vercel.app>',
         to: targetProfile.email,
-        subject: suspend ? 'Account Suspended - KhelaHobe' : 'Account Reinstated - KhelaHobe',
-        html: `<p>Hello ${targetProfile.full_name || 'Player'},</p><p>${notifMessage}</p><p>Regards,<br>KhelaHobe Team</p>`
+        subject: suspend ? 'Account Suspended - KhelaHbe' : 'Account Reinstated - KhelaHbe',
+        html: `<p>Hello ${targetProfile.full_name || 'Player'},</p><p>${notifMessage}</p><p>Regards,<br>KhelaHbe Team</p>`
       })
     }
   } catch (e) {
@@ -246,9 +246,9 @@ export async function submitAdminAppealAction(subject: string, message: string) 
       const { Resend } = await import('resend')
       const resend = new Resend(process.env.RESEND_API_KEY)
       await resend.emails.send({
-        from: 'KhelaHobe Appeals <notifications@khelahbe.vercel.app>',
+        from: 'KhelaHbe Appeals <notifications@khelahbe.vercel.app>',
         to: 'sakib.samadhan@gmail.com',
-        subject: `[KhelaHobe Appeal] ${subject.trim()}`,
+        subject: `[KhelaHbe Appeal] ${subject.trim()}`,
         html: `<p>A suspended user submitted an appeal:</p><p><strong>Subject:</strong> ${subject.trim()}</p><p><strong>Message:</strong> ${message.trim()}</p>`
       })
     }

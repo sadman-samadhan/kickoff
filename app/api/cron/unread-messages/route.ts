@@ -57,7 +57,7 @@ export async function GET(req: Request) {
 
         await sendEmail({
           to: profile.email,
-          subject: `💬 Unread messages in ${groupName} — KhelaHobe`,
+          subject: `💬 Unread messages in ${groupName} — KhelaHbe`,
           html: `
             <div style="font-family: sans-serif; padding: 20px; color: #333;">
               <h2 style="color: #16a34a;">Hi ${profile.full_name?.split(' ')[0] || 'Player'},</h2>

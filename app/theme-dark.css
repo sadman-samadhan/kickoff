@@ -49,7 +49,6 @@
 :where(.dark) .bg-slate-50:where(:not(.no-dark, .no-dark *)) { background-color: rgb(11 16 32 / 1); }
 :where(.dark) .bg-slate-50\/30:where(:not(.no-dark, .no-dark *)) { background-color: rgb(11 16 32 / 0.3); }
 :where(.dark) .bg-white:where(:not(.no-dark, .no-dark *)) { background-color: rgb(14 18 35 / 1); }
-:where(.dark) .bg-white\/90:where(:not(.no-dark, .no-dark *)) { background-color: rgb(14 18 35 / 0.9); }
 :where(.dark) .bg-white\/95:where(:not(.no-dark, .no-dark *)) { background-color: rgb(14 18 35 / 0.95); }
 :where(.dark) .border-amber-100:where(:not(.no-dark, .no-dark *)) { border-color: rgb(245 158 11 / 0.25); }
 :where(.dark) .border-amber-200:where(:not(.no-dark, .no-dark *)) { border-color: rgb(245 158 11 / 0.32); }

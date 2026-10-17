@@ -113,7 +113,7 @@ export default function DashboardClient({
 
     const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//KhelaHobe App//EN
+PRODID:-//KhelaHbe App//EN
 BEGIN:VEVENT
 UID:${booking.id}
 DTSTAMP:${formatDate(new Date())}
@@ -121,7 +121,7 @@ DTSTART:${formatDate(start)}
 DTEND:${formatDate(end)}
 SUMMARY:Match - ${booking.groups?.name || 'Football Group'}
 LOCATION:${booking.field_name}
-DESCRIPTION:KhelaHobe match at ${booking.field_name}
+DESCRIPTION:KhelaHbe match at ${booking.field_name}
 END:VEVENT
 END:VCALENDAR`
 

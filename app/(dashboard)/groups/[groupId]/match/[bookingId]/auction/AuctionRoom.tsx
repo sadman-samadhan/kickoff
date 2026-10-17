@@ -113,7 +113,7 @@ export default function AuctionRoom({ initial, groupId, bookingId }: Props) {
         <WatchView state={state} d={d} />
       )}
       {squadsOpen && (
-        <ShareSheet title="Share final squads" onClose={() => setSquadsOpen(false)} meta={{ fileName: 'khelahobe-auction-squads.png', title: `${state.auction.groupName} — final squads` }}>
+        <ShareSheet title="Share final squads" onClose={() => setSquadsOpen(false)} meta={{ fileName: 'khelahbe-auction-squads.png', title: `${state.auction.groupName} — final squads` }}>
           {(o) => (
             <SquadsCard
               {...o}
