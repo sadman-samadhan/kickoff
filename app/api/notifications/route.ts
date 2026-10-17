@@ -15,6 +15,7 @@ export async function GET(req: Request) {
     .select('id, message, is_read, created_at, booking_id, group_id, bookings(match_date, match_time, field_name), groups(name)')
     .eq('player_id', user.id)
     .order('created_at', { ascending: false })
+    .limit(50)
 
   if (unread === 'true') {
     query = query.eq('is_read', false)

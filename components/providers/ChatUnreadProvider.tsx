@@ -22,18 +22,15 @@ export function ChatUnreadProvider({ children }: { children: React.ReactNode }) 
 
   const refreshCounts = useCallback(async () => {
     try {
-      // Get all group IDs from localStorage that we track, or we could fetch groups API.
-      // But we need the list of user's groups to get accurate counts even for groups they haven't opened yet.
-      const res = await fetch('/api/groups')
-      const groups = await res.json()
-      
-      if (!Array.isArray(groups)) return
-
+      // Send the "last read" time we know for each group; the server works out the user's groups itself.
       const timestamps: Record<string, number> = {}
-      groups.forEach((g: { id: string }) => {
-        const lastRead = localStorage.getItem(`chat_last_read_${g.id}`)
-        timestamps[g.id] = lastRead ? parseInt(lastRead, 10) : 0 // 0 means fetch all unread since epoch
-      })
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key?.startsWith('chat_last_read_')) {
+          const ts = parseInt(localStorage.getItem(key) || '', 10)
+          if (!isNaN(ts)) timestamps[key.slice('chat_last_read_'.length)] = ts
+        }
+      }
 
       const countsRes = await fetch('/api/messages/unread-counts', {
         method: 'POST',
@@ -52,10 +49,24 @@ export function ChatUnreadProvider({ children }: { children: React.ReactNode }) 
   }, [])
 
   useEffect(() => {
-    refreshCounts()
-    // Refresh every 30 seconds
-    const interval = setInterval(refreshCounts, 30000)
-    return () => clearInterval(interval)
+    // Poll only while the tab is visible; refresh as soon as it comes back.
+    let interval: ReturnType<typeof setInterval> | null = null
+    const start = () => {
+      if (interval) return
+      refreshCounts()
+      interval = setInterval(refreshCounts, 60000)
+    }
+    const stop = () => {
+      if (interval) clearInterval(interval)
+      interval = null
+    }
+    const onVisibility = () => (document.visibilityState === 'visible' ? start() : stop())
+    onVisibility()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [refreshCounts])
 
   const markAsRead = useCallback(async (groupId: string) => {

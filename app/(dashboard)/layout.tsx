@@ -1,6 +1,7 @@
 import { BottomNav } from '@/components/layout/BottomNav'
 import { NotificationBell } from '@/components/layout/NotificationBell'
 import { Providers } from '@/components/Providers'
+import { ChatUnreadProvider } from '@/components/providers/ChatUnreadProvider'
 import { SuspendedLayoutGuard } from '@/components/layout/SuspendedLayoutGuard'
 import { getAuthUser } from '@/lib/groupAuth'
 import { getMyProfile } from '@/lib/profile'
@@ -20,6 +21,7 @@ export default async function DashboardLayout({
 
   return (
     <Providers profile={profile}>
+      <ChatUnreadProvider>
       <SuspendedLayoutGuard isSuspended={!!profile?.is_suspended}>
         <div className="min-h-screen min-h-[100dvh] bg-transparent">
           {/* ── Top Header Bar ── */}
@@ -39,6 +41,7 @@ export default async function DashboardLayout({
           <BottomNav />
         </div>
       </SuspendedLayoutGuard>
+      </ChatUnreadProvider>
     </Providers>
   )
 }

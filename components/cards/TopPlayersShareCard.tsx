@@ -2,7 +2,7 @@
 "use client"
 
 import { useRef, useState } from 'react'
-import { toPng } from 'html-to-image'
+import { toPng } from '@/lib/toPng'
 import { QRCodeSVG } from 'qrcode.react'
 import { Share2, Download, X, Loader2, Star, Award, Shield, Target, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'

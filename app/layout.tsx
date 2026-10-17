@@ -31,7 +31,6 @@ export const metadata: Metadata = {
 };
 
 import { TopLoaderProvider } from '@/components/providers/TopLoaderProvider';
-import { ChatUnreadProvider } from '@/components/providers/ChatUnreadProvider';
 import Image from 'next/image';
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { InstallPrompt } from '@/components/ui/InstallPrompt';
@@ -55,13 +54,11 @@ export default function RootLayout({
             alt="Stadium Background"
             fill
             className="object-cover"
-            priority
+            sizes="100vw"
           />
         </div>
         <TopLoaderProvider>
-          <ChatUnreadProvider>
-            {children}
-          </ChatUnreadProvider>
+          {children}
         </TopLoaderProvider>
         <InstallPrompt />
         <SpeedInsights />

@@ -1,39 +1,37 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/groupAuth'
+import { createAdminClient } from '@/lib/supabase/server'
+
+// Unread chat counts for every group the user belongs to, in one request.
+// Body: { groupReadTimestamps?: { [groupId]: epochMs } } — the client's "last read" times (localStorage).
+// Groups never opened count only the last 30 days, not all history.
+const NEVER_READ_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
 
 export async function POST(req: Request) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const { groupReadTimestamps } = await req.json()
-    if (!groupReadTimestamps || typeof groupReadTimestamps !== 'object') {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
-    }
+    const body = await req.json().catch(() => ({}))
+    const readAt: Record<string, unknown> =
+      body?.groupReadTimestamps && typeof body.groupReadTimestamps === 'object' ? body.groupReadTimestamps : {}
+
+    const admin = createAdminClient()
+    const { data: memberships } = await admin.from('group_members').select('group_id').eq('player_id', user.id)
+    const floor = Date.now() - NEVER_READ_WINDOW_MS
 
     const counts: Record<string, number> = {}
-
-    // We do sequential or parallel count fetches. Since groups are usually < 10, Promise.all is fine.
     await Promise.all(
-      Object.entries(groupReadTimestamps).map(async ([groupId, timestamp]) => {
-        const query = supabase
+      (memberships || []).map(async ({ group_id: groupId }) => {
+        const ts = typeof readAt[groupId] === 'number' && (readAt[groupId] as number) > floor ? (readAt[groupId] as number) : floor
+        const { count, error } = await admin
           .from('group_messages')
-          .select('*', { count: 'exact', head: true })
+          .select('id', { count: 'exact', head: true })
           .eq('group_id', groupId)
           .neq('sender_id', user.id)
-
-        // Only count messages newer than the timestamp if provided
-        if (timestamp && typeof timestamp === 'number') {
-           const isoDate = new Date(timestamp).toISOString()
-           query.gt('created_at', isoDate)
-        }
-
-        const { count, error } = await query
-        if (!error && count !== null) {
-          counts[groupId] = count
-        }
-      })
+          .gt('created_at', new Date(ts).toISOString())
+        if (!error) counts[groupId] = count ?? 0
+      }),
     )
 
     return NextResponse.json(counts)

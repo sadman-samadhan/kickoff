@@ -1,52 +1,45 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { getAuthUser, getGroupRole } from '@/lib/groupAuth'
 import GroupClient from './GroupClient'
 
-export default async function GroupPage({ params }: { params: { groupId: string } }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+// How many finished matches the group page shows (the full list lives in match history).
+const PAST_LIMIT = 20
+const PROFILE_FIELDS = 'id, full_name, username, avatar_url, preferred_position, secondary_position, is_suspended'
 
+export default async function GroupPage({ params }: { params: { groupId: string } }) {
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
-  // 1. Fetch group
-  const { data: group } = await supabase
-    .from('groups')
-    .select('*')
-    .eq('id', params.groupId)
-    .single()
-
-  if (!group) {
-    redirect('/dashboard')
-  }
-
-  // 2. Fetch members & my role
   const supabaseAdmin = createAdminClient()
-  const { data: membersData } = await supabaseAdmin
-    .from('group_members')
-    .select('role, player_id, profiles(*)')
-    .eq('group_id', params.groupId)
+  // Matches from the last two days are classified by time below; anything older is history.
+  const recentCutoff = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const bookingFields = `id, match_date, match_time, field_name, max_players, status,
+    rsvps(player_id, status, waitlist_position, selected_position, profiles(is_suspended)),
+    teams(id, name, jersey_color, captain_id, team_players(player_id)),
+    match_schedule(home_team_id, away_team_id, home_score, away_score, status)`
 
-  const myMembership = membersData?.find(m => m.player_id === user.id)
-  
-  if (!myMembership) {
-    // Not a member
+  const [role, { data: group }, { data: membersData }, { data: recentData }, { data: olderData }] = await Promise.all([
+    getGroupRole(params.groupId),
+    supabaseAdmin.from('groups').select('*').eq('id', params.groupId).maybeSingle(),
+    supabaseAdmin.from('group_members').select(`role, player_id, profiles(${PROFILE_FIELDS})`).eq('group_id', params.groupId),
+    supabaseAdmin.from('bookings').select(bookingFields).eq('group_id', params.groupId).gte('match_date', recentCutoff).order('match_date', { ascending: true }),
+    supabaseAdmin.from('bookings').select(bookingFields).eq('group_id', params.groupId).lt('match_date', recentCutoff).order('match_date', { ascending: false }).limit(PAST_LIMIT),
+  ])
+
+  if (!group || !role) {
+    // Missing group, or not a member
     redirect('/dashboard')
   }
 
-  const role = myMembership.role
   const activeMembersData = membersData?.filter(m => !(m.profiles as any)?.is_suspended) || []
   const members = activeMembersData.map(m => ({
-    ...m.profiles,
+    ...(m.profiles as any),
     role: m.role
   }))
 
-  // 3. Fetch bookings, RSVPs, teams, and match_schedule
-  const { data: bookingsData } = await supabaseAdmin
-    .from('bookings')
-    .select('*, rsvps(*, profiles(*)), teams(*, team_players(*)), match_schedule(*)')
-    .eq('group_id', params.groupId)
-    .order('match_date', { ascending: true })
+  const bookingsData = [...(recentData || []), ...(olderData || [])]
 
   interface Booking {
     id: string
@@ -136,7 +129,7 @@ export default async function GroupPage({ params }: { params: { groupId: string 
   const nowMs = Date.now()
   const fiveHoursMs = 5 * 60 * 60 * 1000
 
-  bookingsData?.forEach(b => {
+  bookingsData.forEach((b: any) => {
     const matchDateTimeStr = `${b.match_date}T${b.match_time || '00:00:00'}`
     const matchTimeMs = new Date(matchDateTimeStr).getTime()
 
@@ -163,6 +156,7 @@ export default async function GroupPage({ params }: { params: { groupId: string 
 
   // Sort past descending
   pastBookings.sort((a, b) => new Date(b.match_date).getTime() - new Date(a.match_date).getTime())
+  pastBookings.splice(PAST_LIMIT)
 
   // Next match is the first upcoming
   const nextMatch = upcomingBookings.length > 0 ? upcomingBookings[0] : null

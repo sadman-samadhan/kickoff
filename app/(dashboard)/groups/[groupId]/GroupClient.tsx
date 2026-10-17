@@ -107,7 +107,14 @@ export default function GroupClient({
   const [isDeleteGroupModalOpen, setIsDeleteGroupModalOpen] = useState(false)
   const [adminActionLoading, setAdminActionLoading] = useState(false)
 
+  // Squad stats are expensive to compute, so only load them when the Squad tab is opened.
+  const [statsRequested, setStatsRequested] = useState(false)
   useEffect(() => {
+    if (activeTab === 'squad') setStatsRequested(true)
+  }, [activeTab])
+
+  useEffect(() => {
+    if (!statsRequested) return
     async function fetchStats() {
       try {
         const res = await fetch(`/api/stats/group/${group.id}`)
@@ -128,7 +135,7 @@ export default function GroupClient({
       }
     }
     fetchStats()
-  }, [group.id])
+  }, [group.id, statsRequested])
 
   // Next Match logic
   const myProfile = members.find((m: any) => m.id === userId)
@@ -845,7 +852,6 @@ export default function GroupClient({
                       await makeAdminAction(group.id, selectedMember.id)
                       setIsAdminActionOpen(false)
                       setSelectedMember(null)
-                      router.refresh()
                     } catch (e: any) {
                       alert(e.message || 'Failed to make admin')
                     } finally {
@@ -866,7 +872,6 @@ export default function GroupClient({
                       await removeAdminAction(group.id, selectedMember.id)
                       setIsAdminActionOpen(false)
                       setSelectedMember(null)
-                      router.refresh()
                     } catch (e: any) {
                       alert(e.message || 'Failed to remove admin')
                     } finally {
@@ -913,7 +918,6 @@ export default function GroupClient({
                     await removeMemberAction(group.id, selectedMember.id)
                     setIsConfirmRemoveOpen(false)
                     setSelectedMember(null)
-                    router.refresh()
                   } catch (e: any) {
                     alert(e.message || 'Failed to remove member')
                   } finally {
