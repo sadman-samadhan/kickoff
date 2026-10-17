@@ -1,21 +1,24 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email/resend'
 import { matchCancellationEmail } from '@/lib/email/templates'
+import { AuthError, requireBookingAdminOrCreator } from '@/lib/groupAuth'
 
 export async function POST(req: Request, { params }: { params: { bookingId: string } }) {
-  const supabaseAdmin = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  const body = await req.json()
-  const { groupId, reason } = body
+  const body = await req.json().catch(() => ({}))
+  const { reason } = body
   const { bookingId } = params
 
-  if (!groupId || !bookingId) {
-    return NextResponse.json({ error: 'groupId and bookingId are required' }, { status: 400 })
+  // Only admins or the match creator may cancel. The group comes from the booking row, not the request.
+  let supabaseAdmin: any
+  let groupId: string
+  try {
+    const auth = await requireBookingAdminOrCreator(bookingId, body.groupId || undefined)
+    supabaseAdmin = auth.admin
+    groupId = auth.groupId
+  } catch (e) {
+    const status = e instanceof AuthError ? e.status : 500
+    return NextResponse.json({ error: (e as Error).message }, { status })
   }
 
   const cancelReason = reason || 'No reason provided'
@@ -56,7 +59,7 @@ export async function POST(req: Request, { params }: { params: { bookingId: stri
   }
 
   // Insert notifications
-  const insertData = members.map(m => ({
+  const insertData = members.map((m: any) => ({
     player_id: m.player_id,
     booking_id: bookingId,
     group_id: groupId,
@@ -69,7 +72,7 @@ export async function POST(req: Request, { params }: { params: { bookingId: stri
   }
 
   // Send Emails
-  const playerIds = members.map(m => m.player_id)
+  const playerIds = members.map((m: any) => m.player_id)
   const { data: profiles } = await supabaseAdmin
     .from('profiles')
     .select('id, full_name, email, email_notifications')
@@ -78,7 +81,7 @@ export async function POST(req: Request, { params }: { params: { bookingId: stri
   const groupName = (booking.groups as any)?.name || 'Group'
 
   if (profiles) {
-    Promise.all(profiles.map(async (p) => {
+    Promise.all(profiles.map(async (p: any) => {
       if (p.email && !p.email.endsWith('@khelahobe.local') && p.email_notifications !== false) {
         await sendEmail({
           to: p.email,

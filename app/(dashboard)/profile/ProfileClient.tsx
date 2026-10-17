@@ -99,7 +99,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false)
   const [securityForm, setSecurityForm] = useState({
     security_question: profile.security_question || '',
-    security_answer: profile.security_answer || ''
+    security_answer: ''
   })
 
   useEffect(() => {
@@ -111,7 +111,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
     })
     setSecurityForm({
       security_question: profile.security_question || '',
-      security_answer: profile.security_answer || ''
+      security_answer: ''
     })
   }, [profile])
 
@@ -254,13 +254,14 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
 
     try {
       if (verificationMethod === 'question') {
-        const expected = profile.security_answer?.trim().toLowerCase()
-        const actual = securityAnswerInput.trim().toLowerCase()
-        if (!expected) {
-          throw new Error('Security question answer is not set in your profile. Please use your old password to verify.')
-        }
-        if (expected !== actual) {
-          throw new Error('Incorrect answer to security question.')
+        const res = await fetch('/api/auth/security-answer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answer: securityAnswerInput })
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data.error || 'Incorrect answer to security question.')
         }
         setIsVerified(true)
       } else {
@@ -939,7 +940,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
                   className="w-full px-3 py-3 border border-neutral-200 rounded-xl text-sm font-medium bg-white outline-none focus:ring-2 focus:ring-green-500"
                   value={securityForm.security_answer}
                   onChange={e => setSecurityForm({ ...securityForm, security_answer: e.target.value })}
-                  placeholder="Your secret answer"
+                  placeholder={profile.security_question ? 'Enter a new answer' : 'Your secret answer'}
                 />
                 <p className="text-[10px] text-neutral-400 font-medium">This will be used to verify your identity when changing your password or recovering your account.</p>
               </div>
@@ -950,9 +951,24 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
                     alert('Please select a question and provide an answer.')
                     return
                   }
-                  await updateProfile(securityForm)
-                  setIsSecurityModalOpen(false)
-                  setToastMessage('✅ Security question updated!')
+                  setIsSaving(true)
+                  try {
+                    const res = await fetch('/api/auth/security-answer', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ question: securityForm.security_question, answer: securityForm.security_answer })
+                    })
+                    const data = await res.json().catch(() => ({}))
+                    if (!res.ok) throw new Error(data.error || 'Failed to save')
+                    setProfile({ ...profile, security_question: securityForm.security_question })
+                    setSecurityForm({ ...securityForm, security_answer: '' })
+                    setIsSecurityModalOpen(false)
+                    setToastMessage('✅ Security question updated!')
+                  } catch (err: any) {
+                    setToastMessage(`❌ Error: ${err.message || 'Update failed'}`)
+                  } finally {
+                    setIsSaving(false)
+                  }
                 }}
                 disabled={isSaving}
                 className="w-full h-12 bg-neutral-900 hover:bg-black text-white rounded-xl shadow-sm mt-4 text-base"

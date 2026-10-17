@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { withoutPrivateFields } from '@/lib/profile'
 
 export async function GET(req: Request, { params }: { params: { playerId: string } }) {
   const supabase = createClient()
@@ -18,7 +19,7 @@ export async function GET(req: Request, { params }: { params: { playerId: string
 
   if (!profile) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  return NextResponse.json({ profile })
+  return NextResponse.json({ profile: withoutPrivateFields(profile) })
 }
 
 export async function PATCH(req: Request, { params }: { params: { playerId: string } }) {
@@ -30,7 +31,7 @@ export async function PATCH(req: Request, { params }: { params: { playerId: stri
   }
 
   const body = await req.json()
-  const allowedUpdates = ['full_name', 'preferred_position', 'secondary_position', 'email', 'avatar_url', 'email_notifications', 'push_msg_enabled', 'push_notif_enabled', 'push_forum_enabled', 'security_question', 'security_answer']
+  const allowedUpdates = ['full_name', 'preferred_position', 'secondary_position', 'email', 'avatar_url', 'email_notifications', 'push_msg_enabled', 'push_notif_enabled', 'push_forum_enabled']
   const updates: any = {}
 
   for (const key of allowedUpdates) {
@@ -73,5 +74,5 @@ export async function PATCH(req: Request, { params }: { params: { playerId: stri
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true, profile: data })
+  return NextResponse.json({ success: true, profile: withoutPrivateFields(data) })
 }

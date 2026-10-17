@@ -1,18 +1,13 @@
-import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { getAuthUser } from '@/lib/groupAuth'
+import { getMyProfile } from '@/lib/profile'
 import ProfileClient from './ProfileClient'
 
 export default async function ProfilePage() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const profile = await getMyProfile()
 
   return (
     <div className="pb-24">

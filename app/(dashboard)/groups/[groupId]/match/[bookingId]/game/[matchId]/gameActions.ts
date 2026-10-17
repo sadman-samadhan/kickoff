@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
-import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { requireMatchAdmin, requireMatchLogger } from '@/lib/groupAuth'
 
 /**
  * Update Match Duration (in minutes). Defaults to 30 if empty.
@@ -13,10 +13,7 @@ export async function updateMatchDurationAction(
   groupId: string,
   durationMinutes: number
 ) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
 
   const duration = durationMinutes && durationMinutes > 0 ? durationMinutes : 30
 
@@ -41,10 +38,7 @@ export async function updateStartingLineupAction(
   groupId: string,
   startingPlayerIds: string[]
 ) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
 
   const { error } = await admin
     .from('match_schedule')
@@ -78,10 +72,10 @@ export async function logMatchEventAction(
     details_json?: any
   }
 ) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { admin, match } = await requireMatchLogger(matchId, bookingId, groupId)
+  if (eventData.team_id && eventData.team_id !== match.home_team_id && eventData.team_id !== match.away_team_id) {
+    throw new Error('That team is not playing in this match')
+  }
 
   const isGuestPlayer = eventData.player_id?.startsWith('guest_')
   const isGuestSecondary = eventData.secondary_player_id?.startsWith('guest_')
@@ -142,10 +136,7 @@ export async function deleteMatchEventAction(
   bookingId: string,
   groupId: string
 ) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
 
   // Check event type
   const { data: event } = await admin
@@ -153,6 +144,8 @@ export async function deleteMatchEventAction(
     .select('*')
     .eq('id', eventId)
     .single()
+
+  if (event && event.match_schedule_id !== matchId) throw new Error('Event belongs to a different match')
 
   if (event) {
     await admin.from('match_events').delete().eq('id', eventId)
@@ -228,10 +221,7 @@ export async function updateMatchStatusAction(
   startedAt?: string | null,
   period?: string | null
 ) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
 
   const updatePayload: any = { status }
   if (startedAt !== undefined) updatePayload.started_at = startedAt
@@ -274,10 +264,7 @@ export async function updateMatchScoreAction(
   homeScore: number,
   awayScore: number
 ) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { admin } = await requireMatchAdmin(matchId, bookingId, groupId)
 
   const { error } = await admin
     .from('match_schedule')
@@ -304,10 +291,7 @@ export async function updateMatchMvpAction(
   groupId: string,
   mvpPlayerId: string | null
 ) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { admin } = await requireMatchAdmin(matchId, bookingId, groupId)
 
   const { error } = await admin
     .from('match_schedule')

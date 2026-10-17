@@ -1,5 +1,10 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { verifyMessage, verifySecurityAnswer } from '@/lib/securityAnswers'
+
+// Password reset with a security question (used instead of email reset links).
+
+const GENERIC_NOT_AVAILABLE = 'Security question reset is not available for this account.'
 
 export async function GET(req: Request) {
   try {
@@ -10,25 +15,20 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Email required' }, { status: 400 })
     }
 
-    const admin = createAdminClient()
-    const { data, error } = await admin
+    const { data } = await createAdminClient()
       .from('profiles')
       .select('security_question')
       .eq('email', email.toLowerCase().trim())
-      .single()
+      .maybeSingle()
 
-    if (error || !data) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    if (!data.security_question) {
-      return NextResponse.json({ error: 'Security question not configured for this user' }, { status: 400 })
+    // Same response whether or not the account exists, so this can't be used to probe emails.
+    if (!data?.security_question) {
+      return NextResponse.json({ error: GENERIC_NOT_AVAILABLE }, { status: 400 })
     }
 
     return NextResponse.json({ question: data.security_question })
   } catch (err: unknown) {
-    const error = err as Error
-    console.error('Get security question error:', error)
+    console.error('Get security question error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -46,34 +46,25 @@ export async function POST(req: Request) {
     }
 
     const admin = createAdminClient()
-    
-    // Fetch profile id and security answer
-    const { data: profile, error: profileErr } = await admin
+    const { data: profile } = await admin
       .from('profiles')
-      .select('id, security_answer')
-      .eq('email', email.toLowerCase().trim())
-      .single()
+      .select('id')
+      .eq('email', String(email).toLowerCase().trim())
+      .maybeSingle()
 
-    if (profileErr || !profile) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    if (!profile) {
+      return NextResponse.json({ error: GENERIC_NOT_AVAILABLE }, { status: 400 })
     }
 
-    if (!profile.security_answer) {
-      return NextResponse.json({ error: 'Security question not set up for this user' }, { status: 400 })
+    const result = await verifySecurityAnswer(profile.id, answer)
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.reason === 'not_set' ? GENERIC_NOT_AVAILABLE : verifyMessage(result) },
+        { status: result.reason === 'locked' ? 429 : 400 },
+      )
     }
 
-    // Compare answers case-insensitively and trimmed
-    const match = profile.security_answer.trim().toLowerCase() === answer.trim().toLowerCase()
-    if (!match) {
-      return NextResponse.json({ error: 'Incorrect answer to security question' }, { status: 400 })
-    }
-
-    // Update user's password using admin client
-    const { error: updateErr } = await admin.auth.admin.updateUserById(
-      profile.id,
-      { password: newPassword }
-    )
-
+    const { error: updateErr } = await admin.auth.admin.updateUserById(profile.id, { password: newPassword })
     if (updateErr) {
       console.error('Password update error:', updateErr)
       return NextResponse.json({ error: 'Failed to update password: ' + updateErr.message }, { status: 500 })
@@ -81,8 +72,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, message: 'Password updated successfully' })
   } catch (err: unknown) {
-    const error = err as Error
-    console.error('Post security question error:', error)
+    console.error('Post security question error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
