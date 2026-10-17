@@ -14,7 +14,7 @@ export async function loadLiveMatch(matchId: string): Promise<LiveMatchState | n
   if (!m) return null
 
   const teamIds = [m.home_team_id, m.away_team_id].filter(Boolean)
-  const [{ data: teams }, { data: rsvps }, { data: teamPlayers }, { data: events }] = await Promise.all([
+  const [{ data: teams }, { data: rsvps }, { data: teamPlayers }, { data: events }, { data: booking }] = await Promise.all([
     teamIds.length ? admin.from('teams').select('id, name, jersey_color, captain_id, guest_members').in('id', teamIds) : Promise.resolve({ data: [] as any[] }),
     admin.from('rsvps').select('id, guest_name, guest_position').eq('booking_id', m.booking_id).is('player_id', null),
     teamIds.length ? admin.from('team_players').select(`team_id, player_id, profiles(${PLAYER_FIELDS})`).in('team_id', teamIds) : Promise.resolve({ data: [] as any[] }),
@@ -24,6 +24,7 @@ export async function loadLiveMatch(matchId: string): Promise<LiveMatchState | n
       .eq('match_schedule_id', matchId)
       .is('voided_at', null)
       .order('created_at', { ascending: true }),
+    admin.from('bookings').select('match_date, field_name, groups(name)').eq('id', m.booking_id).maybeSingle(),
   ])
 
   const guestRsvps = new Map((rsvps || []).map((r: any) => [r.id, r]))
@@ -52,6 +53,7 @@ export async function loadLiveMatch(matchId: string): Promise<LiveMatchState | n
 
   return {
     serverNow: Date.now(),
+    context: { group: (booking as any)?.groups?.name ?? null, date: booking?.match_date ?? null, venue: booking?.field_name ?? null },
     match: {
       ...m,
       home_score: m.home_score ?? 0,

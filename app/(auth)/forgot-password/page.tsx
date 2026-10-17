@@ -2,9 +2,9 @@
 "use client"
 
 import { useState } from 'react'
+import { BrandLogo } from '@/components/brand/BrandLogo'
 import Link from 'next/link'
 import { Loader2, ArrowLeft, HelpCircle, Key } from 'lucide-react'
-import Image from 'next/image'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -121,7 +121,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-neutral-50 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md">
         <div className="flex justify-center mb-6">
-          <Image src="/icons/logo-removebg-preview.png" alt="Logo" width={160} height={160} className="object-contain" priority />
+          <BrandLogo size={72} />
         </div>
 
         <Card className="border-0 shadow-xl shadow-neutral-200/50">

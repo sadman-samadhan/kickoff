@@ -3,6 +3,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { Tabs } from '@/components/ui/kit'
 import { format, parseISO } from 'date-fns'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -256,7 +257,7 @@ export default function GroupClient({
       {/* 1. HEADER */}
       <div data-tour="group-header" className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-black text-neutral-900 tracking-tight leading-none mb-2">{group.name}</h1>
+          <h1 className="font-display text-[28px] font-extrabold leading-none mb-2">{group.name}</h1>
           <div className="flex items-center gap-3 text-sm font-medium">
             <span className="flex items-center gap-1.5 text-neutral-600 bg-neutral-100 px-2 py-1 rounded-full">
               <Users className="w-4 h-4" /> {members.length} members
@@ -281,42 +282,22 @@ export default function GroupClient({
       </div>
 
       {/* TAB NAVIGATION */}
-      <div data-tour="group-tabs" className="flex bg-white rounded-2xl p-1 border border-neutral-100 shadow-sm overflow-x-auto">
-        {[
-          { key: 'matches' as const, label: 'Matches', icon: Calendar },
-          { key: 'chat' as const, label: 'Chat', icon: MessageCircle, badge: unreadCount },
-          { key: 'squad' as const, label: 'Squad', icon: Users },
-          { key: 'settings' as const, label: 'Settings', icon: Settings },
-        ].map(tab => {
-          const Icon = tab.icon
-          const isActive = activeTab === tab.key
-          return (
-            <button
-              key={tab.key}
-              onClick={() => {
-                setActiveTab(tab.key)
-                if (tab.key === 'chat') {
-                  markAsRead(group.id)
-                }
-              }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                isActive
-                  ? 'bg-green-600 text-white shadow-sm'
-                  : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-50'
-              }`}
-            >
-              <div className="relative">
-                <Icon className="w-4 h-4" />
-                {tab.badge ? (
-                  <span className="absolute -top-2 -right-3 bg-red-500 text-white text-[9px] font-bold px-1.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-full border-2 border-white">
-                    {tab.badge > 9 ? '9+' : tab.badge}
-                  </span>
-                ) : null}
-              </div>
-              {tab.label}
-            </button>
-          )
-        })}
+      <div data-tour="group-tabs">
+        <Tabs
+          stretch
+          label="Group sections"
+          value={activeTab}
+          onChange={(k) => {
+            setActiveTab(k)
+            if (k === 'chat') markAsRead(group.id)
+          }}
+          items={[
+            { key: 'matches', label: 'Matches', icon: Calendar },
+            { key: 'chat', label: 'Chat', icon: MessageCircle, badge: unreadCount },
+            { key: 'squad', label: 'Squad', icon: Users },
+            { key: 'settings', label: 'Settings', icon: Settings },
+          ]}
+        />
       </div>
 
       {/* CHAT TAB */}

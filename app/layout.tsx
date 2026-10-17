@@ -1,19 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
-});
+import "./theme-dark.css";
+import { fontVars } from "@/lib/fonts";
+import { themeScript } from "@/components/theme/themeScript";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#16a34a",
+  themeColor: "#f4f6f1",
 };
 
 export const metadata: Metadata = {
@@ -41,14 +38,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={fontVars} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <link rel="icon" href="/icons/logo-mini.png?v=1" type="image/png" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/logo.png" />
       </head>
-      <body className="font-sans antialiased bg-slate-50 text-neutral-900 relative">
-        <div className="fixed inset-0 z-[-1] pointer-events-none opacity-[0.05] mix-blend-multiply">
+      <body className="font-sans antialiased bg-app-bg text-app-ink relative">
+        <div className="fixed inset-0 z-[-1] pointer-events-none opacity-[0.05] mix-blend-multiply dark:opacity-[0.06] dark:mix-blend-screen">
           <Image
             src="/images/bg-stadium.png"
             alt="Stadium Background"
@@ -57,9 +55,11 @@ export default function RootLayout({
             sizes="100vw"
           />
         </div>
-        <TopLoaderProvider>
-          {children}
-        </TopLoaderProvider>
+        <ThemeProvider>
+          <TopLoaderProvider>
+            {children}
+          </TopLoaderProvider>
+        </ThemeProvider>
         <InstallPrompt />
         <SpeedInsights />
       </body>

@@ -1,5 +1,5 @@
 /* Auction screens. Light = "Clean Pitch", dark = "Floodlight" (design canvas, 2026-10-17).
-   Dark follows the phone's setting today; a .dark class on <html> (future app-wide toggle) also works. */
+   Dark follows the app theme (.dark on <html>: the phone's setting unless the user chose one). */
 .ka {
   --ka-bg: #f4f6f1;
   --ka-surface: #ffffff;
@@ -21,24 +21,6 @@
   background: var(--ka-bg);
   color: var(--ka-ink);
   font-family: var(--ka-body);
-}
-
-@media (prefers-color-scheme: dark) {
-  .ka:not(.ka-force-light) {
-    --ka-bg: #020617;
-    --ka-surface: #0e1223;
-    --ka-soft: #1e293b;
-    --ka-ink: #f8fafc;
-    --ka-muted: #94a3b8;
-    --ka-line: #1e293b;
-    --ka-primary: #22c55e;
-    --ka-on-primary: #052e16;
-    --ka-accent: #4ade80;
-    --ka-on-accent: #052e16;
-    --ka-display: var(--font-ka-barlow-condensed), system-ui, sans-serif;
-    --ka-body: var(--font-ka-barlow), system-ui, sans-serif;
-    --ka-display-case: uppercase;
-  }
 }
 
 .dark .ka {

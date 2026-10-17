@@ -11,7 +11,10 @@ import { editedEvent, goalFor, isOwnGoal, keyFields, keyOf, mergeEvents, newId, 
 import {
   ClockText, LineupTab, MinutesTab, MvpPicker, PERIOD_LABEL, PeriodPrompt, PickRow, Sheet, TeamHalf, Timeline, Toast, eventLabel,
 } from '@/components/live/LiveParts'
-import { MatchShareCard } from '@/components/live/MatchShareCard'
+import dynamic from 'next/dynamic'
+import { MotmCard, ResultCard } from '@/components/share/cards'
+
+const ShareSheet = dynamic(() => import('@/components/share/ShareSheet').then((m) => m.ShareSheet))
 import {
   completeMatchAction, logMatchEventAction, matchClockAction, updateMatchEventAction, updateMatchMvpAction, updateStartingLineupAction,
   voidMatchEventAction, type ClockCommand, type LogEventInput,
@@ -92,7 +95,7 @@ export default function LiveMatchClient({
   const [sheet, setSheet] = useState<SheetState | null>(null)
   const [tab, setTab] = useState<Tab>('events')
   const [busy, setBusy] = useState(false)
-  const [showShare, setShowShare] = useState(false)
+  const [showShare, setShowShare] = useState<'result' | 'motm' | null>(null)
 
   // Toasts close themselves unless they're waiting on a decision.
   useEffect(() => {
@@ -285,6 +288,22 @@ export default function LiveMatchClient({
       .sort((a, b) => a.minute - b.minute)
       .map((e) => ({ id: e.id, name: nameOf(keyOf(e)) || 'Unknown', minute: e.minute, ownGoal: isOwnGoal(e) }))
 
+  // Share cards: "Labib 27' 31'" per scorer, in minute order.
+  const scorerLines = (side: 'home' | 'away') => {
+    const byName = new Map<string, string[]>()
+    for (const g of scorersFor(side)) byName.set(g.name, [...(byName.get(g.name) || []), `${g.minute}'${g.ownGoal ? ' (OG)' : ''}`])
+    return Array.from(byName, ([n, mins]) => `${n} ${mins.join(' ')}`)
+  }
+  const mvpTally = mvpKey ? tally.get(mvpKey) : undefined
+  const potmLine = mvpTally?.goals ? `${mvpTally.goals} goal${mvpTally.goals > 1 ? 's' : ''}` : mvpTally?.assists ? `${mvpTally.assists} assist${mvpTally.assists > 1 ? 's' : ''}` : undefined
+  const ctx = state.context
+  const shareMeta = {
+    group: ctx?.group || 'KhelaHobe',
+    label: [match.match_number ? `Match ${match.match_number}` : null, match.stage_name].filter(Boolean).join(' · ') || undefined,
+    date: ctx?.date ? new Date(`${ctx.date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : undefined,
+    venue: ctx?.venue || undefined,
+  }
+
   const toastTeam = toast && 'teamId' in toast ? teamById(toast.teamId) : null
   const toastColor = toastTeam ? kit(toastTeam.jersey_color).base : undefined
 
@@ -376,9 +395,16 @@ export default function LiveMatchClient({
           {tab === 'lineup' && <LineupTab teams={teams} starters={starters} canLog={canLog} onToggle={toggleStarter} />}
           {tab === 'minutes' && <MinutesTab teams={teams} minutes={pitch.minutesPlayed} conceded={pitch.goalsConcededOnPitch} />}
         </div>
-        <button onClick={() => setShowShare(true)} className="mt-5 w-full h-12 rounded-2xl border border-ka-line bg-ka-surface font-bold flex items-center justify-center gap-2">
-          <Share2 className="w-4 h-4" /> Share result card
-        </button>
+        <div className={`mt-5 grid gap-2 ${mvpKey ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <button onClick={() => setShowShare('result')} className="h-12 rounded-2xl border border-ka-line bg-ka-surface font-bold flex items-center justify-center gap-2">
+            <Share2 className="w-4 h-4" /> {finished ? 'Share result' : 'Share score'}
+          </button>
+          {mvpKey && (
+            <button onClick={() => setShowShare('motm')} className="h-12 rounded-2xl border border-ka-line bg-ka-surface font-bold flex items-center justify-center gap-2">
+              <Share2 className="w-4 h-4" /> Share POTM
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Bottom: toast + period control */}
@@ -531,18 +557,49 @@ export default function LiveMatchClient({
         </Sheet>
       )}
 
-      {showShare && (
-        <MatchShareCard
-          matchNumber={match.match_number}
-          stageName={match.stage_name}
-          home={home}
-          away={away}
-          score={score}
-          homeScorers={scorersFor('home')}
-          awayScorers={scorersFor('away')}
-          mvpName={fullName(mvpKey)}
-          onClose={() => setShowShare(false)}
-        />
+      {showShare === 'result' && (
+        <ShareSheet
+          title={finished ? 'Share result' : 'Share score'}
+          onClose={() => setShowShare(null)}
+          meta={{ fileName: `khelahobe-match-${match.match_number ?? ''}.png`, title: `${home?.name} ${score.home}–${score.away} ${away?.name}`, text: `${home?.name} ${score.home}–${score.away} ${away?.name} ⚽` }}
+        >
+          {(o) => (
+            <ResultCard
+              {...o}
+              data={{
+                meta: shareMeta,
+                home: { name: home?.name || 'Home', color: home?.jersey_color, score: score.home, scorers: scorerLines('home') },
+                away: { name: away?.name || 'Away', color: away?.jersey_color, score: score.away, scorers: scorerLines('away') },
+                potm: mvpKey ? { name: nameOf(mvpKey) || 'Player', line: potmLine } : null,
+              }}
+            />
+          )}
+        </ShareSheet>
+      )}
+
+      {showShare === 'motm' && mvpKey && (
+        <ShareSheet title="Share player of the match" onClose={() => setShowShare(null)} meta={{ fileName: `khelahobe-potm-${match.match_number ?? ''}.png`, title: `${fullName(mvpKey)} — player of the match` }}>
+          {(o) => {
+            const t = tally.get(mvpKey)
+            const team = teams.find((x) => x.players.some((p) => p.id === mvpKey))
+            const player = team?.players.find((p) => p.id === mvpKey)
+            return (
+              <MotmCard
+                {...o}
+                data={{
+                  meta: shareMeta,
+                  player: { name: nameOf(mvpKey) || 'Player', team: team?.name, color: team?.jersey_color, position: player?.preferred_position, avatarUrl: player?.avatar_url },
+                  stats: [
+                    { label: 'goals', value: t?.goals || 0 },
+                    { label: 'assists', value: t?.assists || 0 },
+                    ...(t?.saves ? [{ label: 'pen saves', value: t.saves }] : []),
+                  ],
+                  resultLine: `${home?.name} ${score.home}–${score.away} ${away?.name}`,
+                }}
+              />
+            )
+          }}
+        </ShareSheet>
       )}
     </div>
   )

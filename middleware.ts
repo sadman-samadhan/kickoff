@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isLinkPreviewBot, matchdayIdFromPath } from '@/lib/share/linkPreview'
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
@@ -55,6 +56,14 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/profile')
 
   if (isProtectedRoute && !isSignedIn) {
+    // Link previews (WhatsApp etc.) of a matchday get the public preview page instead of the login page.
+    const bookingId = matchdayIdFromPath(pathname)
+    if (bookingId && isLinkPreviewBot(request.headers.get('user-agent'))) {
+      const url = request.nextUrl.clone()
+      url.pathname = `/share/matchday/${bookingId}`
+      url.search = ''
+      return NextResponse.rewrite(url)
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

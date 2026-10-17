@@ -3,15 +3,18 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
+import { StatTile } from '@/components/ui/kit'
+import { ThemePicker } from '@/components/theme/ThemeToggle'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Goal, Target, Shield, Activity, Camera, ChevronDown, ChevronUp, Loader2, X, Edit3, Settings, Trophy, LogOut, Bell, KeyRound, Eye, EyeOff, HelpCircle, AlertOctagon, Mail, Send, CheckCircle2 } from 'lucide-react'
+import { Shield, Activity, Camera, ChevronDown, ChevronUp, Loader2, X, Edit3, Settings, Trophy, LogOut, Bell, KeyRound, Eye, EyeOff, HelpCircle, AlertOctagon, Mail, Send, CheckCircle2, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
 import { Toast } from '@/components/ui/Toast'
 import dynamic from 'next/dynamic'
-const StatShareCard = dynamic(() => import('@/components/cards/StatShareCard'))
+const ShareSheet = dynamic(() => import('@/components/share/ShareSheet').then((m) => m.ShareSheet))
+import { PlayerStatsCard } from '@/components/share/cards'
 import { TourGuide } from '@/components/ui/TourGuide'
 import { submitAdminAppealAction } from '@/app/(dashboard)/admin/actions'
 
@@ -98,6 +101,7 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
   })
 
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false)
+  const [shareStatsOpen, setShareStatsOpen] = useState(false)
   const [securityForm, setSecurityForm] = useState({
     security_question: profile.security_question || '',
     security_answer: ''
@@ -478,40 +482,45 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
           <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-neutral-300" /></div>
         ) : stats ? (
           <>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center col-span-2">
-                <span className="text-3xl font-black text-emerald-700 mb-0.5">{stats.fpl_points ?? 0}</span>
-                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">🏆 Total Points</span>
-              </div>
-              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-                <span className="text-2xl font-black text-amber-600 mb-1">{stats.goals}</span>
-                <span className="text-[10px] font-bold text-amber-700/60 uppercase tracking-wider flex items-center gap-1.5"><Goal className="w-3 h-3" /> Goals</span>
-              </div>
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-                <span className="text-2xl font-black text-blue-600 mb-1">{stats.assists}</span>
-                <span className="text-[10px] font-bold text-blue-700/60 uppercase tracking-wider flex items-center gap-1.5"><Target className="w-3 h-3" /> Assists</span>
-              </div>
-              <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-                <span className="text-2xl font-black text-purple-600 mb-1">{stats.clean_sheets}</span>
-                <span className="text-[10px] font-bold text-purple-700/60 uppercase tracking-wider flex items-center gap-1.5"><Shield className="w-3 h-3" /> Clean Sheets</span>
-              </div>
-              <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
-                <span className="text-2xl font-black text-neutral-700 mb-1">{stats.matches_played}</span>
-                <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Matches Played</span>
-              </div>
+            <div className="grid grid-cols-2 gap-2.5 mb-3">
+              <StatTile className="col-span-2 bg-app-soft" value={stats.fpl_points ?? 0} label="Total points" tone="primary" />
+              <StatTile value={stats.goals} label="Goals" />
+              <StatTile value={stats.assists} label="Assists" />
+              <StatTile value={stats.clean_sheets} label="Clean sheets" />
+              <StatTile value={stats.matches_played} label="Matches played" />
+              {!!stats.hat_tricks && <StatTile value={stats.hat_tricks} label="Hat-tricks" tone="warn" />}
+              {!!stats.wins && <StatTile value={stats.wins} label="Wins" />}
             </div>
             <p className="text-[10px] text-center text-neutral-400 font-bold uppercase tracking-wider">Across all groups</p>
 
             {/* Share Stats Button */}
-            <StatShareCard
-              playerName={profile.full_name}
-              position={profile.preferred_position}
-              avatarUrl={profile.avatar_url}
-              goals={stats.goals}
-              assists={stats.assists}
-              cleanSheets={stats.clean_sheets}
-              matchesPlayed={stats.matches_played}
-            />
+            <button
+              type="button"
+              onClick={() => setShareStatsOpen(true)}
+              className="mt-3 w-full h-12 rounded-2xl bg-app-ink text-app-bg font-bold flex items-center justify-center gap-2"
+            >
+              <Share2 className="w-4 h-4" /> Share my stats
+            </button>
+            {shareStatsOpen && (
+              <ShareSheet title="Share my stats" onClose={() => setShareStatsOpen(false)} meta={{ fileName: 'khelahobe-my-stats.png', title: `${profile.full_name} — KhelaHobe stats` }}>
+                {(o) => (
+                  <PlayerStatsCard
+                    {...o}
+                    data={{
+                      name: profile.full_name,
+                      position: profile.preferred_position,
+                      avatarUrl: profile.avatar_url,
+                      subtitle: `${stats.matches_played} matches · ${stats.fpl_points ?? 0} pts`,
+                      stats: [
+                        { label: 'Goals', value: stats.goals },
+                        { label: 'Assists', value: stats.assists },
+                        { label: 'Clean sheets', value: stats.clean_sheets },
+                      ],
+                    }}
+                  />
+                )}
+              </ShareSheet>
+            )}
           </>
         ) : (
           <div className="text-center text-sm text-neutral-400 py-4">No stats available</div>
@@ -581,6 +590,11 @@ export default function ProfileClient({ initialProfile, userId }: { initialProfi
         <h2 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
           <Settings className="w-5 h-5 text-neutral-400" /> Preferences
         </h2>
+
+        <div className="pb-4 border-b border-neutral-100">
+          <p className="text-sm font-bold text-neutral-800 mb-2">Appearance</p>
+          <ThemePicker />
+        </div>
 
         <div className="flex items-center justify-between py-3 border-b border-neutral-100">
           <div className="flex items-center gap-3">

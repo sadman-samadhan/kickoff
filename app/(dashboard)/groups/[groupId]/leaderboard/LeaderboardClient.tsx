@@ -4,6 +4,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { Tabs } from '@/components/ui/kit'
 import Link from 'next/link'
 import { ChevronRight, Trophy, Target, Shield, Goal, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -146,37 +147,26 @@ export default function LeaderboardClient({ groupId, groupName }: { groupId: str
         </div>
       )}
 
-      {/* 2. POSITION FILTER TABS */}
-      <div className="flex gap-2 overflow-x-auto hide-scrollbar">
-        {['All', 'GK', 'DEF', 'MID', 'ATT'].map(pos => (
-          <button
-            key={pos}
-            onClick={() => setPositionFilter(pos)}
-            className={`px-4 py-2 rounded-full text-sm font-bold shrink-0 transition-colors ${positionFilter === pos ? 'bg-neutral-900 text-white' : 'bg-white text-neutral-500 border border-neutral-200'}`}
-          >
-            {pos}
-          </button>
-        ))}
-      </div>
-
-      {/* 3. SORT OPTIONS */}
-      <div className="bg-neutral-100 p-1 rounded-xl flex gap-1 overflow-x-auto">
-        {[
-          { id: 'points', label: '🏆 Points' },
-          { id: 'goals', label: 'Goals' },
-          { id: 'assists', label: 'Assists' },
-          { id: 'clean_sheets', label: 'Clean Sheets' },
-          { id: 'matches', label: 'Matches' }
-        ].map(sort => (
-          <button
-            key={sort.id}
-            onClick={() => setSortBy(sort.id)}
-            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${sortBy === sort.id ? 'bg-white text-emerald-700 shadow-sm border border-emerald-100' : 'text-neutral-500 hover:text-neutral-700'}`}
-          >
-            {sort.label}
-          </button>
-        ))}
-      </div>
+      {/* 2. POSITION FILTER + 3. SORT */}
+      <Tabs
+        label="Position"
+        value={positionFilter}
+        onChange={setPositionFilter}
+        items={['All', 'GK', 'DEF', 'MID', 'ATT'].map((p) => ({ key: p, label: p }))}
+      />
+      <Tabs
+        stretch
+        label="Sort by"
+        value={sortBy}
+        onChange={setSortBy}
+        items={[
+          { key: 'points', label: 'Points' },
+          { key: 'goals', label: 'Goals' },
+          { key: 'assists', label: 'Assists' },
+          { key: 'clean_sheets', label: 'CS' },
+          { key: 'matches', label: 'Played' },
+        ]}
+      />
 
       {/* 4. PLAYER STATS LIST */}
       <div className="flex flex-col gap-3">
