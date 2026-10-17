@@ -1,0 +1,85 @@
+/* Auction screens. Light = "Clean Pitch", dark = "Floodlight" (design canvas, 2026-10-17).
+   Dark follows the phone's setting today; a .dark class on <html> (future app-wide toggle) also works. */
+.ka {
+  --ka-bg: #f4f6f1;
+  --ka-surface: #ffffff;
+  --ka-soft: #f8faf7;
+  --ka-ink: #14211a;
+  --ka-muted: #5b6b62;
+  --ka-line: #e2e8e0;
+  --ka-primary: #15803d;
+  --ka-on-primary: #ffffff;
+  --ka-accent: #d9f99d;
+  --ka-on-accent: #14211a;
+  --ka-warn: #f59e0b;
+  --ka-on-warn: #1c1003;
+  --ka-danger: #dc2626;
+  --ka-display: var(--font-ka-archivo), system-ui, sans-serif;
+  --ka-body: var(--font-ka-figtree), system-ui, sans-serif;
+  --ka-display-case: none;
+  --ka-display-weight: 800;
+  background: var(--ka-bg);
+  color: var(--ka-ink);
+  font-family: var(--ka-body);
+}
+
+@media (prefers-color-scheme: dark) {
+  .ka:not(.ka-force-light) {
+    --ka-bg: #020617;
+    --ka-surface: #0e1223;
+    --ka-soft: #1e293b;
+    --ka-ink: #f8fafc;
+    --ka-muted: #94a3b8;
+    --ka-line: #1e293b;
+    --ka-primary: #22c55e;
+    --ka-on-primary: #052e16;
+    --ka-accent: #4ade80;
+    --ka-on-accent: #052e16;
+    --ka-display: var(--font-ka-barlow-condensed), system-ui, sans-serif;
+    --ka-body: var(--font-ka-barlow), system-ui, sans-serif;
+    --ka-display-case: uppercase;
+  }
+}
+
+.dark .ka {
+  --ka-bg: #020617;
+  --ka-surface: #0e1223;
+  --ka-soft: #1e293b;
+  --ka-ink: #f8fafc;
+  --ka-muted: #94a3b8;
+  --ka-line: #1e293b;
+  --ka-primary: #22c55e;
+  --ka-on-primary: #052e16;
+  --ka-accent: #4ade80;
+  --ka-on-accent: #052e16;
+  --ka-display: var(--font-ka-barlow-condensed), system-ui, sans-serif;
+  --ka-body: var(--font-ka-barlow), system-ui, sans-serif;
+  --ka-display-case: uppercase;
+}
+
+.ka-display {
+  font-family: var(--ka-display);
+  font-weight: var(--ka-display-weight);
+  text-transform: var(--ka-display-case);
+  letter-spacing: 0.01em;
+}
+
+.ka-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes ka-bid-flash {
+  0% { box-shadow: 0 0 0 0 rgb(34 197 94 / 0.55); }
+  100% { box-shadow: 0 0 0 16px rgb(34 197 94 / 0); }
+}
+.ka-bid-flash { animation: ka-bid-flash 700ms ease-out; }
+
+@keyframes ka-stamp {
+  0% { transform: scale(1.6) rotate(-12deg); opacity: 0; }
+  100% { transform: scale(1) rotate(-12deg); opacity: 1; }
+}
+.ka-stamp { animation: ka-stamp 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ka-bid-flash, .ka-stamp { animation: none; }
+}

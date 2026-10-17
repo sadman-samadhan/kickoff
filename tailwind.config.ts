@@ -9,6 +9,22 @@ const config: Config = {
   theme: {
   	extend: {
   		colors: {
+  			// Auction screens (Clean Pitch light / Floodlight dark), see app/auction.css
+  			ka: {
+  				bg: 'var(--ka-bg)',
+  				surface: 'var(--ka-surface)',
+  				soft: 'var(--ka-soft)',
+  				ink: 'var(--ka-ink)',
+  				muted: 'var(--ka-muted)',
+  				line: 'var(--ka-line)',
+  				primary: 'var(--ka-primary)',
+  				'on-primary': 'var(--ka-on-primary)',
+  				accent: 'var(--ka-accent)',
+  				'on-accent': 'var(--ka-on-accent)',
+  				warn: 'var(--ka-warn)',
+  				'on-warn': 'var(--ka-on-warn)',
+  				danger: 'var(--ka-danger)'
+  			},
   			background: 'var(--background)',
   			foreground: 'var(--foreground)',
   			card: {
