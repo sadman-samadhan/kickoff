@@ -201,7 +201,7 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-neutral-50 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md">
         <div className="flex justify-center mb-6">
-          <BrandLogo size={72} />
+          <BrandLogo size={64} stacked animate />
         </div>
 
         <Card className="border-0 shadow-xl shadow-neutral-200/50">

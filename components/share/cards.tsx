@@ -5,6 +5,7 @@
 // changes an exported image.
 
 import { kit } from '@/components/live/kit'
+import { Wordmark } from '@/components/brand/BrandLogo'
 import { cardHeight, type CardFormat } from './useShareImage'
 
 export type CardStyle = 'kit' | 'floodlight'
@@ -52,12 +53,11 @@ function Frame({ style, format, children, background }: { style: CardStyle; form
 }
 
 function Brand({ style, size = 16 }: { style: CardStyle; size?: number }) {
-  return style === 'floodlight' ? (
-    <span style={{ fontFamily: F.flDisplay, fontWeight: 800, fontSize: size, letterSpacing: '0.08em' }}>
-      KHELA<span style={{ color: FL.green }}>HOBE</span>
+  // The real wordmark ("khelah⊙be"); its green half follows the card look, not the app theme.
+  return (
+    <span style={{ color: style === 'floodlight' ? FL.ink : KIT.ink, ['--app-primary' as string]: style === 'floodlight' ? FL.green : '#15803d' }}>
+      <Wordmark size={size + 2} />
     </span>
-  ) : (
-    <span style={{ fontFamily: F.kitDisplay, fontWeight: 800, fontSize: size - 1, textTransform: 'uppercase' }}>KhelaHobe</span>
   )
 }
 

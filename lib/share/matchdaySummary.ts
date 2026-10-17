@@ -82,7 +82,7 @@ export const loadMatchdaySummary = cache(async (bookingId: string): Promise<Matc
   return {
     bookingId: b.id,
     groupId: b.group_id,
-    group: (b as any).groups?.name || 'KhelaHobe',
+    group: (b as any).groups?.name || 'KhelaHbe',
     date: b.match_date,
     time: b.match_time ? String(b.match_time).slice(0, 5) : null,
     venue: b.field_name,

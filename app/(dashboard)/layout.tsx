@@ -8,7 +8,7 @@ import { getAuthUser } from '@/lib/groupAuth'
 import { getMyProfile } from '@/lib/profile'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
+import { BrandLogo } from '@/components/brand/BrandLogo'
 
 export default async function DashboardLayout({
   children,
@@ -28,7 +28,7 @@ export default async function DashboardLayout({
           {/* ── Top Header Bar ── */}
           <header className="fixed top-0 left-0 right-0 h-14 bg-white/95 backdrop-blur-lg border-b border-neutral-100 flex items-center justify-between px-4 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
             <Link href="/dashboard" className="flex items-center">
-              <Image src="/icons/logo.png" alt="KhelaHobe" width={40} height={40} className="rounded-lg" />
+              <BrandLogo size={34} />
             </Link>
             <div className="flex items-center gap-1">
               <ThemeToggle />

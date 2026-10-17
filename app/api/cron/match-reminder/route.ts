@@ -46,7 +46,7 @@ export async function GET(req: Request) {
 
           await sendEmail({
             to: profile.email,
-            subject: `⏰ Match Reminder: ${groupName} — KhelaHobe`,
+            subject: `⏰ Match Reminder: ${groupName} — KhelaHbe`,
             html: `
               <div style="font-family: sans-serif; padding: 20px; color: #333;">
                 <h2 style="color: #16a34a;">Match Reminder!</h2>

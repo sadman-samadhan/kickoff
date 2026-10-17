@@ -40,7 +40,7 @@ export async function matchdayImage(s: Pick<MatchdaySummary, 'group' | 'date' | 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', fontSize: 26, fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', color: '#4ade80' }}>Matchday</div>
           <div style={{ display: 'flex', fontSize: 30, fontWeight: 800, letterSpacing: 3 }}>
-            KHELA<span style={{ color: '#4ade80' }}>HOBE</span>
+            KHELA<span style={{ color: '#4ade80' }}>HBE</span>
           </div>
         </div>
         <div style={{ display: 'flex', fontSize: 72, fontWeight: 800, marginTop: 14, lineHeight: 1 }}>{s.group}</div>

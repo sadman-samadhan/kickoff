@@ -14,13 +14,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "KhelaHobe — Football Match Manager",
+  title: "KhelaHbe: football nights, sorted",
   description:
-    "Organize matches, track stats, and manage your football groups. KhelaHobe is the ultimate tool for recreational football players.",
+    "Run your football group in one app: RSVPs, balanced teams, player auctions, live scores, stats and share cards.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "KhelaHobe",
+    title: "KhelaHbe",
   },
   other: {
     "apple-mobile-web-app-capable": "yes",
@@ -41,9 +41,8 @@ export default function RootLayout({
     <html lang="en" className={fontVars} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <link rel="icon" href="/icons/logo-mini.png?v=1" type="image/png" />
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icons/logo.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body className="font-sans antialiased bg-app-bg text-app-ink relative">
         <div className="fixed inset-0 z-[-1] pointer-events-none opacity-[0.05] mix-blend-multiply dark:opacity-[0.06] dark:mix-blend-screen">

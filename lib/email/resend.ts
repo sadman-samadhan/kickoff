@@ -13,7 +13,7 @@ export async function sendEmail({ to, subject, html }: EmailPayload): Promise<vo
   
   try {
     await resend.emails.send({
-      from: 'KhelaHobe App <onboarding@resend.dev>', 
+      from: 'KhelaHbe App <onboarding@resend.dev>', 
       to,
       subject,
       html

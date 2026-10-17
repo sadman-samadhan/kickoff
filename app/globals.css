@@ -64,6 +64,7 @@
     --app-on-primary: #052e16;
     --app-accent: #4ade80;
     --app-on-accent: #052e16;
+    --brand-tile: #16a34a;
     --font-body: var(--font-ka-barlow), ui-sans-serif, system-ui, sans-serif;
     --font-display: var(--font-ka-barlow-condensed), ui-sans-serif, system-ui, sans-serif;
     --display-case: uppercase;
@@ -139,6 +140,21 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-in { animation: none; }
 }
+
+/* Brand mark: the ball rolls in (BrandLogo animate). */
+.kh-roll, .kh-roll-o, .kh-lines { transform-box: fill-box; transform-origin: center; }
+.kh-roll { animation: kh-roll 1.1s cubic-bezier(.2,.8,.25,1) both; }
+.kh-roll-o { animation: kh-roll-o 1.2s cubic-bezier(.2,.8,.25,1) .25s both; }
+.kh-lines { animation: kh-lines 1.4s ease-out .5s both; }
+@keyframes kh-roll { from { transform: translateX(-90px) rotate(-420deg); opacity: 0; } 25% { opacity: 1; } }
+@keyframes kh-roll-o { from { transform: translateX(-160%) rotate(-360deg); opacity: 0; } 30% { opacity: 1; } }
+@keyframes kh-lines { from { transform: translateX(16px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .kh-roll, .kh-roll-o, .kh-lines { animation: none; } }
+
+/* Landing ticker */
+.kh-marquee { animation: kh-marquee 38s linear infinite; }
+@keyframes kh-marquee { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .kh-marquee { animation: none; } }
 
 /* Safe area padding utility */
 @supports (padding: max(0px)) {
