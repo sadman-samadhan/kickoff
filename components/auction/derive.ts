@@ -1,3 +1,4 @@
+import { tierProblem } from '@/lib/auctionRules'
 import type { AuctionEntry, AuctionState, AuctionTeam, AuctionTier } from '@/lib/auction/types'
 
 /** Handy lookups computed from a snapshot. */
@@ -15,7 +16,32 @@ export function derive(state: AuctionState) {
     unsold: state.entries.filter((e) => e.status === 'unsold').length,
     queued: state.entries.filter((e) => e.status === 'queued').length,
   }
-  return { teamById, tierById, current, top, currentTier, minPrice, squad, counts }
+  const tiersInUse = state.tiers.filter((t) => state.entries.some((e) => e.tierId === t.id))
+  const teamTierIds = (teamId: string) => new Set(squad(teamId).map((e) => e.tierId).filter(Boolean) as string[])
+  /** Tiers a team still needs a player from (empty when the rule is off). */
+  const missingTiers = (teamId: string) => {
+    if (!state.auction.requireEachTier) return []
+    const have = teamTierIds(teamId)
+    return tiersInUse.filter((t) => !have.has(t.id))
+  }
+  /** Why a team may not buy this player under the one-per-tier rule, or null. */
+  const tierProblemFor = (teamId: string, entry: AuctionEntry | null) => {
+    if (!entry) return null
+    const team = teamById.get(teamId)
+    if (!team) return null
+    return tierProblem({
+      enabled: state.auction.requireEachTier,
+      entryTierId: entry.tierId,
+      tiersInUse,
+      teamTierIds: teamTierIds(teamId),
+      slotsLeft: team.standing.slotsLeft,
+      availableInTier: state.entries.filter((e) => e.tierId === entry.tierId && e.id !== entry.id && e.status !== 'sold').length,
+      otherTeamsMissingTier: state.teams.filter(
+        (t) => t.id !== teamId && t.standing.slotsLeft > 0 && !teamTierIds(t.id).has(entry.tierId as string),
+      ).length,
+    })
+  }
+  return { teamById, tierById, current, top, currentTier, minPrice, squad, counts, missingTiers, tierProblemFor }
 }
 
 export type Derived = ReturnType<typeof derive>

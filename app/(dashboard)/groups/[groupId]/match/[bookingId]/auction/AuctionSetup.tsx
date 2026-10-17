@@ -16,6 +16,7 @@ export type SetupData = {
   blocked: boolean
   players: { rsvpId: string; playerId: string | null; name: string; avatarUrl: string | null; position: string | null; tier: string | null }[]
   rules: { budget: number; squadSize: number; bidIncrement: number; basePrice: number }
+  requireEachTier: boolean
   teams: { name: string; color: string; captainId: string }[]
   tiers: { name: string; color: string; basePrice: number | null }[]
   existingAuctionId: string | null
@@ -42,6 +43,7 @@ export default function AuctionSetup({ data }: { data: SetupData }) {
   const [rules, setRules] = useState(data.rules)
   const [squadTouched, setSquadTouched] = useState(data.rules.squadSize > 0)
   const [remember, setRemember] = useState(true)
+  const [requireEachTier, setRequireEachTier] = useState(data.requireEachTier)
 
   const captainIds = new Set(teams.map((t) => t.captainId).filter(Boolean))
   const pool = data.players.filter((p) => !p.playerId || !captainIds.has(p.playerId))
@@ -62,6 +64,14 @@ export default function AuctionSetup({ data }: { data: SetupData }) {
     captainIds.size !== teams.filter((t) => t.captainId).length && 'Each team needs a different captain.',
     pool.length === 0 && 'Nobody is left in the pool.',
     rules.basePrice * squadSize > rules.budget && 'Budget is too small to fill a squad at the base price.',
+    ...(requireEachTier
+      ? [
+          ...tiers
+            .filter((t) => (tierCounts[t.name] ?? 0) > 0 && (tierCounts[t.name] ?? 0) < teams.length)
+            .map((t) => `${t.name} has ${tierCounts[t.name]} players but there are ${teams.length} teams — every team needs one.`),
+          tiers.filter((t) => (tierCounts[t.name] ?? 0) > 0).length > squadSize && 'There are more tiers than players per team.',
+        ]
+      : []),
   ].filter(Boolean) as string[]
 
   function setTeam(i: number, patch: Partial<(typeof teams)[number]>) {
@@ -73,6 +83,7 @@ export default function AuctionSetup({ data }: { data: SetupData }) {
     start(async () => {
       const res = await saveAuctionSetup(data.bookingId, data.groupId, {
         rules: { ...rules, squadSize },
+        requireEachTier,
         teams,
         tiers,
         assignments: Object.fromEntries(pool.map((p) => [p.rsvpId, assign[p.rsvpId] && tiers.some((t) => t.name === assign[p.rsvpId]) ? assign[p.rsvpId] : null])),
@@ -300,9 +311,16 @@ export default function AuctionSetup({ data }: { data: SetupData }) {
             )
           })}
         </ul>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5 size-5 accent-[var(--ka-primary)]" checked={requireEachTier} onChange={(e) => setRequireEachTier(e.target.checked)} />
+          <span>
+            <b>Every team must get at least one player from each tier</b>
+            <span className="block text-xs text-ka-muted">Captains are stopped from bids that would make this impossible.</span>
+          </span>
+        </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" className="size-5 accent-[var(--ka-primary)]" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-          Remember tiers for next matchday
+          Pre-fill these tiers next time (they&apos;re only used in auctions)
         </label>
       </section>
 

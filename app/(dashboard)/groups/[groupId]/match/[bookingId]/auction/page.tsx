@@ -95,6 +95,7 @@ export default async function AuctionPage({ params }: { params: { groupId: strin
     rules: state
       ? { budget: state.auction.budget, squadSize: state.auction.squadSize, bidIncrement: state.auction.bidIncrement, basePrice: state.auction.basePrice }
       : { budget: saved.budget ?? 8000, squadSize: saved.squadSize ?? 0, bidIncrement: saved.bidIncrement ?? 25, basePrice: saved.basePrice ?? 50 },
+    requireEachTier: state ? state.auction.requireEachTier : saved.requireEachTier !== false,
     teams: state
       ? state.teams.map((t) => ({ name: t.name, color: t.color, captainId: t.captainId || '' }))
       : [],

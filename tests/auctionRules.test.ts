@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkBid, computeStanding, minNextBid, pickAutoAssignTeam } from '@/lib/auctionRules'
+import { checkBid, computeStanding, minNextBid, pickAutoAssignTeam, tierProblem } from '@/lib/auctionRules'
 import { V12_RULES as R } from './fixtures/v12'
 
 describe('computeStanding', () => {
@@ -63,5 +63,23 @@ describe('pickAutoAssignTeam', () => {
   it('skips teams that cannot afford it', () => {
     const teams = [{ id: 'a', sortOrder: 0, standing: computeStanding(R, [7900]) }]
     expect(pickAutoAssignTeam(teams, 150)).toBeNull()
+  })
+})
+
+describe('tierProblem (one player from every tier)', () => {
+  const tiers = [{ id: 'a', name: 'Apex' }, { id: 'p', name: 'Prestige' }, { id: 'd', name: 'Dominion' }]
+  const base = { enabled: true, tiersInUse: tiers, availableInTier: 5, otherTeamsMissingTier: 0 }
+  it('allows a player from a missing tier', () => {
+    expect(tierProblem({ ...base, entryTierId: 'p', teamTierIds: new Set(['a']), slotsLeft: 2 })).toBeNull()
+  })
+  it('keeps spots for missing tiers', () => {
+    expect(tierProblem({ ...base, entryTierId: 'a', teamTierIds: new Set(['a']), slotsLeft: 2 })).toMatch(/Save your spots.*Prestige, Dominion/)
+  })
+  it('leaves enough of a tier for teams without one', () => {
+    expect(tierProblem({ ...base, entryTierId: 'a', teamTierIds: new Set(['a']), slotsLeft: 6, availableInTier: 1, otherTeamsMissingTier: 2 })).toMatch(/Leave enough Apex/)
+  })
+  it('does nothing when switched off or the player has no tier', () => {
+    expect(tierProblem({ ...base, enabled: false, entryTierId: 'a', teamTierIds: new Set(['a']), slotsLeft: 1 })).toBeNull()
+    expect(tierProblem({ ...base, entryTierId: null, teamTierIds: new Set(), slotsLeft: 1 })).toBeNull()
   })
 })

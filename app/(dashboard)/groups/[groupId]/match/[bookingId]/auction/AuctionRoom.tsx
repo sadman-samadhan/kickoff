@@ -155,10 +155,14 @@ function BidPad({ state, d, teamId, refresh, compact }: { state: AuctionState; d
   useEffect(() => setCustom((c) => (c < next ? next : c)), [next])
   useEffect(() => setError(''), [e?.id])
 
+  const tierReason = d.tierProblemFor(teamId, e)
   const check = useCallback(
-    (amount: number) =>
-      open ? checkBid({ rules: r, minPrice: d.minPrice, amount, top, teamId, standing: team.standing }) : ({ ok: false, reason: 'Bidding is closed' } as const),
-    [open, r, d.minPrice, top, teamId, team.standing],
+    (amount: number) => {
+      if (!open) return { ok: false, reason: 'Bidding is closed' } as const
+      if (tierReason) return { ok: false, reason: tierReason } as const
+      return checkBid({ rules: r, minPrice: d.minPrice, amount, top, teamId, standing: team.standing })
+    },
+    [open, r, d.minPrice, top, teamId, team.standing, tierReason],
   )
 
   const options = useMemo(() => {
@@ -191,6 +195,7 @@ function BidPad({ state, d, teamId, refresh, compact }: { state: AuctionState; d
   return (
     <div className="flex flex-col gap-2">
       {error && <p role="alert" className="rounded-xl bg-ka-danger/10 px-3 py-2 text-sm text-ka-danger">{error}</p>}
+      {tierReason && <p className="rounded-xl bg-ka-warn/15 px-3 py-2 text-sm font-semibold">{tierReason}</p>}
       <div className="grid grid-cols-2 gap-2">
         {options.map((amount, i) => {
           const c = check(amount)
@@ -275,6 +280,17 @@ function CaptainView({ state, d, refresh }: { state: AuctionState; d: Derived; r
         >
           {leading ? <CheckCircle2 className="size-5" aria-hidden /> : top ? <TriangleAlert className="size-5" aria-hidden /> : null}
           {leading ? `You're winning at ${formatMoney(top!.amount)}` : top ? `${d.teamById.get(top.teamId)?.name} has ${formatMoney(top.amount)}` : `Opening at ${formatMoney(d.minPrice)}`}
+        </div>
+      )}
+
+      {d.missingTiers(team.id).length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-semibold text-ka-muted">Still need:</span>
+          {d.missingTiers(team.id).map((t) => (
+            <span key={t.id} className="rounded-full px-2.5 py-1 text-xs font-bold" style={{ background: `${t.color}26`, color: t.color }}>
+              {t.name}
+            </span>
+          ))}
         </div>
       )}
 

@@ -35,6 +35,8 @@ create table if not exists public.auctions (
   squad_size int not null default 8 check (squad_size between 1 and 30),
   bid_increment int not null default 25 check (bid_increment > 0),
   base_price int not null default 50 check (base_price >= 0),
+  -- Each team must end up with at least one player from every tier that has players.
+  require_each_tier boolean not null default true,
   current_entry_id uuid,
   call_state text not null default 'none' check (call_state in ('none', 'once', 'twice')),
   finalized_at timestamptz,
@@ -204,7 +206,72 @@ begin
   perform public._auction_log(p_auction, 'phase_change', null, null, null, jsonb_build_object('phase', 'done'));
 end $$;
 
--- Leftovers go at base price to the team with the most open slots that can afford them.
+-- ── "At least one player from every tier" rule ──
+-- Returns null when team p_team may buy entry p_entry, otherwise the reason it may not:
+--  • room:   every tier the team still lacks needs one of its open spots;
+--  • supply: a team taking a second player from a tier must leave enough of that tier for the
+--            teams that don't have one yet.
+create or replace function public._auction_tier_problem(p_auction uuid, p_team uuid, p_entry uuid)
+returns text language plpgsql stable as $$
+declare
+  a public.auctions;
+  e public.auction_entries;
+  v_slots int;
+  v_missing text[];
+  v_entry_missing boolean;
+  v_available int;
+  v_others_missing int;
+  v_tier_name text;
+begin
+  select * into a from public.auctions where id = p_auction;
+  select * into e from public.auction_entries where id = p_entry;
+  if not a.require_each_tier or e.tier_id is null then return null; end if;
+
+  select slots_left into v_slots from public.auction_team_standings where team_id = p_team and auction_id = p_auction;
+
+  -- Tiers (that have players) this team has no player from yet.
+  select coalesce(array_agg(tr.name order by tr.sort_order), '{}') into v_missing
+  from public.auction_tiers tr
+  where tr.auction_id = p_auction
+    and exists (select 1 from public.auction_entries x where x.auction_id = p_auction and x.tier_id = tr.id)
+    and not exists (
+      select 1 from public.auction_entries x
+      where x.auction_id = p_auction and x.tier_id = tr.id and x.status = 'sold' and x.sold_team_id = p_team
+    );
+  select name into v_tier_name from public.auction_tiers where id = e.tier_id;
+  v_entry_missing := v_tier_name = any(v_missing);
+
+  if not v_entry_missing and v_slots - 1 < coalesce(array_length(v_missing, 1), 0) then
+    return format('Save your spots: you still need a player from %s', array_to_string(v_missing, ', '));
+  end if;
+
+  if not v_entry_missing then
+    select count(*) into v_available from public.auction_entries x
+    where x.auction_id = p_auction and x.tier_id = e.tier_id and x.id <> e.id and x.status in ('queued', 'on_block', 'unsold');
+    select count(*) into v_others_missing
+    from public.auction_team_standings ts
+    where ts.auction_id = p_auction and ts.team_id <> p_team and ts.slots_left > 0
+      and not exists (
+        select 1 from public.auction_entries x
+        where x.auction_id = p_auction and x.tier_id = e.tier_id and x.status = 'sold' and x.sold_team_id = ts.team_id
+      );
+    if v_available < v_others_missing then
+      return format('Leave enough %s players for the teams that don''t have one yet', v_tier_name);
+    end if;
+  end if;
+  return null;
+end $$;
+
+create or replace function public._auction_check_tier_rule(p_auction uuid, p_team uuid, p_entry uuid)
+returns void language plpgsql as $$
+declare v_problem text;
+begin
+  v_problem := public._auction_tier_problem(p_auction, p_team, p_entry);
+  if v_problem is not null then raise exception '%', v_problem; end if;
+end $$;
+
+-- Leftovers go at base price to the team with the most open slots that can afford them
+-- (teams that still need the player's tier first, and never breaking the tier rule).
 create or replace function public._auction_auto_assign(p_auction uuid)
 returns void language plpgsql as $$
 declare
@@ -224,7 +291,14 @@ begin
     join public.auction_teams at on at.team_id = ts.team_id
     join public.teams t on t.id = ts.team_id
     where ts.auction_id = p_auction and ts.slots_left > 0 and ts.max_bid >= v_price
-    order by ts.slots_left desc, ts.remaining desc, at.sort_order, t.created_at
+      and public._auction_tier_problem(p_auction, ts.team_id, e.id) is null
+    order by
+      (exists (
+        select 1 from public.auction_entries x
+        where x.auction_id = p_auction and x.status = 'sold' and x.sold_team_id = ts.team_id
+          and x.tier_id = (select tier_id from public.auction_entries where id = e.id)
+      )) asc,
+      ts.slots_left desc, ts.remaining desc, at.sort_order, t.created_at
     limit 1;
     if v_team is null then continue; end if;
     update public.auction_entries
@@ -308,6 +382,20 @@ begin
   if v_conflict is not null then
     raise exception '% is a captain and also in the player pool', v_conflict;
   end if;
+  if a.require_each_tier then
+    select tr.name into v_conflict
+    from public.auction_tiers tr
+    where tr.auction_id = p_auction
+      and (select count(*) from public.auction_entries x where x.auction_id = p_auction and x.tier_id = tr.id)
+          between 1 and (select count(*) - 1 from public.auction_teams where auction_id = p_auction)
+    limit 1;
+    if v_conflict is not null then
+      raise exception 'Tier % has fewer players than there are teams — move players into it or switch off the one-per-tier rule', v_conflict;
+    end if;
+    if (select count(distinct tier_id) from public.auction_entries where auction_id = p_auction and tier_id is not null) > a.squad_size then
+      raise exception 'There are more tiers than players per team — the one-per-tier rule can''t be met';
+    end if;
+  end if;
 
   -- Tier by tier, shuffled within each tier.
   update public.auction_entries en
@@ -365,6 +453,7 @@ begin
     raise exception 'Your max bid is % (you must keep % for each of your other % open spots)',
       st.max_bid, a.base_price, st.slots_left - 1;
   end if;
+  perform public._auction_check_tier_rule(p_auction, p_team, p_entry);
 
   insert into public.auction_bids (auction_id, entry_id, team_id, amount, placed_by)
   values (p_auction, p_entry, p_team, p_amount, p_placed_by)
@@ -390,7 +479,8 @@ begin
   top := public._auction_top_bid(e.id);
   if top.id is null then raise exception 'No bids yet — mark UNSOLD instead'; end if;
   select * into st from public.auction_team_standings where team_id = top.team_id and auction_id = p_auction;
-  if st.slots_left <= 0 or top.amount > st.max_bid then
+  if st.slots_left <= 0 or top.amount > st.max_bid
+     or public._auction_tier_problem(p_auction, top.team_id, e.id) is not null then
     raise exception 'The highest bid is no longer valid for that team — retract it first';
   end if;
 
@@ -574,6 +664,9 @@ begin
     v_remaining := st.remaining + case when e.status = 'sold' and e.sold_team_id = p_team then e.sold_price else 0 end;
     if v_slots <= 0 then raise exception 'That team''s squad is full'; end if;
     if p_price > v_remaining then raise exception 'That team only has % left', v_remaining; end if;
+    if not (e.status = 'sold' and e.sold_team_id = p_team) then
+      perform public._auction_check_tier_rule(p_auction, p_team, e.id);
+    end if;
     update public.auction_entries
     set status = 'sold', sold_team_id = p_team, sold_price = p_price, sold_at = now(), sold_via = 'manual'
     where id = e.id returning * into e;
@@ -657,7 +750,8 @@ begin
     'auction_finalize(uuid)',
     '_auction_lock(uuid)', '_auction_entry_min_price(uuid)', '_auction_top_bid(uuid)',
     '_auction_require_live(auctions)', '_auction_log(uuid,text,uuid,uuid,int,jsonb)', '_auction_finish(uuid)',
-    '_auction_auto_assign(uuid)', '_auction_put_next(uuid,uuid)'
+    '_auction_auto_assign(uuid)', '_auction_put_next(uuid,uuid)',
+    '_auction_tier_problem(uuid,uuid,uuid)', '_auction_check_tier_rule(uuid,uuid,uuid)'
   ] loop
     execute format('revoke all on function public.%s from public, anon, authenticated', f);
     execute format('grant execute on function public.%s to service_role', f);

@@ -12,6 +12,7 @@ const fail = (e: unknown): { ok: false; error: string } => ({ ok: false, error: 
 export type AuctionRulesInput = { budget: number; squadSize: number; bidIncrement: number; basePrice: number }
 export type AuctionSetupInput = {
   rules: AuctionRulesInput
+  requireEachTier: boolean
   teams: { name: string; color: string; captainId: string }[]
   tiers: { name: string; color: string; basePrice: number | null }[]
   /** rsvpId → tier name (or null for no tier) */
@@ -81,6 +82,17 @@ export async function saveAuctionSetup(bookingId: string, groupId: string, input
     }
 
     const confirmed = (rsvps || []).filter((r: any) => !r.profiles?.is_suspended)
+    if (input.requireEachTier) {
+      const poolIds = confirmed.filter((r: any) => !r.player_id || !captainIds.includes(r.player_id)).map((r: any) => r.id)
+      const counts: Record<string, number> = {}
+      for (const id of poolIds) {
+        const tier = input.assignments[id]
+        if (tier) counts[tier] = (counts[tier] ?? 0) + 1
+      }
+      const short = Object.entries(counts).find(([, n]) => n < teams.length)
+      if (short) return { ok: false, error: `${short[0]} has ${short[1]} players but there are ${teams.length} teams — every team needs one, or switch the rule off` }
+      if (Object.keys(counts).length > input.rules.squadSize) return { ok: false, error: 'There are more tiers than players per team' }
+    }
     const confirmedPlayers = new Set(confirmed.map((r: any) => r.player_id).filter(Boolean))
     if (captainIds.some((c) => !confirmedPlayers.has(c))) {
       return { ok: false, error: 'Captains must be registered players who are confirmed for this matchday' }
@@ -95,6 +107,7 @@ export async function saveAuctionSetup(bookingId: string, groupId: string, input
         squad_size: input.rules.squadSize,
         bid_increment: input.rules.bidIncrement,
         base_price: input.rules.basePrice,
+        require_each_tier: input.requireEachTier,
         created_by: user.id,
       })
       .select('id')
@@ -161,7 +174,7 @@ export async function saveAuctionSetup(bookingId: string, groupId: string, input
         .map((r: any) => ({ group_id: groupId, player_id: r.player_id, tier_id: groupTierIds.get(input.assignments[r.id] as string) }))
       if (rows.length) await admin.from('group_player_tiers').upsert(rows, { onConflict: 'group_id,player_id' })
     }
-    await admin.from('groups').update({ auction_settings: input.rules }).eq('id', groupId)
+    await admin.from('groups').update({ auction_settings: { ...input.rules, requireEachTier: input.requireEachTier } }).eq('id', groupId)
 
     revalidatePath(matchPath(groupId, bookingId))
     return { ok: true, data: { auctionId: auction.id } }

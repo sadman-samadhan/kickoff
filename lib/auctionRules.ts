@@ -83,3 +83,34 @@ export function formatMoney(n: number | null | undefined): string {
   if (n == null) return '—'
   return n.toLocaleString('en-US')
 }
+
+/**
+ * "At least one player from every tier" (mirrors _auction_tier_problem in 0004_auction.sql).
+ * Returns the reason a team may not buy a player, or null when it may.
+ */
+export function tierProblem(args: {
+  enabled: boolean
+  entryTierId: string | null
+  /** Tiers that have at least one player, in auction order. */
+  tiersInUse: { id: string; name: string }[]
+  /** Tiers the team already has a player from. */
+  teamTierIds: Set<string>
+  slotsLeft: number
+  /** Unsold players left in the entry's tier, not counting this one. */
+  availableInTier: number
+  /** Other teams with open spots that have no player from the entry's tier yet. */
+  otherTeamsMissingTier: number
+}): string | null {
+  const { enabled, entryTierId, tiersInUse, teamTierIds, slotsLeft, availableInTier, otherTeamsMissingTier } = args
+  if (!enabled || !entryTierId) return null
+  const missing = tiersInUse.filter((t) => !teamTierIds.has(t.id))
+  const fillsAGap = missing.some((t) => t.id === entryTierId)
+  if (!fillsAGap && slotsLeft - 1 < missing.length) {
+    return `Save your spots: you still need a player from ${missing.map((t) => t.name).join(', ')}`
+  }
+  if (!fillsAGap && availableInTier < otherTeamsMissingTier) {
+    const name = tiersInUse.find((t) => t.id === entryTierId)?.name ?? 'that tier'
+    return `Leave enough ${name} players for the teams that don't have one yet`
+  }
+  return null
+}

@@ -251,8 +251,22 @@ export function TeamsGrid({ state, d, highlightTeamId, compact }: { state: Aucti
                 ))}
             </ul>
             {s.slotsLeft > 0 && state.auction.status !== 'done' && (
-              <p className="border-t border-ka-line px-3 py-1.5 text-xs text-ka-muted">
-                Max bid <b className="ka-tabular text-ka-ink">{formatMoney(s.maxBid)}</b>
+              <p className="flex flex-wrap items-center gap-1.5 border-t border-ka-line px-3 py-1.5 text-xs text-ka-muted">
+                <span>
+                  Max bid <b className="ka-tabular text-ka-ink">{formatMoney(s.maxBid)}</b>
+                </span>
+                {d.missingTiers(team.id).length > 0 && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span>Needs</span>
+                    {d.missingTiers(team.id).map((t) => (
+                      <span key={t.id} className="inline-flex items-center gap-1 font-semibold" style={{ color: t.color }}>
+                        <span className="size-2 rounded-full" style={{ background: t.color }} aria-hidden />
+                        {t.name}
+                      </span>
+                    ))}
+                  </>
+                )}
               </p>
             )}
           </section>

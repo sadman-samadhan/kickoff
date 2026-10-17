@@ -15,6 +15,7 @@ export type AuctionInfo = {
   squadSize: number
   bidIncrement: number
   basePrice: number
+  requireEachTier: boolean
   callState: 'none' | 'once' | 'twice'
   currentEntryId: string | null
   finalizedAt: string | null

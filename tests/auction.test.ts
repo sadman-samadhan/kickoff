@@ -19,6 +19,8 @@ const bidError = (team: string, entry: string, amount: number) => errorOf(() => 
 const [SYN, ROY] = V12_TEAMS.map((t) => t.name)
 
 async function replayV12() {
+  // The real V12 sales happened in a different order, so don't apply the one-per-tier rule to the replay.
+  await db.query(`update public.auctions set require_each_tier = false where id = $1`, [ids.auctionId])
   await call('auction_start')
   const order: string[] = []
   for (let guard = 0; guard < 100; guard++) {
@@ -144,5 +146,73 @@ describe('safety', () => {
     await db.exec(`reset role`)
     expect(readErr).toMatch(/permission denied/)
     expect(callErr).toMatch(/permission denied/)
+  })
+})
+
+describe('one player from every tier', () => {
+  const entryOf = async (name: string) =>
+    (await db.query<{ id: string }>(`select id from public.auction_entries where auction_id = $1 and display_name = $2`, [ids.auctionId, name])).rows[0].id
+  const assign = (name: string, team: string, price = 50) =>
+    entryOf(name).then((id) => db.query(`select public.auction_manual_assign($1, $2, $3, $4)`, [ids.auctionId, id, ids.teamIds[team], price]))
+  const assignError = (name: string, team: string) => errorOf(() => assign(name, team))
+  const [, , RMA, MOB] = V12_TEAMS.map((t) => t.name)
+
+  beforeEach(async () => {
+    await call('auction_start')
+  })
+
+  it('a team must keep spots for the tiers it still lacks', async () => {
+    for (const n of ['Anam', 'Anan', 'Faruk', 'Jawad', 'JH Sajid', 'Labib']) await assign(n, SYN)
+    // 6 Apex, 2 spots left, still missing Prestige and Dominion → no 7th Apex.
+    expect(await assignError('Muaz', SYN)).toMatch(/Save your spots: you still need a player from Prestige, Dominion/)
+    expect(await assignError('Afif', SYN)).toBeNull()
+  })
+
+  it('a team taking extra players from a tier must leave one for each team without one', async () => {
+    for (const n of ['Anam', 'Anan', 'Faruk']) await assign(n, SYN)
+    for (const n of ['Jawad', 'JH Sajid', 'Labib']) await assign(n, ROY)
+    for (const n of ['Muaz', 'Ratul', 'Smit']) await assign(n, RMA)
+    // 3 Apex left (Sojib, Tamal, Xibon) and The Mob has none.
+    expect(await assignError('Sojib', RMA)).toBeNull()
+    expect(await assignError('Tamal', SYN)).toBeNull()
+    expect(await assignError('Xibon', ROY)).toMatch(/Leave enough Apex players/)
+    expect(await assignError('Xibon', MOB)).toBeNull()
+  })
+
+  it('bids are checked too', async () => {
+    const cur = await currentEntry(db, ids.auctionId)
+    expect(cur.tier).toBe('Apex')
+    for (const n of ['Anam', 'Anan', 'Faruk', 'Jawad', 'JH Sajid', 'Labib', 'Muaz', 'Ratul', 'Smit', 'Sojib', 'Tamal', 'Xibon'].filter((n) => n !== cur.player).slice(0, 6))
+      await assign(n, SYN)
+    expect(await bidError(SYN, cur.entry_id!, 100)).toMatch(/Save your spots/)
+  })
+})
+
+describe('tier rule at start', () => {
+  it('blocks the start when a tier has fewer players than teams', async () => {
+    await db.query(
+      `update public.auction_entries set tier_id = null where auction_id = $1 and display_name in ('Afif','Alamin','Mehedi','Ruhit','Sajid')`,
+      [ids.auctionId],
+    )
+    expect(await errorOf(() => call('auction_start'))).toMatch(/Tier Prestige has fewer players than there are teams/)
+    await db.query(`update public.auctions set require_each_tier = false where id = $1`, [ids.auctionId])
+    expect(await errorOf(() => call('auction_start'))).toBeNull()
+  })
+
+  it('auto-assign gives leftovers to teams that still need that tier', async () => {
+    await call('auction_start')
+    for (let i = 0; i < 64; i++) {
+      const cur = await currentEntry(db, ids.auctionId)
+      if (cur.status === 'done') break
+      await call('auction_mark_unsold')
+      await call('auction_next_player')
+    }
+    const r = await db.query<{ team: string; tiers: number }>(
+      `select e.sold_team_id as team, count(distinct e.tier_id)::int as tiers from public.auction_entries e
+       where e.auction_id = $1 and e.status = 'sold' group by 1`,
+      [ids.auctionId],
+    )
+    expect(r.rows).toHaveLength(4)
+    expect(r.rows.every((x) => x.tiers === 3)).toBe(true)
   })
 })

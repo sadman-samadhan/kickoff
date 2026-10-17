@@ -14,7 +14,7 @@ export async function loadAuctionState(
   let q = db
     .from('auctions')
     .select(
-      'id, booking_id, group_id, status, phase, budget, squad_size, bid_increment, base_price, call_state, current_entry_id, finalized_at, groups(name), bookings(match_date, match_time, field_name)',
+      'id, booking_id, group_id, status, phase, budget, squad_size, bid_increment, base_price, require_each_tier, call_state, current_entry_id, finalized_at, groups(name), bookings(match_date, match_time, field_name)',
     )
   q = 'bookingId' in by ? q.eq('booking_id', by.bookingId) : q.eq('id', by.auctionId)
   const { data: a } = await q.maybeSingle()
@@ -85,6 +85,7 @@ export async function loadAuctionState(
       squadSize: a.squad_size,
       bidIncrement: a.bid_increment,
       basePrice: a.base_price,
+      requireEachTier: a.require_each_tier !== false,
       callState: a.call_state,
       currentEntryId: a.current_entry_id,
       finalizedAt: a.finalized_at,
