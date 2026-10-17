@@ -14,9 +14,5 @@ create table if not exists public.user_security (
 alter table public.user_security enable row level security;
 revoke all on public.user_security from anon, authenticated;
 
--- Profiles are no longer readable without logging in.
--- (Name from supabase_schema.sql; confirm against the production baseline before running.)
-drop policy if exists "Public profiles are viewable by everyone" on public.profiles;
-drop policy if exists "Profiles are viewable by signed-in users" on public.profiles;
-create policy "Profiles are viewable by signed-in users"
-  on public.profiles for select to authenticated using (true);
+-- Note: production already limits profile reads to the user's own row ("Users can view own profile"),
+-- so no read-policy change is needed here.
