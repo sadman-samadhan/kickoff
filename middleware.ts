@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { isLinkPreviewBot, matchdayIdFromPath } from '@/lib/share/linkPreview'
+import { safeNext } from '@/lib/safeNext'
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
@@ -64,8 +65,10 @@ export async function middleware(request: NextRequest) {
       url.search = ''
       return NextResponse.rewrite(url)
     }
+    // Sign in, then come straight back here.
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    url.search = `?next=${encodeURIComponent(pathname + request.nextUrl.search)}`
     return NextResponse.redirect(url)
   }
 
@@ -74,7 +77,10 @@ export async function middleware(request: NextRequest) {
 
   if (isAuthRoute && isSignedIn) {
     const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
+    const dest = safeNext(request.nextUrl.searchParams.get('next'))
+    const [p, q] = dest.split('?')
+    url.pathname = p
+    url.search = q ? `?${q}` : ''
     return NextResponse.redirect(url)
   }
 

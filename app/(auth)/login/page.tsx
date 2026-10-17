@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { rememberNextForOAuth, safeNext, withNext } from '@/lib/safeNext'
 import { BrandLogo } from '@/components/brand/BrandLogo'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -24,6 +25,8 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  // Where to go after signing in (e.g. back to a group invite link)
+  const [next, setNext] = useState<string | null>(null)
 
   useEffect(() => {
     // If the URL has an error message from OAuth callback redirect, show it
@@ -32,6 +35,7 @@ export default function LoginPage() {
     if (errParam) {
       setError(errParam)
     }
+    setNext(searchParams.get('next'))
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -73,7 +77,7 @@ export default function LoginPage() {
         throw new Error('Incorrect username/email or password')
       }
 
-      router.push('/dashboard')
+      router.push(safeNext(next))
       router.refresh()
 
     } catch (err: any) {
@@ -87,6 +91,7 @@ export default function LoginPage() {
     setError('')
     setIsGoogleLoading(true)
     try {
+      rememberNextForOAuth(next)
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -240,7 +245,7 @@ export default function LoginPage() {
           <CardFooter className="flex justify-center border-t border-neutral-100 pt-6">
             <p className="text-sm text-neutral-600">
               Don&apos;t have an account?{' '}
-              <Link href="/register" className="text-green-600 font-semibold hover:text-green-700 hover:underline">
+              <Link href={withNext('/register', next)} className="text-green-600 font-semibold hover:text-green-700 hover:underline">
                 Register here
               </Link>
             </p>

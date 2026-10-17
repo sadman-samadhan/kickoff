@@ -4,6 +4,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from 'react'
+import { rememberNextForOAuth, safeNext, withNext } from '@/lib/safeNext'
 import { BrandLogo } from '@/components/brand/BrandLogo'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -56,6 +57,11 @@ function compressImage(file: File, maxSize = MAX_AVATAR_SIZE): Promise<Blob> {
 
 export default function RegisterPage() {
   const router = useRouter()
+  // Where to go after signing up (e.g. back to a group invite link)
+  const [next, setNext] = useState<string | null>(null)
+  useEffect(() => {
+    setNext(new URLSearchParams(window.location.search).get('next'))
+  }, [])
   const supabase = createClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -169,7 +175,7 @@ export default function RegisterPage() {
       })
 
       // 4. Redirect on success
-      router.push('/dashboard')
+      router.push(safeNext(next))
       router.refresh()
 
     } catch (err: any) {
@@ -184,6 +190,7 @@ export default function RegisterPage() {
     setServerError('')
     setIsGoogleLoading(true)
     try {
+      rememberNextForOAuth(next)
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -402,7 +409,7 @@ export default function RegisterPage() {
           <CardFooter className="flex justify-center border-t border-neutral-100 pt-6">
             <p className="text-sm text-neutral-600">
               Already have an account?{' '}
-              <Link href="/login" className="text-green-600 font-semibold hover:text-green-700 hover:underline">
+              <Link href={withNext('/login', next)} className="text-green-600 font-semibold hover:text-green-700 hover:underline">
                 Log in
               </Link>
             </p>
