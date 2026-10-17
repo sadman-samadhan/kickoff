@@ -1,76 +1,53 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { getAuthUser, getGroupRole } from '@/lib/groupAuth'
 import GameDetailsClient from './GameDetailsClient'
+
+const PLAYER_FIELDS = 'id, full_name, username, avatar_url, preferred_position, secondary_position, is_suspended'
 
 export default async function GameDetailsPage({
   params,
 }: {
   params: { groupId: string; bookingId: string; matchId: string }
 }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const supabaseAdmin = createAdminClient()
+  const matchPath = `/groups/${params.groupId}/match/${params.bookingId}`
 
-  // 1. Fetch User Role in Group
-  const { data: member } = await supabaseAdmin
-    .from('group_members')
-    .select('role')
-    .eq('group_id', params.groupId)
-    .eq('player_id', user.id)
-    .single()
+  const [role, { data: match }, { data: booking }] = await Promise.all([
+    getGroupRole(params.groupId),
+    supabaseAdmin.from('match_schedule').select('*').eq('id', params.matchId).maybeSingle(),
+    supabaseAdmin.from('bookings').select('id, group_id').eq('id', params.bookingId).maybeSingle(),
+  ])
 
-  if (!member) redirect('/dashboard')
+  if (!role) redirect('/dashboard')
+  // The URL must describe one consistent group → booking → match chain.
+  if (!booking || booking.group_id !== params.groupId) redirect(`/groups/${params.groupId}`)
+  if (!match || match.booking_id !== params.bookingId) redirect(matchPath)
 
-  // 2. Fetch Match Details
-  const { data: match } = await supabaseAdmin
-    .from('match_schedule')
-    .select('*')
-    .eq('id', params.matchId)
-    .single()
+  const teamIds = [match.home_team_id, match.away_team_id].filter(Boolean)
+  const [{ data: teams }, { data: rsvps }, { data: teamPlayers }, { data: events }] = await Promise.all([
+    teamIds.length ? supabaseAdmin.from('teams').select('*').in('id', teamIds) : Promise.resolve({ data: [] as any[] }),
+    supabaseAdmin.from('rsvps').select('id, player_id, status, guest_name, guest_position').eq('booking_id', params.bookingId),
+    teamIds.length
+      ? supabaseAdmin.from('team_players').select(`team_id, player_id, profiles(${PLAYER_FIELDS})`).in('team_id', teamIds)
+      : Promise.resolve({ data: [] as any[] }),
+    supabaseAdmin.from('match_events').select('*').eq('match_schedule_id', params.matchId).order('minute', { ascending: true }),
+  ])
 
-  if (!match) redirect(`/groups/${params.groupId}/match/${params.bookingId}`)
+  const homeTeam = (teams || []).find((t: any) => t.id === match.home_team_id) || null
+  const awayTeam = (teams || []).find((t: any) => t.id === match.away_team_id) || null
 
-  // 3. Fetch Home and Away Teams
-  const { data: homeTeam } = match.home_team_id
-    ? await supabaseAdmin.from('teams').select('*').eq('id', match.home_team_id).single()
-    : { data: null }
+  const registeredFor = (teamId: string | null) =>
+    (teamPlayers || [])
+      .filter((t: any) => teamId && t.team_id === teamId)
+      .map((t: any) => (t.profiles ? { ...t.profiles, id: t.player_id } : null))
+      .filter((p: any) => p && !p.is_suspended)
 
-  const { data: awayTeam } = match.away_team_id
-    ? await supabaseAdmin.from('teams').select('*').eq('id', match.away_team_id).single()
-    : { data: null }
-
-  // 4. Fetch Home and Away Players (including registered players and guests)
-  const { data: rsvps } = await supabaseAdmin
-    .from('rsvps')
-    .select('*')
-    .eq('booking_id', params.bookingId)
-
-  const { data: homeTp } = match.home_team_id
-    ? await supabaseAdmin
-        .from('team_players')
-        .select('player_id, profiles(*)')
-        .eq('team_id', match.home_team_id)
-    : { data: [] }
-
-  const { data: awayTp } = match.away_team_id
-    ? await supabaseAdmin
-        .from('team_players')
-        .select('player_id, profiles(*)')
-        .eq('team_id', match.away_team_id)
-    : { data: [] }
-
-  const homeRegistered = (homeTp || [])
-    .map((t: any) => (t.profiles ? { ...t.profiles, id: t.player_id } : null))
-    .filter((p: any) => p && !p.is_suspended)
-
-  const awayRegistered = (awayTp || [])
-    .map((t: any) => (t.profiles ? { ...t.profiles, id: t.player_id } : null))
-    .filter((p: any) => p && !p.is_suspended)
-
-  // Resolve Guest Players from team guest_members cleanly without duplicates
+  // Resolve guest players from each team's guest_members without duplicates
   const guestRsvps = (rsvps || []).filter((r: any) => r.status === 'in' && (r.player_id === null || r.guest_name))
 
   const resolveTeamGuests = (guestMembers: string[]) => {
@@ -96,18 +73,11 @@ export default async function GameDetailsPage({
     return list.sort((a: any, b: any) => (a.full_name || '').localeCompare(b.full_name || ''))
   }
 
-  const homeGuests = resolveTeamGuests(homeTeam?.guest_members)
-  const awayGuests = resolveTeamGuests(awayTeam?.guest_members)
+  const homePlayers = [...registeredFor(match.home_team_id), ...resolveTeamGuests(homeTeam?.guest_members)]
+  const awayPlayers = [...registeredFor(match.away_team_id), ...resolveTeamGuests(awayTeam?.guest_members)]
 
-  const homePlayers = [...homeRegistered, ...homeGuests]
-  const awayPlayers = [...awayRegistered, ...awayGuests]
-
-  // 5. Fetch Match Events
-  const { data: events } = await supabaseAdmin
-    .from('match_events')
-    .select('*')
-    .eq('match_schedule_id', params.matchId)
-    .order('minute', { ascending: true })
+  const isAdmin = role === 'admin'
+  const isCaptain = [homeTeam, awayTeam].some((t: any) => t?.captain_id === user.id)
 
   return (
     <GameDetailsClient
@@ -120,7 +90,8 @@ export default async function GameDetailsPage({
       homePlayers={homePlayers}
       awayPlayers={awayPlayers}
       events={events || []}
-      isAdmin={member.role === 'admin'}
+      isAdmin={isAdmin}
+      canLog={isAdmin || isCaptain}
     />
   )
 }

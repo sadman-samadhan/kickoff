@@ -2,11 +2,17 @@
 /* eslint-disable prefer-const */
 'use server'
 
-import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { requireBookingAdmin, requireBookingMember, requireTeamAdmin } from '@/lib/groupAuth'
+
+/** Ids of the teams that belong to a booking (used to reject team ids from other matches). */
+async function bookingTeamIds(admin: any, bookingId: string): Promise<Set<string>> {
+  const { data } = await admin.from('teams').select('id').eq('booking_id', bookingId)
+  return new Set((data || []).map((t: any) => t.id))
+}
 
 export async function saveTeamsAction(bookingId: string, groupId: string, teamsData: any[]) {
-  const admin = createAdminClient()
+  const { admin } = await requireBookingAdmin(bookingId, groupId)
   
   for (const team of teamsData) {
     const realCaptainId = (team.captainId && !team.captainId.startsWith('guest_')) ? team.captainId : null
@@ -43,7 +49,7 @@ export async function saveTeamsAction(bookingId: string, groupId: string, teamsD
 }
 
 export async function updateTeamAction(teamId: string, bookingId: string, groupId: string, data: { name: string, jerseyColor: string, captainId: string, playerIds: string[], guestNames?: Record<string, string> }) {
-  const admin = createAdminClient()
+  const { admin } = await requireTeamAdmin(teamId, bookingId, groupId)
   const realCaptainId = (data.captainId && !data.captainId.startsWith('guest_')) ? data.captainId : null
   const guestRsvpIds = Array.from(new Set(
     (data.playerIds || [])
@@ -78,15 +84,18 @@ export async function updateTeamAction(teamId: string, bookingId: string, groupI
 }
 
 export async function deleteTeamAction(teamId: string, bookingId: string, groupId: string) {
-  const admin = createAdminClient()
+  const { admin } = await requireTeamAdmin(teamId, bookingId, groupId)
   await admin.from('team_players').delete().eq('team_id', teamId)
   await admin.from('teams').delete().eq('id', teamId)
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
   return { success: true }
 }
 
-export async function generateScheduleAction(bookingId: string, groupId: string, teams: any[], scheduleType: string) {
-  const supabase = createClient()
+export async function generateScheduleAction(bookingId: string, groupId: string, teamsInput: any[], scheduleType: string) {
+  const { admin } = await requireBookingAdmin(bookingId, groupId)
+  const allowed = await bookingTeamIds(admin, bookingId)
+  const teams = (teamsInput || []).filter((t: any) => allowed.has(t.id))
+  if (teams.length < 2) throw new Error('Add at least two teams first')
   const { generateLeagueSchedule, generateKnockoutSchedule } = await import('@/lib/scheduleGenerator')
 
   const is2Leg = scheduleType.includes('2-Leg') || scheduleType.includes('2-leg') || scheduleType.includes('UCL')
@@ -96,8 +105,8 @@ export async function generateScheduleAction(bookingId: string, groupId: string,
     ? generateKnockoutSchedule(teams, is2Leg ? 2 : 1)
     : generateLeagueSchedule(teams, is2Leg ? 2 : 1)
 
-  for (const match of generatedMatches) {
-    await supabase.from('match_schedule').insert({
+  if (generatedMatches.length > 0) {
+    const { error } = await admin.from('match_schedule').insert(generatedMatches.map((match: any) => ({
       booking_id: bookingId,
       home_team_id: match.home_team_id,
       away_team_id: match.away_team_id,
@@ -106,7 +115,8 @@ export async function generateScheduleAction(bookingId: string, groupId: string,
       scheduled_order: match.scheduled_order,
       stage_name: match.stage_name || (isKnockout ? 'Knockout' : 'League'),
       status: 'scheduled'
-    })
+    })))
+    if (error) throw new Error(error.message)
   }
 
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
@@ -121,7 +131,9 @@ export async function addManualMatchAction(
   leg: number = 1,
   stageName: string = 'Match'
 ) {
-  const admin = createAdminClient()
+  const { admin } = await requireBookingAdmin(bookingId, groupId)
+  const allowed = await bookingTeamIds(admin, bookingId)
+  if (!allowed.has(homeTeamId) || !allowed.has(awayTeamId)) throw new Error('Pick two teams from this matchday')
   const { data: existingMatches } = await admin
     .from('match_schedule')
     .select('scheduled_order')
@@ -144,87 +156,15 @@ export async function addManualMatchAction(
   return { success: true }
 }
 
-export async function updateMatchScoreAction(
-  groupId: string,
-  bookingId: string,
-  matchScheduleId: string,
-  homeScore: number,
-  awayScore: number,
-  status: string,
-  goalEvents: any[],
-  fantasyData?: {
-    dnpPlayerIds?: string[]
-    dnpGuestNames?: string[]
-    motmPlayerId?: string | null
-    motmGuestName?: string | null
-  }
-) {
-  const supabase = createClient()
-  
-  await supabase.from('match_schedule').update({
-    home_score: homeScore,
-    away_score: awayScore,
-    status,
-    dnp_player_ids: fantasyData?.dnpPlayerIds || [],
-    dnp_guest_names: fantasyData?.dnpGuestNames || [],
-    motm_player_id: fantasyData?.motmPlayerId || null,
-    mvp_player_id: fantasyData?.motmPlayerId || null,
-    motm_guest_name: fantasyData?.motmGuestName || null
-  }).eq('id', matchScheduleId)
-
-  // Clear previous goal events for this match before re-inserting if updated
-  await supabase.from('goal_events').delete().eq('match_schedule_id', matchScheduleId)
-
-  // Insert goal events if any
-  if (goalEvents && goalEvents.length > 0) {
-    const formattedGoals = goalEvents.map(g => ({
-      match_schedule_id: matchScheduleId,
-      scorer_id: g.scorerId,
-      assist_id: g.assistId || null,
-      team_id: g.teamId,
-      is_own_goal: g.isOwnGoal || false,
-      minute: g.minute || null
-    }))
-    await supabase.from('goal_events').insert(formattedGoals)
-  }
-
-  // Check if all matches in schedule are completed, then complete booking
-  const { data: schedule } = await supabase.from('match_schedule').select('status').eq('booking_id', bookingId)
-  const allCompleted = schedule?.every(s => s.status === 'completed')
-  if (allCompleted) {
-    await supabase.from('bookings').update({ status: 'completed' }).eq('id', bookingId)
-  } else if (status === 'ongoing') {
-    await supabase.from('bookings').update({ status: 'ongoing' }).eq('id', bookingId)
-  }
-
-  // Auto-populate knockout progression (e.g. Semi-Final winners -> Final)
-  const admin = createAdminClient()
-  const { checkAndAutoPopulateKnockoutProgression } = await import('@/lib/knockoutProgression')
-  await checkAndAutoPopulateKnockoutProgression(admin, bookingId)
-
-  revalidatePath(`/groups/${groupId}/match/${bookingId}`)
-  revalidatePath(`/groups/${groupId}`)
-  revalidatePath('/dashboard')
-  return { success: true }
-}
-
 export async function adminAddRsvpAction(bookingId: string, groupId: string, playerIdOrIds: string | string[], maxPlayers: number, selectedPositions?: Record<string, string>) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { admin } = await requireBookingAdmin(bookingId, groupId)
 
-  // Verify caller is admin
-  const { data: callerMembership } = await admin
-    .from('group_members')
-    .select('role')
-    .eq('group_id', groupId)
-    .eq('player_id', user.id)
-    .single()
-
-  if (callerMembership?.role !== 'admin') throw new Error('Only admins can add players')
-
-  const playerIds = Array.isArray(playerIdOrIds) ? playerIdOrIds : [playerIdOrIds]
+  // Only members of this group can be added
+  const requested = Array.isArray(playerIdOrIds) ? playerIdOrIds : [playerIdOrIds]
+  const { data: memberRows } = await admin.from('group_members').select('player_id').eq('group_id', groupId).in('player_id', requested)
+  const memberIds = new Set((memberRows || []).map((m: any) => m.player_id))
+  const playerIds = requested.filter((id: string) => memberIds.has(id))
+  if (playerIds.length === 0) throw new Error('Those players are not in this group')
 
   // Filter out suspended profiles
   const { data: suspendedProfiles } = await admin.from('profiles').select('id').in('id', playerIds).eq('is_suspended', true)
@@ -286,10 +226,10 @@ export async function adminAddRsvpAction(bookingId: string, groupId: string, pla
 }
 
 export async function updateRsvpPositionAction(rsvpId: string, bookingId: string, groupId: string, selectedPosition: string) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { admin, user, role } = await requireBookingMember(bookingId, groupId)
+  const { data: rsvp } = await admin.from('rsvps').select('id, booking_id, player_id').eq('id', rsvpId).maybeSingle()
+  if (!rsvp || rsvp.booking_id !== bookingId) throw new Error('RSVP not found')
+  if (role !== 'admin' && rsvp.player_id !== user.id) throw new Error('You can only change your own position')
 
   const { error } = await admin.from('rsvps').update({ selected_position: selectedPosition }).eq('id', rsvpId)
   if (error && error.message?.includes('selected_position')) {
@@ -305,15 +245,7 @@ export async function updateRsvpPositionAction(rsvpId: string, bookingId: string
 }
 
 export async function addGuestAction(bookingId: string, groupId: string, guestName: string, position: string) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
-
-  const { data: callerMembership } = await admin
-    .from('group_members').select('role')
-    .eq('group_id', groupId).eq('player_id', user.id).single()
-  if (callerMembership?.role !== 'admin') throw new Error('Only admins can add guests')
+  const { admin } = await requireBookingAdmin(bookingId, groupId)
 
   await admin.from('rsvps').insert({
     booking_id: bookingId,
@@ -331,15 +263,7 @@ export async function addGuestAction(bookingId: string, groupId: string, guestNa
 }
 
 export async function updateMaxPlayersAction(bookingId: string, groupId: string, maxPlayers: number) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
-
-  const { data: callerMembership } = await admin
-    .from('group_members').select('role')
-    .eq('group_id', groupId).eq('player_id', user.id).single()
-  if (callerMembership?.role !== 'admin') throw new Error('Only admins can edit max players')
+  const { admin } = await requireBookingAdmin(bookingId, groupId)
 
   await admin.from('bookings').update({ max_players: maxPlayers }).eq('id', bookingId)
 
@@ -350,7 +274,10 @@ export async function updateMaxPlayersAction(bookingId: string, groupId: string,
 }
 
 export async function assignPlayerToTeamAction(bookingId: string, groupId: string, playerId: string | null, guestName: string | null, rsvpId: string, newTeamId: string | null) {
-  const admin = createAdminClient()
+  const { admin } = await requireBookingAdmin(bookingId, groupId)
+  if (newTeamId && !(await bookingTeamIds(admin, bookingId)).has(newTeamId)) throw new Error('Team belongs to a different match')
+  const { data: rsvp } = await admin.from('rsvps').select('booking_id, player_id').eq('id', rsvpId).maybeSingle()
+  if (!rsvp || rsvp.booking_id !== bookingId || (playerId && rsvp.player_id !== playerId)) throw new Error('Player is not in this match')
   
   // First, remove player/guest from any existing teams for this booking
   const { data: teams } = await admin.from('teams').select('id, guest_members').eq('booking_id', bookingId)
@@ -388,7 +315,7 @@ export async function assignPlayerToTeamAction(bookingId: string, groupId: strin
 }
 
 export async function rescheduleMatchesAction(bookingId: string, groupId: string) {
-  const admin = createAdminClient()
+  const { admin } = await requireBookingAdmin(bookingId, groupId)
   
   // Delete all goal events related to this schedule first (cascade might not be set up)
   const { data: schedule } = await admin.from('match_schedule').select('id').eq('booking_id', bookingId)
@@ -410,22 +337,10 @@ export async function rescheduleMatchesAction(bookingId: string, groupId: string
 }
 
 export async function adminRemoveRsvpAction(bookingId: string, groupId: string, rsvpId: string) {
-  const supabase = createClient()
-  const admin = createAdminClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
-
-  const { data: callerMembership } = await admin
-    .from('group_members')
-    .select('role')
-    .eq('group_id', groupId)
-    .eq('player_id', user.id)
-    .single()
-
-  if (callerMembership?.role !== 'admin') throw new Error('Only admins can remove players')
+  const { admin } = await requireBookingAdmin(bookingId, groupId)
 
   const { data: targetRsvp } = await admin.from('rsvps').select('*').eq('id', rsvpId).single()
-  if (!targetRsvp) throw new Error('RSVP not found')
+  if (!targetRsvp || targetRsvp.booking_id !== bookingId) throw new Error('RSVP not found')
 
   const wasStatus = targetRsvp.status
 
@@ -540,7 +455,7 @@ async function notifyPlayerOfTeamAssignment(
 }
 
 export async function reorderMatchesAction(bookingId: string, groupId: string, matchIdsInOrder: string[]) {
-  const admin = createAdminClient()
+  const { admin } = await requireBookingAdmin(bookingId, groupId)
   
   for (let i = 0; i < matchIdsInOrder.length; i++) {
     await admin

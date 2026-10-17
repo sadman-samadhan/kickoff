@@ -2,7 +2,8 @@ import { BottomNav } from '@/components/layout/BottomNav'
 import { NotificationBell } from '@/components/layout/NotificationBell'
 import { Providers } from '@/components/Providers'
 import { SuspendedLayoutGuard } from '@/components/layout/SuspendedLayoutGuard'
-import { createClient } from '@/lib/supabase/server'
+import { getAuthUser } from '@/lib/groupAuth'
+import { getMyProfile } from '@/lib/profile'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -12,16 +13,10 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const profile = await getMyProfile()
 
   return (
     <Providers profile={profile}>

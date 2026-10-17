@@ -3,14 +3,14 @@
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { requireGroupMember } from '@/lib/groupAuth'
+import { notifyNewBooking } from '@/lib/notifications/booking'
 
 export async function addBookingAction(groupId: string, data: any) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+  const { user, admin } = await requireGroupMember(groupId)
 
   // Insert booking
-  const { data: booking, error } = await supabase.from('bookings').insert({
+  const { data: booking, error } = await admin.from('bookings').insert({
     group_id: groupId,
     created_by: user.id,
     match_date: data.matchDate,
@@ -23,17 +23,12 @@ export async function addBookingAction(groupId: string, data: any) {
 
   if (error) throw new Error(error.message)
 
-  // Fetch all group members to notify
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://khelahbe.vercel.app/'
-  fetch(`${baseUrl}/api/notifications/send`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      group_id: groupId,
-      booking_id: booking.id,
-      exclude_player_id: user.id
-    })
-  }).catch(console.error)
+  // Notify all group members (in-app, email, push)
+  try {
+    await notifyNewBooking({ groupId, bookingId: booking.id, excludePlayerId: user.id })
+  } catch (e) {
+    console.error('Failed to send booking notifications:', e)
+  }
 
   revalidatePath(`/groups/${groupId}`)
   revalidatePath('/groups')

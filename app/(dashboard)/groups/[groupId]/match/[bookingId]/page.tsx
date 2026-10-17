@@ -1,8 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable prefer-const */
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { getAuthUser, getGroupRole } from '@/lib/groupAuth'
 import MatchClient from './MatchClient'
+
+// Only the profile fields the matchday UI needs — never send whole profile rows to the browser.
+const PROFILE_FIELDS = 'id, full_name, username, avatar_url, preferred_position, secondary_position, is_suspended'
 
 export default async function MatchPage({
   params,
@@ -11,48 +15,25 @@ export default async function MatchPage({
   params: { groupId: string, bookingId: string }
   searchParams?: { tab?: string }
 }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
-  // Fetch Booking
-  const { data: booking } = await supabase
-    .from('bookings')
-    .select('*, groups(name)')
-    .eq('id', params.bookingId)
-    .single()
-
-  if (!booking) redirect(`/groups/${params.groupId}`)
-
   const supabaseAdmin = createAdminClient()
-  
-  // Fetch User Role
-  const { data: member } = await supabaseAdmin
-    .from('group_members')
-    .select('role')
-    .eq('group_id', params.groupId)
-    .eq('player_id', user.id)
-    .single()
 
-  // Fetch RSVPs
-  const { data: rsvps } = await supabaseAdmin
-    .from('rsvps')
-    .select('*, profiles(*)')
-    .eq('booking_id', params.bookingId)
+  const [role, { data: booking }, { data: rsvps }, { data: teamsData }, { data: matchSchedule }, { data: groupMembers }, { data: userRating }] =
+    await Promise.all([
+      getGroupRole(params.groupId),
+      supabaseAdmin.from('bookings').select('*, groups(name)').eq('id', params.bookingId).maybeSingle(),
+      supabaseAdmin.from('rsvps').select(`*, profiles(${PROFILE_FIELDS})`).eq('booking_id', params.bookingId),
+      supabaseAdmin.from('teams').select(`*, team_players(*, profiles(${PROFILE_FIELDS}))`).eq('booking_id', params.bookingId),
+      supabaseAdmin.from('match_schedule').select('*').eq('booking_id', params.bookingId).order('scheduled_order', { ascending: true }),
+      supabaseAdmin.from('group_members').select(`*, profiles(${PROFILE_FIELDS})`).eq('group_id', params.groupId),
+      supabaseAdmin.from('field_ratings').select('id').eq('booking_id', params.bookingId).eq('user_id', user.id).maybeSingle(),
+    ])
 
-  // Fetch Teams
-  const { data: teamsData } = await supabaseAdmin
-    .from('teams')
-    .select('*, team_players(*, profiles(*))')
-    .eq('booking_id', params.bookingId)
-
-  // Fetch Match Schedule
-  const { data: matchSchedule } = await supabase
-    .from('match_schedule')
-    .select('*')
-    .eq('booking_id', params.bookingId)
-    .order('scheduled_order', { ascending: true })
+  // Members only, and the booking must belong to the group in the URL.
+  if (!role) redirect('/dashboard')
+  if (!booking || booking.group_id !== params.groupId) redirect(`/groups/${params.groupId}`)
 
   interface MatchScheduleItem {
     id: string
@@ -65,17 +46,18 @@ export default async function MatchPage({
   let rawGoalEvents: any[] = []
 
   if (scheduleIds.length > 0) {
-    const { data: me } = await supabaseAdmin
-      .from('match_events')
-      .select('*, profiles!player_id(*), secondary_profile:profiles!secondary_player_id(*)')
-      .in('match_schedule_id', scheduleIds)
-      .order('minute', { ascending: true })
+    const [{ data: me }, { data: ge }] = await Promise.all([
+      supabaseAdmin
+        .from('match_events')
+        .select(`*, profiles!player_id(${PROFILE_FIELDS}), secondary_profile:profiles!secondary_player_id(${PROFILE_FIELDS})`)
+        .in('match_schedule_id', scheduleIds)
+        .order('minute', { ascending: true }),
+      supabaseAdmin
+        .from('goal_events')
+        .select(`*, profiles!scorer_id(${PROFILE_FIELDS}), assist:profiles!assist_id(${PROFILE_FIELDS})`)
+        .in('match_schedule_id', scheduleIds),
+    ])
     matchEvents = me || []
-
-    const { data: ge } = await supabaseAdmin
-      .from('goal_events')
-      .select('*, profiles!scorer_id(*), assist:profiles!assist_id(*)')
-      .in('match_schedule_id', scheduleIds)
     rawGoalEvents = ge || []
   }
 
@@ -132,20 +114,6 @@ export default async function MatchPage({
     }
   })
 
-  // Fetch Group Members for Admin to add
-  const { data: groupMembers } = await supabaseAdmin
-    .from('group_members')
-    .select('*, profiles(*)')
-    .eq('group_id', params.groupId)
-
-  // Check if current user has rated the field for this booking
-  const { data: userRating } = await supabaseAdmin
-    .from('field_ratings')
-    .select('id')
-    .eq('booking_id', params.bookingId)
-    .eq('user_id', user.id)
-    .maybeSingle()
-
   const activeRsvps = (rsvps || []).filter((r: any) => !(r.profiles as any)?.is_suspended)
   const activeTeams = (teamsData || []).map((t: any) => ({
     ...t,
@@ -153,17 +121,20 @@ export default async function MatchPage({
   }))
   const activeGroupMembers = (groupMembers || []).filter((gm: any) => !(gm.profiles as any)?.is_suspended)
 
+  // Only what the client needs about the signed-in user.
+  const currentUser = { id: user.id, email: user.email }
+
   return (
-    <MatchClient 
+    <MatchClient
       booking={booking}
       rsvps={activeRsvps}
       teams={activeTeams}
       matchSchedule={matchSchedule || []}
       goalEvents={unifiedGoalEvents}
       matchEvents={matchEvents || []}
-      currentUser={user}
+      currentUser={currentUser}
       groupId={params.groupId}
-      userRole={member?.role || 'member'}
+      userRole={role}
       groupMembers={activeGroupMembers}
       initialHasRated={!!userRating}
       initialTab={searchParams?.tab || 'players'}

@@ -40,6 +40,7 @@ interface GameDetailsClientProps {
   awayPlayers: any[]
   events: any[]
   isAdmin: boolean
+  canLog: boolean
 }
 
 interface OptionItem<T extends string = string> {
@@ -118,6 +119,7 @@ export default function GameDetailsClient({
   awayPlayers,
   events,
   isAdmin,
+  canLog,
 }: GameDetailsClientProps) {
   const [activeTab, setActiveTab] = useState<'events' | 'lineup' | 'pitchTime'>('events')
   const allPlayers = [...homePlayers, ...awayPlayers]
@@ -185,14 +187,15 @@ export default function GameDetailsClient({
 
   // Auto-stop clock & mark match complete at (duration + 2) minutes if not stopped manually
   useEffect(() => {
-    if (timerState !== 'running') return
+    // Only people who can run the match may advance it; a viewer's open page must never end a half.
+    if (!canLog || timerState !== 'running') return
 
     const maxAllowedSeconds = (Math.max(1, halfDuration) + 2) * 60
     if (elapsedSeconds >= maxAllowedSeconds) {
       handleNextPeriod()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [elapsedSeconds, timerState, halfDuration])
+  }, [elapsedSeconds, timerState, halfDuration, canLog])
 
   const getCurrentMatchMinute = () => {
     const elapsedMins = Math.floor(elapsedSeconds / 60)
@@ -394,7 +397,7 @@ export default function GameDetailsClient({
   const [startingPlayerIds, setStartingPlayerIds] = useState<string[]>(defaultStartingPids)
 
   const handleToggleStartingPlayer = async (pid: string) => {
-    if (!isAdmin) return
+    if (!canLog) return
     const nextPids = startingPlayerIds.includes(pid)
       ? startingPlayerIds.filter((id) => id !== pid)
       : [...startingPlayerIds, pid]
@@ -525,7 +528,7 @@ export default function GameDetailsClient({
   }
 
   const handleDeleteEvent = async (eventId: string) => {
-    if (!isAdmin) return
+    if (!canLog) return
     try {
       await deleteMatchEventAction(eventId, matchId, bookingId, groupId)
     } catch (e: any) {
@@ -650,7 +653,7 @@ export default function GameDetailsClient({
       </div>
 
       {/* Live Match Clock Bar (When match is ongoing / scheduled) */}
-      {isAdmin && (
+      {canLog && (
         <div className="bg-neutral-900 text-white rounded-2xl p-3.5 flex items-center justify-between shadow-md border border-neutral-800">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-emerald-400" />
@@ -888,7 +891,7 @@ export default function GameDetailsClient({
           )}
 
           {/* Quick Action Event Logger Buttons for Admin */}
-          {isAdmin && (
+          {canLog && (
             <div className="bg-white rounded-3xl p-4 border border-neutral-100 shadow-sm space-y-3">
               <span className="text-xs font-black text-neutral-900 uppercase tracking-wider block">
                 Log Match Event
@@ -1010,7 +1013,7 @@ export default function GameDetailsClient({
                           </div>
                         </div>
 
-                        {isAdmin && (
+                        {canLog && (
                           <button
                             onClick={() => handleDeleteEvent(evt.id)}
                             className="text-neutral-400 hover:text-red-600 p-1.5 rounded-lg transition-colors shrink-0"

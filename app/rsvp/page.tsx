@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { generateRsvpToken } from '@/lib/utils'
+import { verifyRsvpToken } from '@/lib/tokens'
 import { sendEmail } from '@/lib/email/resend'
 import { waitlistPromotionEmail } from '@/lib/email/templates'
 import Link from 'next/link'
@@ -17,9 +17,12 @@ export default async function RsvpPage({
     return <ErrorState message="Invalid or missing link parameters." />
   }
 
+  if (status !== 'in' && status !== 'out') {
+    return <ErrorState message="Invalid or missing link parameters." />
+  }
+
   // Verify HMAC token
-  const expectedToken = generateRsvpToken(playerId, bookingId)
-  if (token !== expectedToken) {
+  if (!verifyRsvpToken(playerId, bookingId, token)) {
     return <ErrorState message="This link has expired or is invalid." />
   }
 

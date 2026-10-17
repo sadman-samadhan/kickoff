@@ -8,7 +8,7 @@ import { format, parseISO } from 'date-fns'
 import { MapPin, Clock, Calendar, CheckCircle, XCircle, Users, Shield, Map as MapIcon, Plus, ChevronRight, X, Loader2, Trophy, Goal, Star, MinusCircle, Share2, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { rsvpAction } from '../../actions'
-import { saveTeamsAction, generateScheduleAction, updateMatchScoreAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction, reorderMatchesAction, addManualMatchAction, updateRsvpPositionAction } from './actions'
+import { saveTeamsAction, generateScheduleAction, adminAddRsvpAction, addGuestAction, updateMaxPlayersAction, updateTeamAction, deleteTeamAction, assignPlayerToTeamAction, rescheduleMatchesAction, adminRemoveRsvpAction, reorderMatchesAction, addManualMatchAction, updateRsvpPositionAction } from './actions'
 import { calculateFplPoints } from '@/lib/fpl'
 import { getGroupScoringSettings, calculateTournamentPlayerPoints, calculateMatchPlayerPitchTime, PlayerPointsBreakdown } from '@/lib/tournamentScoring'
 import Link from 'next/link'
@@ -569,9 +569,6 @@ export default function MatchClient({
 
   // Score Entry & Fantasy State
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null)
-  const [scoreForms, setScoreForms] = useState<Record<string, { homeScore: number, awayScore: number }>>({})
-  const [dnpForms, setDnpForms] = useState<Record<string, { playerIds: string[], guestNames: string[] }>>({})
-  const [motmForms, setMotmForms] = useState<Record<string, { playerId: string, guestName: string }>>({})
 
   // Manual Match State
   const [isAddManualMatchOpen, setIsAddManualMatchOpen] = useState(false)
@@ -581,10 +578,6 @@ export default function MatchClient({
   const [manualLeg, setManualLeg] = useState(1)
   const [isManualMatchLoading, setIsManualMatchLoading] = useState(false)
 
-  const [isAddGoalOpen, setIsAddGoalOpen] = useState(false)
-  const [goalForm, setGoalForm] = useState({ teamId: '', scorerId: '', assistId: '', minute: '', isOwnGoal: false })
-  const [isGoalLoading, setIsGoalLoading] = useState(false)
-  const [isScoreLoading, setIsScoreLoading] = useState(false)
 
   // Cancel Match State
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false)
@@ -1026,66 +1019,7 @@ export default function MatchClient({
   }
 
   const handleExpandMatch = (match: any) => {
-    if (expandedMatchId === match.id) {
-      setExpandedMatchId(null)
-    } else {
-      setExpandedMatchId(match.id)
-      setScoreForms({
-        ...scoreForms,
-        [match.id]: { homeScore: match.home_score || 0, awayScore: match.away_score || 0 }
-      })
-      if (!dnpForms[match.id]) {
-        setDnpForms({
-          ...dnpForms,
-          [match.id]: {
-            playerIds: match.dnp_player_ids || [],
-            guestNames: match.dnp_guest_names || []
-          }
-        })
-      }
-      if (!motmForms[match.id]) {
-        setMotmForms({
-          ...motmForms,
-          [match.id]: {
-            playerId: match.motm_player_id || '',
-            guestName: match.motm_guest_name || ''
-          }
-        })
-      }
-    }
-  }
-
-  const handleSaveScore = async (matchId: string) => {
-    setIsScoreLoading(true)
-    try {
-      const form = scoreForms[matchId] || { homeScore: 0, awayScore: 0 }
-      const dnp = dnpForms[matchId] || { playerIds: [], guestNames: [] }
-      const motm = motmForms[matchId] || { playerId: '', guestName: '' }
-
-      await fetch(`/api/matches/${matchId}/score`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          home_score: form.homeScore,
-          away_score: form.awayScore,
-          status: 'completed',
-          dnp_player_ids: dnp.playerIds,
-          dnp_guest_names: dnp.guestNames,
-          motm_player_id: motm.playerId || null,
-          motm_guest_name: motm.guestName || null
-        })
-      })
-
-      await fetch(`/api/matches/${matchId}/complete`, {
-        method: 'POST'
-      })
-
-      router.refresh()
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setIsScoreLoading(false)
-    }
+    setExpandedMatchId(expandedMatchId === match.id ? null : match.id)
   }
 
   const handleAddManualMatch = async (e: React.FormEvent) => {
@@ -1104,65 +1038,6 @@ export default function MatchClient({
     } finally {
       setIsManualMatchLoading(false)
     }
-  }
-
-  const handleAddGoal = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!expandedMatchId) return
-    setIsGoalLoading(true)
-    try {
-      let guestScorerName = null
-      if (goalForm.scorerId.startsWith('guest_')) {
-        const rsvpId = goalForm.scorerId.replace('guest_', '')
-        const rsvp = rsvps.find((r: any) => r.id === rsvpId)
-        guestScorerName = rsvp ? rsvp.guest_name : 'Guest'
-      }
-
-      let guestAssistName = null
-      if (goalForm.assistId && goalForm.assistId.startsWith('guest_')) {
-        const rsvpId = goalForm.assistId.replace('guest_', '')
-        const rsvp = rsvps.find((r: any) => r.id === rsvpId)
-        guestAssistName = rsvp ? rsvp.guest_name : 'Guest'
-      }
-
-      await fetch(`/api/matches/${expandedMatchId}/goals`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          team_id: goalForm.teamId,
-          scorer_id: goalForm.scorerId,
-          guest_scorer_name: guestScorerName,
-          assist_id: goalForm.assistId || null,
-          guest_assist_name: guestAssistName,
-          minute: parseInt(goalForm.minute) || null,
-          is_own_goal: goalForm.isOwnGoal
-        })
-      })
-      setIsAddGoalOpen(false)
-      setGoalForm({ teamId: '', scorerId: '', assistId: '', minute: '', isOwnGoal: false })
-      router.refresh()
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setIsGoalLoading(false)
-    }
-  }
-
-  const handleDeleteGoal = (goalId: string, matchId: string) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete Goal',
-      message: 'Are you sure you want to delete this goal?',
-      confirmText: 'Delete',
-      onConfirm: async () => {
-        try {
-          await fetch(`/api/matches/${matchId}/goals/${goalId}`, { method: 'DELETE' })
-          router.refresh()
-        } catch (e) {
-          console.error(e)
-        }
-      }
-    })
   }
 
   const handleCancelMatch = async () => {
@@ -1563,9 +1438,13 @@ export default function MatchClient({
               ) : (
                 <div className="text-center py-4">
                   <p className="text-sm text-neutral-500 mb-3">No teams have been created for this match yet.</p>
-                  <Button onClick={() => setIsAddingTeams(true)} className="bg-neutral-900 text-white rounded-xl">
-                    <Plus className="w-4 h-4 mr-2" /> Add Teams
-                  </Button>
+                  {userRole === 'admin' ? (
+                    <Button onClick={() => setIsAddingTeams(true)} className="bg-neutral-900 text-white rounded-xl">
+                      <Plus className="w-4 h-4 mr-2" /> Add Teams
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-neutral-400">An admin will set up the teams.</p>
+                  )}
                 </div>
               )
             ) : (
@@ -1822,6 +1701,10 @@ export default function MatchClient({
           <div className="p-4">
             {matchSchedule.length === 0 ? (
               <div className="space-y-4">
+                {userRole !== 'admin' && (
+                  <p className="text-sm text-neutral-500 text-center py-2">No fixtures yet. An admin will set them up.</p>
+                )}
+                {userRole === 'admin' && (
                 <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-100 space-y-3">
                   <div className="text-xs font-bold text-neutral-700 uppercase tracking-wider">Option 1: Fixture Templates</div>
                   <CustomSelect
@@ -1841,6 +1724,7 @@ export default function MatchClient({
                     Generate Template Schedule
                   </Button>
                 </div>
+                )}
 
                 {userRole === 'admin' && (
                   <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 flex flex-col items-center gap-2">
@@ -2530,129 +2414,6 @@ export default function MatchClient({
           <Star className="w-8 h-8 text-green-600 fill-green-600 mx-auto mb-2" />
           <p className="font-bold text-green-800">Thanks for rating!</p>
           <p className="text-xs text-green-600 mt-1">Your feedback helps the community.</p>
-        </div>
-      )}
-
-      {/* ADD GOAL MODAL */}
-      {isAddGoalOpen && expandedMatchId && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-900/60 p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-lg flex items-center gap-2"><Goal className="w-5 h-5" /> Add Goal</h3>
-              <button onClick={() => setIsAddGoalOpen(false)}><X className="w-5 h-5 text-neutral-500" /></button>
-            </div>
-
-            <form onSubmit={handleAddGoal} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-neutral-500 uppercase">Team</label>
-                <CustomSelect
-                  value={goalForm.teamId}
-                  onChange={val => setGoalForm({ ...goalForm, teamId: val, scorerId: '', assistId: '' })}
-                  placeholder="Select Team..."
-                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
-                  options={[
-                    { value: '', label: 'Select Team...' },
-                    ...(matchSchedule.find((m: { id: string }) => m.id === expandedMatchId) ? [
-                      {
-                        value: matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.home_team_id || '',
-                        label: getTeamName(matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.home_team_id) || ''
-                      },
-                      {
-                        value: matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.away_team_id || '',
-                        label: getTeamName(matchSchedule.find((m: { id: string }) => m.id === expandedMatchId)?.away_team_id) || ''
-                      }
-                    ] : [])
-                  ]}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-neutral-500 uppercase">Scorer</label>
-                <CustomSelect
-                  value={goalForm.scorerId}
-                  onChange={val => setGoalForm({ ...goalForm, scorerId: val })}
-                  placeholder="Select Player..."
-                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
-                  disabled={!goalForm.teamId}
-                  options={[
-                    { value: '', label: 'Select Player...' },
-                    ...(() => {
-                      const selectedTeam = teams.find((t: any) => t.id === goalForm.teamId)
-                      if (!selectedTeam) return []
-                      const players: { value: string, label: string }[] = []
-                      selectedTeam.team_players?.forEach((tp: any) => {
-                        players.push({ value: tp.player_id, label: tp.profiles?.full_name || 'Player' })
-                      })
-                      selectedTeam.guest_members?.forEach((gId: string) => {
-                        const rsvp = rsvps.find((r: any) => r.id === gId)
-                        if (rsvp) players.push({ value: `guest_${rsvp.id}`, label: rsvp.guest_name + ' (Guest)' })
-                      })
-                      return players
-                    })()
-                  ]}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-neutral-500 uppercase">Assist (Optional)</label>
-                <CustomSelect
-                  value={goalForm.assistId}
-                  onChange={val => setGoalForm({ ...goalForm, assistId: val })}
-                  placeholder="None"
-                  buttonClassName="w-full px-3 py-2 border border-neutral-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
-                  disabled={!goalForm.teamId}
-                  options={[
-                    { value: '', label: 'None' },
-                    ...(() => {
-                      const selectedTeam = teams.find((t: any) => t.id === goalForm.teamId)
-                      if (!selectedTeam) return []
-                      const players: { value: string, label: string }[] = []
-                      selectedTeam.team_players?.forEach((tp: any) => {
-                        if (tp.player_id !== goalForm.scorerId) {
-                          players.push({ value: tp.player_id, label: tp.profiles?.full_name || 'Player' })
-                        }
-                      })
-                      selectedTeam.guest_members?.forEach((gId: string) => {
-                        const rsvp = rsvps.find((r: any) => r.id === gId)
-                        const gidStr = `guest_${rsvp?.id}`
-                        if (rsvp && gidStr !== goalForm.scorerId) {
-                          players.push({ value: gidStr, label: rsvp.guest_name + ' (Guest)' })
-                        }
-                      })
-                      return players
-                    })()
-                  ]}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-neutral-500 uppercase">Minute (Optional)</label>
-                  <input
-                    type="number" min="1" max="120"
-                    className="w-full px-3 py-2 border rounded-xl text-sm"
-                    value={goalForm.minute}
-                    onChange={e => setGoalForm({ ...goalForm, minute: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5 flex flex-col justify-end pb-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 rounded text-green-600 focus:ring-green-500"
-                      checked={goalForm.isOwnGoal}
-                      onChange={e => setGoalForm({ ...goalForm, isOwnGoal: e.target.checked })}
-                    />
-                    <span className="text-sm font-bold text-neutral-700">Own Goal</span>
-                  </label>
-                </div>
-              </div>
-
-              <Button type="submit" className="w-full h-12 bg-green-600 hover:bg-green-700 text-white rounded-xl mt-2" disabled={isGoalLoading}>
-                {isGoalLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Add Goal'}
-              </Button>
-            </form>
-          </div>
         </div>
       )}
 
