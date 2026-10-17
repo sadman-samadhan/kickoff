@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       images: [{ url: image, width: 1200, height: 630 }],
       siteName: 'KhelaHobe',
       type: 'website',
-      url: appUrl(`/groups/${s.groupId}/match/${s.bookingId}`),
+      url: appUrl(`/share/matchday/${s.bookingId}`),
     },
     twitter: { card: 'summary_large_image', title, description, images: [image] },
   }
@@ -55,8 +55,8 @@ export default async function SharedMatchday({ params }: Props) {
           </ul>
         )}
         <p className="text-sm">{describeMatchday(s)}</p>
-        <Link href={`/groups/${s.groupId}/match/${s.bookingId}`} className="h-12 rounded-2xl bg-app-primary text-app-on-primary font-bold flex items-center justify-center">
-          Open in KhelaHobe
+        <Link href="/login" className="h-12 rounded-2xl bg-app-primary text-app-on-primary font-bold flex items-center justify-center">
+          Sign in to KhelaHobe
         </Link>
       </div>
     </main>

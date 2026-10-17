@@ -92,6 +92,11 @@ export async function saveAuctionSetup(bookingId: string, groupId: string, input
       const short = Object.entries(counts).find(([, n]) => n < teams.length)
       if (short) return { ok: false, error: `${short[0]} has ${short[1]} players but there are ${teams.length} teams — every team needs one, or switch the rule off` }
       if (Object.keys(counts).length > input.rules.squadSize) return { ok: false, error: 'There are more tiers than players per team' }
+      // The bid limit reserves the base price for each open slot, so a dearer tier could become unaffordable.
+      if (input.tiers.some((t) => t.basePrice != null && t.basePrice > input.rules.basePrice)) return { ok: false, error: "With one-from-each-tier on, a tier can't open higher than the base price (a team could spend so much it can't afford a player it must take)" }
+    }
+    if (input.tiers.some((t) => t.basePrice != null && (!Number.isInteger(t.basePrice) || t.basePrice < 0 || t.basePrice > input.rules.budget))) {
+      return { ok: false, error: 'Tier opening bids must be whole numbers within the budget' }
     }
     const confirmedPlayers = new Set(confirmed.map((r: any) => r.player_id).filter(Boolean))
     if (captainIds.some((c) => !confirmedPlayers.has(c))) {
@@ -250,8 +255,8 @@ export async function controlAuction(auctionId: string, cmd: AuctionControl): Pr
     const p = { p_auction: auctionId }
     switch (cmd.op) {
       case 'sold': {
-        const e = await callAuctionEngine<any>('auction_mark_sold', p)
-        await notifyAuction(auctionId, { kind: 'sold', entryId: e.id, teamId: e.sold_team_id, amount: e.sold_price })
+        await callAuctionEngine('auction_mark_sold', p)
+        await notifyAuction(auctionId, { kind: 'sold' })
         return { ok: true }
       }
       case 'unsold': await callAuctionEngine('auction_mark_unsold', p); break
@@ -267,7 +272,7 @@ export async function controlAuction(auctionId: string, cmd: AuctionControl): Pr
         await callAuctionEngine('auction_manual_assign', { ...p, p_entry: cmd.entryId, p_team: cmd.teamId, p_price: cmd.price })
         break
       case 'budget': {
-        if (!Number.isInteger(cmd.adjustment)) return { ok: false, error: 'Enter a whole number' }
+        if (!Number.isInteger(cmd.adjustment) || Math.abs(cmd.adjustment) > a.budget) return { ok: false, error: `Enter a whole number between -${a.budget} and ${a.budget}` }
         if (a.finalized_at) return { ok: false, error: 'The teams are already final' }
         await admin.from('auction_teams').update({ budget_adjustment: cmd.adjustment }).eq('team_id', cmd.teamId).eq('auction_id', auctionId)
         break
@@ -302,7 +307,7 @@ export async function placeAuctionBid(auctionId: string, entryId: string, amount
     if (!teamId) return { ok: false, error: 'Only captains can bid' }
 
     await callAuctionEngine('auction_place_bid', { p_auction: auctionId, p_team: teamId, p_entry: entryId, p_amount: amount, p_placed_by: user.id })
-    await notifyAuction(auctionId, { kind: 'bid', teamId, amount, entryId })
+    await notifyAuction(auctionId, { kind: 'bid', teamId })
     return { ok: true }
   } catch (e) {
     return fail(e)

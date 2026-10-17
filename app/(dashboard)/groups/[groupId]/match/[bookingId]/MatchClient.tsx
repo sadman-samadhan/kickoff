@@ -50,8 +50,8 @@ export default function MatchClient({
   renderedAt = 0
 }: any) {
   const router = useRouter()
-  // Live scores on the Fixture list while any fixture is still to be finished.
-  useMatchdayLive(booking.id, matchSchedule.length > 0 && matchSchedule.some((m: any) => m.status !== 'completed'), renderedAt)
+  // Live scores on the Fixture list (and corrections made after full time).
+  useMatchdayLive(booking.id, { hasFixtures: matchSchedule.length > 0, live: matchSchedule.some((m: any) => m.status === 'ongoing'), renderedAt })
   const canScore = (m: any) =>
     userRole === 'admin' || teams.some((t: any) => (t.id === m.home_team_id || t.id === m.away_team_id) && t.captain_id === currentUser?.id)
   // While an auction is running, its teams belong to the auction screen, not this page.
@@ -909,6 +909,20 @@ export default function MatchClient({
   }
 
   const getTeamName = (teamId: string) => teams.find((t: any) => t.id === teamId)?.name || 'Team'
+  // Share card banner: the winner of a completed final, else the table leader once every fixture is done,
+  // else the current leader mid-matchday; nothing before the first result.
+  const shareHeadline = (() => {
+    const final = matchSchedule.find((m: any) => m.status === 'completed' && /^final$|grand final/i.test(m.stage_name || '') && m.home_score !== m.away_score)
+    if (final) {
+      const w = teams.find((t: any) => t.id === (final.home_score > final.away_score ? final.home_team_id : final.away_team_id))
+      if (w) return { name: w.name, color: w.jersey_color, label: 'Matchday champions', line: `Won the final ${Math.max(final.home_score, final.away_score)}–${Math.min(final.home_score, final.away_score)}` }
+    }
+    const leader = sortedPointsTable[0]
+    if (!leader || !hasCompletedMatches || leader.played === 0) return null
+    const allDone = matchSchedule.length > 0 && matchSchedule.every((m: any) => m.status === 'completed')
+    const line = `${leader.points} pts · ${leader.won}W ${leader.drawn}D ${leader.lost}L · GD ${leader.goalDifference > 0 ? '+' : ''}${leader.goalDifference}`
+    return { name: leader.name, color: leader.jerseyColor, label: allDone ? 'Matchday champions' : 'Top of the table', line }
+  })()
   const shareMeta = { group: (booking.groups as any)?.name || 'Matchday', date: format(parseISO(booking.match_date), 'EEE d MMM'), venue: booking.field_name }
 
   return (
@@ -2597,6 +2611,7 @@ export default function MatchClient({
                 meta: shareMeta,
                 rows: sortedPointsTable.map((t) => ({ name: t.name, color: t.jerseyColor, p: t.played, w: t.won, d: t.drawn, l: t.lost, gd: t.goalDifference, pts: t.points })),
                 topScorer: topScorerText !== 'TBD' ? topScorerText : null,
+                headline: shareHeadline,
               }}
             />
           )}

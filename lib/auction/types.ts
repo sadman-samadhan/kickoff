@@ -75,8 +75,12 @@ export type AuctionState = {
   fetchedAt: string
 }
 
-/** Broadcast after every change so open screens refetch. */
+/**
+ * Broadcast after every change so open screens refetch. The channel is public, so pings carry nothing beyond
+ * what to play (bid/sold sound) and which team bid (so a captain doesn't hear their own bid); data comes from
+ * the members-only state API.
+ */
 export type AuctionPing =
   | { kind: 'changed' }
-  | { kind: 'bid'; teamId: string; amount: number; entryId: string }
-  | { kind: 'sold'; teamId: string; amount: number; entryId: string }
+  | { kind: 'bid'; teamId: string }
+  | { kind: 'sold' }

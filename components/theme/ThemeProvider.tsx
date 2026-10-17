@@ -15,7 +15,7 @@ function apply(choice: ThemeChoice) {
   const el = document.documentElement
   el.classList.toggle('dark', dark)
   el.style.colorScheme = dark ? 'dark' : 'light'
-  document.querySelector('meta[name="theme-color"]:not([media])')?.setAttribute('content', dark ? '#020617' : '#f4f6f1')
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#020617' : '#f4f6f1'))
   return dark ? 'dark' : 'light'
 }
 

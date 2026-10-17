@@ -129,10 +129,18 @@ function ruleFor(cls, palette) {
   const u = placeholder && !utility.startsWith('placeholder-') ? utility.replace(/^text-/, 'placeholder-') : utility
   const decls = declsFor(u, palette)
   if (!decls) return null
-  const self = `.${esc(cls)}${pseudo}`
-  const target = `${ancestor}${self}:not(.no-dark):not(.no-dark *)${placeholder ? '::placeholder' : ''}`
+  // Specificity: a plain class (0,1,0) overrides the plain Tailwind class by coming later in the CSS, and loses
+  // to every Tailwind variant (hover:, focus:, dark:, md: …) so those keep working. A mirrored variant
+  // (hover:bg-white) carries an extra .dark so it beats its light Tailwind version. The no-dark escape hatch
+  // sits inside :where() so it adds no weight.
+  const variant = parts.length > 0
+  const scope = variant ? '.dark ' : ':where(.dark) '
+  const notNoDark = ':where(:not(.no-dark, .no-dark *))'
   const kind = u.split('-')[0]
-  const sel = kind === 'divide' ? `:where(.dark) ${ancestor}.${esc(cls)}:not(.no-dark):not(.no-dark *) > :not([hidden]) ~ :not([hidden])` : `:where(.dark) ${target}`
+  const sel =
+    kind === 'divide'
+      ? `${scope}${ancestor}.${esc(cls)}${notNoDark} > :not([hidden]) ~ :not([hidden])`
+      : `${scope}${ancestor}.${esc(cls)}${pseudo}${notNoDark}${placeholder ? '::placeholder' : ''}`
   const rule = `${sel} { ${decls} }`
   return { rule, media }
 }

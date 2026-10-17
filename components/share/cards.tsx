@@ -100,10 +100,15 @@ export type ResultData = {
   home: TeamRef & { score: number; scorers: string[] }
   away: TeamRef & { score: number; scorers: string[] }
   potm?: { name: string; line?: string } | null
+  /** Full time (default), half-time or still playing. */
+  state?: 'ft' | 'ht' | 'live'
 }
+
+const STATE_LABEL = { ft: ['FT', 'Full time', 'FULL TIME'], ht: ['HT', 'Half-time', 'HALF-TIME'], live: ['LIVE', 'Live', 'LIVE'] } as const
 
 export function ResultCard({ data, style, format }: { data: ResultData; style: CardStyle; format: CardFormat }) {
   const story = format === 'story'
+  const [badge, sentence, caps] = STATE_LABEL[data.state ?? 'ft']
   if (style === 'kit') {
     const half = (t: ResultData['home'], right: boolean) => {
       const k = kit(t.color, right ? '#2563eb' : '#16a34a')
@@ -122,8 +127,8 @@ export function ResultCard({ data, style, format }: { data: ResultData; style: C
           {half(data.away, true)}
         </div>
         <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12, background: KIT.paper, color: KIT.ink }}>
-          <span style={{ fontFamily: F.kitDisplay, fontWeight: 800, fontSize: 15, letterSpacing: '0.08em', background: KIT.ink, color: KIT.paper, borderRadius: 6, padding: '4px 8px' }}>FT</span>
-          <span style={{ flex: 1, fontSize: 14 }}>{data.potm ? <><b>{data.potm.name}</b> player of the match</> : 'Full time'}</span>
+          <span style={{ fontFamily: F.kitDisplay, fontWeight: 800, fontSize: 15, letterSpacing: '0.08em', background: KIT.ink, color: KIT.paper, borderRadius: 6, padding: '4px 8px' }}>{badge}</span>
+          <span style={{ flex: 1, fontSize: 14 }}>{data.potm ? <><b>{data.potm.name}</b> player of the match</> : sentence}</span>
           <Brand style={style} />
         </div>
         <div style={{ padding: '8px 20px 12px', fontSize: 12, color: '#b5b2a8', background: '#111111' }}>{metaLine(data.meta)}</div>
@@ -144,7 +149,7 @@ export function ResultCard({ data, style, format }: { data: ResultData; style: C
       <div style={{ padding: 28, display: 'flex', flexDirection: 'column', flex: 1, position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: FL.muted }}>{[data.meta.group, data.meta.label].filter(Boolean).join(' · ')}</span>
-          <span style={{ fontFamily: F.flDisplay, fontWeight: 800, fontSize: 14, letterSpacing: '0.1em', color: '#052e16', background: FL.green, borderRadius: 6, padding: '3px 8px' }}>FULL TIME</span>
+          <span style={{ fontFamily: F.flDisplay, fontWeight: 800, fontSize: 14, letterSpacing: '0.1em', color: '#052e16', background: FL.green, borderRadius: 6, padding: '3px 8px' }}>{caps}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: story ? 90 : 34 }}>
           {team(data.home)}
@@ -342,20 +347,22 @@ export type StandingsData = {
   meta: CardMeta
   rows: (TeamRef & { p: number; w: number; d: number; l: number; gd: number; pts: number })[]
   topScorer?: string | null
+  /** Banner on top: decided champions, or the current leader mid-matchday. None before any result. */
+  headline?: (TeamRef & { label: string; line?: string }) | null
 }
 
 export function StandingsCard({ data, style, format }: { data: StandingsData; style: CardStyle; format: CardFormat }) {
   const fl = style === 'floodlight'
-  const champ = data.rows[0]
+  const champ = data.headline
   const k = kit(champ?.color)
   const story = format === 'story'
   return (
     <Frame style={style} format={format}>
       {champ && (
         <div style={{ background: fl ? `linear-gradient(135deg, ${k.base}, ${k.stripe})` : k.stripes(90), color: k.ink, padding: story ? '40px 26px 26px' : '22px 26px 18px', position: 'relative' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', opacity: 0.9 }}>🏆 Matchday champions</div>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', opacity: 0.9 }}>🏆 {champ.label}</div>
           <div style={{ fontFamily: fl ? F.flDisplay : F.kitDisplay, fontWeight: 800, fontSize: story ? 52 : 40, textTransform: 'uppercase', lineHeight: 1, marginTop: 6 }}>{champ.name}</div>
-          <div style={{ fontSize: 13, marginTop: 6, fontWeight: 600 }}>{champ.pts} pts · {champ.w}W {champ.d}D {champ.l}L · GD {champ.gd > 0 ? `+${champ.gd}` : champ.gd}</div>
+          {champ.line && <div style={{ fontSize: 13, marginTop: 6, fontWeight: 600 }}>{champ.line}</div>}
         </div>
       )}
       <div style={{ padding: '18px 26px 22px', display: 'flex', flexDirection: 'column', flex: 1, position: 'relative' }}>

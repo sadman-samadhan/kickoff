@@ -4,6 +4,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireMatchAdmin, requireMatchLogger } from '@/lib/groupAuth'
 import { notifyMatch } from '@/lib/live/notify'
+import { loadLiveMatch } from '@/lib/live/state'
 import type { LiveEvent } from '@/lib/live/types'
 
 // Every write goes through a row-locked SQL function (migration 0005), so two phones scoring the same match
@@ -26,6 +27,19 @@ function splitKey(key: string | null | undefined, detailsKey: 'guest_player_id' 
   }
   if (!UUID.test(key)) throw new Error('Unknown player')
   return { player: key, guest: null, details: {} }
+}
+
+/** Player keys ("profile id" / "guest_…") of everyone on the two teams in this match. */
+async function rosterKeys(matchId: string) {
+  const state = await loadLiveMatch(matchId)
+  return new Set([...(state?.home?.players || []), ...(state?.away?.players || [])].map((p) => p.id))
+}
+
+/** A finished match was corrected: knockout places and the matchday pages may change. */
+async function afterCorrection(admin: any, groupId: string, bookingId: string) {
+  const { checkAndAutoPopulateKnockoutProgression } = await import('@/lib/knockoutProgression')
+  await checkAndAutoPopulateKnockoutProgression(admin, bookingId)
+  refreshPages(groupId, bookingId)
 }
 
 function refreshPages(groupId: string, bookingId: string) {
@@ -52,7 +66,7 @@ export async function logMatchEventAction(
   input: LogEventInput,
 ): Promise<Result<{ event: LiveEvent; duplicate: { by: string | null; secondsAgo: number } | null }>> {
   try {
-    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { admin, user, match } = await requireMatchLogger(matchId, bookingId, groupId)
     if (!UUID.test(input.id)) throw new Error('Bad event id')
     const p = splitKey(input.player_key, 'guest_player_id')
     const s = splitKey(input.secondary_key, 'guest_secondary_player_id')
@@ -84,7 +98,8 @@ export async function logMatchEventAction(
         .maybeSingle()
       if (d) duplicate = { by: (d as any).creator?.full_name || null, secondsAgo: Math.max(0, Math.round((Date.now() - new Date(d.created_at).getTime()) / 1000)) }
     }
-    await notifyMatch(matchId, bookingId, { kind: 'event', by: user.id })
+    await notifyMatch(matchId, bookingId, { kind: 'event' })
+    if (match.status === 'completed') await afterCorrection(admin, groupId, bookingId)
     return { ok: true, event: data.event as LiveEvent, duplicate }
   } catch (e) {
     return fail(e)
@@ -99,7 +114,7 @@ export async function updateMatchEventAction(
   input: { player_key?: string | null; secondary_key?: string | null; minute: number; is_own_goal?: boolean; card_type?: 'yellow' | 'red' },
 ): Promise<Result> {
   try {
-    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { admin, match } = await requireMatchLogger(matchId, bookingId, groupId)
     const { data: ev } = await admin.from('match_events').select('event_type').eq('id', eventId).eq('match_schedule_id', matchId).maybeSingle()
     if (!ev) throw new Error('Event not found')
     const p = splitKey(input.player_key, 'guest_player_id')
@@ -119,7 +134,8 @@ export async function updateMatchEventAction(
       p_details: details,
     })
     if (error) throw new Error(error.message)
-    await notifyMatch(matchId, bookingId, { kind: 'event', by: user.id })
+    await notifyMatch(matchId, bookingId, { kind: 'event' })
+    if (match.status === 'completed') await afterCorrection(admin, groupId, bookingId)
     return { ok: true }
   } catch (e) {
     return fail(e)
@@ -129,10 +145,11 @@ export async function updateMatchEventAction(
 /** Removes an event (kept in the table as voided, so nothing is lost). */
 export async function voidMatchEventAction(matchId: string, bookingId: string, groupId: string, eventId: string): Promise<Result> {
   try {
-    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { admin, match } = await requireMatchLogger(matchId, bookingId, groupId)
     const { error } = await admin.rpc('void_match_event', { p_event: eventId, p_match: matchId })
     if (error) throw new Error(error.message)
-    await notifyMatch(matchId, bookingId, { kind: 'event', by: user.id })
+    await notifyMatch(matchId, bookingId, { kind: 'event' })
+    if (match.status === 'completed') await afterCorrection(admin, groupId, bookingId)
     return { ok: true }
   } catch (e) {
     return fail(e)
@@ -146,7 +163,7 @@ export type ClockCommand =
 
 export async function matchClockAction(matchId: string, bookingId: string, groupId: string, c: ClockCommand): Promise<Result> {
   try {
-    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
     const { error } = await admin.rpc('match_clock', {
       p_match: matchId,
       p_cmd: c.cmd,
@@ -155,7 +172,7 @@ export async function matchClockAction(matchId: string, bookingId: string, group
       p_delta_ms: c.cmd === 'adjust' ? Math.round(c.deltaMs) : 0,
     })
     if (error) throw new Error(error.message)
-    await notifyMatch(matchId, bookingId, { kind: 'clock', by: user.id })
+    await notifyMatch(matchId, bookingId, { kind: 'clock' })
     if (c.cmd === 'start' || c.cmd === 'reset') refreshPages(groupId, bookingId)
     return { ok: true }
   } catch (e) {
@@ -166,12 +183,12 @@ export async function matchClockAction(matchId: string, bookingId: string, group
 /** Full time: final score from events, clean sheets, knockout progression, matchday completed when all done. */
 export async function completeMatchAction(matchId: string, bookingId: string, groupId: string): Promise<Result> {
   try {
-    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
     const { error } = await admin.rpc('complete_match', { p_match: matchId })
     if (error) throw new Error(error.message)
     const { checkAndAutoPopulateKnockoutProgression } = await import('@/lib/knockoutProgression')
     await checkAndAutoPopulateKnockoutProgression(admin, bookingId)
-    await notifyMatch(matchId, bookingId, { kind: 'status', by: user.id })
+    await notifyMatch(matchId, bookingId, { kind: 'status' })
     refreshPages(groupId, bookingId)
     revalidatePath('/dashboard')
     return { ok: true }
@@ -183,13 +200,14 @@ export async function completeMatchAction(matchId: string, bookingId: string, gr
 /** Who started the match (everyone else starts on the bench for pitch-time stats). */
 export async function updateStartingLineupAction(matchId: string, bookingId: string, groupId: string, startingPlayerIds: string[]): Promise<Result> {
   try {
-    const { admin, user } = await requireMatchLogger(matchId, bookingId, groupId)
+    const { admin } = await requireMatchLogger(matchId, bookingId, groupId)
+    const roster = await rosterKeys(matchId)
     const { error } = await admin
       .from('match_schedule')
-      .update({ starting_player_ids: startingPlayerIds.filter((x) => typeof x === 'string').slice(0, 60) })
+      .update({ starting_player_ids: Array.from(new Set(startingPlayerIds)).filter((x) => typeof x === 'string' && roster.has(x)) })
       .eq('id', matchId)
     if (error) throw new Error(error.message)
-    await notifyMatch(matchId, bookingId, { kind: 'status', by: user.id })
+    await notifyMatch(matchId, bookingId, { kind: 'status' })
     return { ok: true }
   } catch (e) {
     return fail(e)
@@ -199,7 +217,8 @@ export async function updateStartingLineupAction(matchId: string, bookingId: str
 /** MVP: a registered player goes in mvp/motm_player_id; a guest is stored by name in motm_guest_name. */
 export async function updateMatchMvpAction(matchId: string, bookingId: string, groupId: string, playerKey: string | null): Promise<Result> {
   try {
-    const { admin, user } = await requireMatchAdmin(matchId, bookingId, groupId)
+    const { admin } = await requireMatchAdmin(matchId, bookingId, groupId)
+    if (playerKey && !(await rosterKeys(matchId)).has(playerKey)) throw new Error('That player is not in this match')
     let guestName: string | null = null
     const k = splitKey(playerKey, 'guest_player_id')
     if (k.guest) {
@@ -214,7 +233,7 @@ export async function updateMatchMvpAction(matchId: string, bookingId: string, g
       .update({ mvp_player_id: k.player, motm_player_id: k.player, motm_guest_name: guestName })
       .eq('id', matchId)
     if (error) throw new Error(error.message)
-    await notifyMatch(matchId, bookingId, { kind: 'status', by: user.id })
+    await notifyMatch(matchId, bookingId, { kind: 'status' })
     refreshPages(groupId, bookingId)
     return { ok: true }
   } catch (e) {

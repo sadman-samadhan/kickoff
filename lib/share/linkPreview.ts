@@ -2,7 +2,8 @@
 // link we show them a public preview page (title, result image) instead of the login redirect.
 // Everything on that preview is also in the image anyone in the chat can see; nothing private is exposed.
 
-const PREVIEW_BOTS = /whatsapp|facebookexternalhit|facebot|twitterbot|telegrambot|slackbot|discordbot|linkedinbot|skypeuripreview|viber|line\/|pinterest|embedly|iframely|redditbot|applebot|google-inspectiontool/i
+// Link fetchers only: in-app browsers (LINE, Viber, Pinterest…) are real people and must reach the login page.
+const PREVIEW_BOTS = /whatsapp\/|facebookexternalhit|facebot|twitterbot|telegrambot|slackbot|discordbot|linkedinbot|skypeuripreview|embedly|iframely|redditbot/i
 
 export function isLinkPreviewBot(userAgent: string | null | undefined) {
   return !!userAgent && PREVIEW_BOTS.test(userAgent)

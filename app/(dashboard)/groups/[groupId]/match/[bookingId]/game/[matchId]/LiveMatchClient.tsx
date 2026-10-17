@@ -162,6 +162,9 @@ export default function LiveMatchClient({
         return n
       })
       showError(r.error)
+    } else {
+      // Deleted for good: forget any optimistic copy too (it may never have shown up in a fetch).
+      setPending((x) => x.filter((e) => e.id !== id))
     }
     refresh()
   }
@@ -212,9 +215,16 @@ export default function LiveMatchClient({
       }))
     }
     setBusy(true)
-    const r = await withRetry(() => matchClockAction(matchId, bookingId, groupId, c))
+    // No automatic retry: if the connection dropped after the server applied it, a retry would apply it twice
+    // (+2 min) or fail confusingly. The refetch below shows what actually happened.
+    let r: { ok: boolean; error?: string }
+    try {
+      r = await matchClockAction(matchId, bookingId, groupId, c)
+    } catch {
+      r = { ok: false, error: 'No connection. Check the clock and try again.' }
+    }
     setBusy(false)
-    if (!r.ok) showError(r.error)
+    if (!r.ok) showError(r.error || 'Something went wrong')
     refresh()
   }
 
@@ -236,18 +246,30 @@ export default function LiveMatchClient({
 
   // ── Lineup & MVP ──
 
-  const [starters, setStarters] = useState<Set<string>>(() => new Set(match.starting_player_ids ?? allPlayers.map((p) => p.id)))
+  // Local lineup wins while this phone has unsaved toggles; otherwise follow the server (by content, so a
+  // refetch with the same lineup doesn't reset anything).
+  const serverStarters = (match.starting_player_ids ?? allPlayers.map((p) => p.id)).slice().sort().join(',')
+  const [starters, setStarters] = useState<Set<string>>(() => new Set(serverStarters ? serverStarters.split(',') : []))
+  const lineupSaves = useRef(0)
   useEffect(() => {
-    setStarters(new Set(match.starting_player_ids ?? allPlayers.map((p) => p.id)))
-  }, [match.starting_player_ids, allPlayers])
+    if (lineupSaves.current === 0) setStarters(new Set(serverStarters ? serverStarters.split(',') : []))
+  }, [serverStarters])
+
+  const startersRef = useRef(starters)
+  startersRef.current = starters
 
   async function toggleStarter(id: string) {
-    const next = new Set(starters)
+    // Build from the ref, so quick taps before a re-render don't lose each other.
+    const next = new Set(startersRef.current)
     if (next.has(id)) next.delete(id)
     else next.add(id)
+    startersRef.current = next
     setStarters(next)
+    lineupSaves.current++
     const r = await withRetry(() => updateStartingLineupAction(matchId, bookingId, groupId, Array.from(next)))
+    lineupSaves.current--
     if (!r.ok) showError(r.error)
+    if (lineupSaves.current === 0) refresh()
   }
 
   const mvpKey = match.mvp_player_id || (match.motm_guest_name ? allPlayers.find((p) => p.is_guest && p.full_name === match.motm_guest_name)?.id || null : null)
@@ -571,6 +593,7 @@ export default function LiveMatchClient({
                 home: { name: home?.name || 'Home', color: home?.jersey_color, score: score.home, scorers: scorerLines('home') },
                 away: { name: away?.name || 'Away', color: away?.jersey_color, score: score.away, scorers: scorerLines('away') },
                 potm: mvpKey ? { name: nameOf(mvpKey) || 'Player', line: potmLine } : null,
+                state: finished ? 'ft' : match.period === 'half_time' ? 'ht' : 'live',
               }}
             />
           )}

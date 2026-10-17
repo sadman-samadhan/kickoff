@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { verifyRsvpToken } from '@/lib/tokens'
+import { auctionDropOutBlock } from '@/lib/auction/guards'
 import { sendEmail } from '@/lib/email/resend'
 import { waitlistPromotionEmail } from '@/lib/email/templates'
 import Link from 'next/link'
@@ -49,6 +50,11 @@ export default async function RsvpPage({
     .single()
 
   const wasIn = currentRsvp?.status === 'in'
+
+  if (status === 'out') {
+    const blocked = await auctionDropOutBlock(supabaseAdmin, bookingId, currentRsvp?.id ?? null, playerId)
+    if (blocked) return <ErrorState message={blocked} />
+  }
 
   const { data: confirmedRsvps } = await supabaseAdmin
     .from('rsvps')

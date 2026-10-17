@@ -13,6 +13,8 @@ describe('link previews', () => {
     expect(isLinkPreviewBot('TelegramBot (like TwitterBot)')).toBe(true)
     expect(isLinkPreviewBot('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/129.0 Mobile Safari/537.36')).toBe(false)
     expect(isLinkPreviewBot(null)).toBe(false)
+    // In-app browsers are people: they must reach the login page.
+    expect(isLinkPreviewBot('Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36 Line/13.21.0')).toBe(false)
   })
 
   it('only matches matchday and scoring URLs', () => {

@@ -14,7 +14,9 @@ export function ThemeToggle({ className = '' }: { className?: string }) {
       aria-label={`Switch to ${next} mode`}
       className={`w-10 h-10 rounded-full flex items-center justify-center text-app-muted hover:text-app-ink hover:bg-app-soft transition-colors ${className}`}
     >
-      {resolved === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+      {/* Icon follows the class the head script already set, so dark users don't see a flash of the wrong one. */}
+      <Sun className="w-5 h-5 hidden dark:block" aria-hidden />
+      <Moon className="w-5 h-5 dark:hidden" aria-hidden />
     </button>
   )
 }
