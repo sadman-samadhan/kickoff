@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs'
+import path from 'path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { asUser, createTestDb, errorOf, type TestDb } from './db'
 
@@ -56,7 +58,10 @@ describe('migrations on top of the production baseline', () => {
   })
 
   it('creates every index from 0003', async () => {
-    const r = await db.query<{ n: number }>(`select count(*)::int as n from pg_indexes where schemaname = 'public' and indexname like '%_idx'`)
-    expect(r.rows[0].n).toBe(21)
+    const sql = readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '0003_indexes.sql'), 'utf8')
+    const names = Array.from(sql.matchAll(/create index if not exists (\w+)/g)).map((m) => m[1])
+    expect(names).toHaveLength(21)
+    const r = await db.query<{ indexname: string }>(`select indexname from pg_indexes where schemaname = 'public' and indexname = any($1)`, [names])
+    expect(r.rows.map((x) => x.indexname).sort()).toEqual([...names].sort())
   })
 })

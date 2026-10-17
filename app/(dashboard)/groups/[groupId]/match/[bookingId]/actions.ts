@@ -4,6 +4,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireBookingAdmin, requireBookingMember, requireTeamAdmin } from '@/lib/groupAuth'
+import { assertNoOpenAuction, assertRsvpNotInOpenAuction } from '@/lib/auction/guards'
 
 /** Ids of the teams that belong to a booking (used to reject team ids from other matches). */
 async function bookingTeamIds(admin: any, bookingId: string): Promise<Set<string>> {
@@ -13,6 +14,7 @@ async function bookingTeamIds(admin: any, bookingId: string): Promise<Set<string
 
 export async function saveTeamsAction(bookingId: string, groupId: string, teamsData: any[]) {
   const { admin } = await requireBookingAdmin(bookingId, groupId)
+  await assertNoOpenAuction(admin, bookingId)
   
   for (const team of teamsData) {
     const realCaptainId = (team.captainId && !team.captainId.startsWith('guest_')) ? team.captainId : null
@@ -50,6 +52,7 @@ export async function saveTeamsAction(bookingId: string, groupId: string, teamsD
 
 export async function updateTeamAction(teamId: string, bookingId: string, groupId: string, data: { name: string, jerseyColor: string, captainId: string, playerIds: string[], guestNames?: Record<string, string> }) {
   const { admin } = await requireTeamAdmin(teamId, bookingId, groupId)
+  await assertNoOpenAuction(admin, bookingId)
   const realCaptainId = (data.captainId && !data.captainId.startsWith('guest_')) ? data.captainId : null
   const guestRsvpIds = Array.from(new Set(
     (data.playerIds || [])
@@ -85,6 +88,7 @@ export async function updateTeamAction(teamId: string, bookingId: string, groupI
 
 export async function deleteTeamAction(teamId: string, bookingId: string, groupId: string) {
   const { admin } = await requireTeamAdmin(teamId, bookingId, groupId)
+  await assertNoOpenAuction(admin, bookingId)
   await admin.from('team_players').delete().eq('team_id', teamId)
   await admin.from('teams').delete().eq('id', teamId)
   revalidatePath(`/groups/${groupId}/match/${bookingId}`)
@@ -93,6 +97,7 @@ export async function deleteTeamAction(teamId: string, bookingId: string, groupI
 
 export async function generateScheduleAction(bookingId: string, groupId: string, teamsInput: any[], scheduleType: string) {
   const { admin } = await requireBookingAdmin(bookingId, groupId)
+  await assertNoOpenAuction(admin, bookingId)
   const allowed = await bookingTeamIds(admin, bookingId)
   const teams = (teamsInput || []).filter((t: any) => allowed.has(t.id))
   if (teams.length < 2) throw new Error('Add at least two teams first')
@@ -132,6 +137,7 @@ export async function addManualMatchAction(
   stageName: string = 'Match'
 ) {
   const { admin } = await requireBookingAdmin(bookingId, groupId)
+  await assertNoOpenAuction(admin, bookingId)
   const allowed = await bookingTeamIds(admin, bookingId)
   if (!allowed.has(homeTeamId) || !allowed.has(awayTeamId)) throw new Error('Pick two teams from this matchday')
   const { data: existingMatches } = await admin
@@ -275,6 +281,7 @@ export async function updateMaxPlayersAction(bookingId: string, groupId: string,
 
 export async function assignPlayerToTeamAction(bookingId: string, groupId: string, playerId: string | null, guestName: string | null, rsvpId: string, newTeamId: string | null) {
   const { admin } = await requireBookingAdmin(bookingId, groupId)
+  await assertNoOpenAuction(admin, bookingId)
   if (newTeamId && !(await bookingTeamIds(admin, bookingId)).has(newTeamId)) throw new Error('Team belongs to a different match')
   const { data: rsvp } = await admin.from('rsvps').select('booking_id, player_id').eq('id', rsvpId).maybeSingle()
   if (!rsvp || rsvp.booking_id !== bookingId || (playerId && rsvp.player_id !== playerId)) throw new Error('Player is not in this match')
@@ -341,6 +348,7 @@ export async function adminRemoveRsvpAction(bookingId: string, groupId: string, 
 
   const { data: targetRsvp } = await admin.from('rsvps').select('*').eq('id', rsvpId).single()
   if (!targetRsvp || targetRsvp.booking_id !== bookingId) throw new Error('RSVP not found')
+  await assertRsvpNotInOpenAuction(admin, rsvpId)
 
   const wasStatus = targetRsvp.status
 

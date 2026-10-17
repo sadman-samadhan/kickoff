@@ -20,7 +20,7 @@ export default async function MatchPage({
 
   const supabaseAdmin = createAdminClient()
 
-  const [role, { data: booking }, { data: rsvps }, { data: teamsData }, { data: matchSchedule }, { data: groupMembers }, { data: userRating }] =
+  const [role, { data: booking }, { data: rsvps }, { data: teamsData }, { data: matchSchedule }, { data: groupMembers }, { data: userRating }, { data: auction }] =
     await Promise.all([
       getGroupRole(params.groupId),
       supabaseAdmin.from('bookings').select('*, groups(name)').eq('id', params.bookingId).maybeSingle(),
@@ -29,6 +29,7 @@ export default async function MatchPage({
       supabaseAdmin.from('match_schedule').select('*').eq('booking_id', params.bookingId).order('scheduled_order', { ascending: true }),
       supabaseAdmin.from('group_members').select(`*, profiles(${PROFILE_FIELDS})`).eq('group_id', params.groupId),
       supabaseAdmin.from('field_ratings').select('id').eq('booking_id', params.bookingId).eq('user_id', user.id).maybeSingle(),
+      supabaseAdmin.from('auctions').select('id, status, finalized_at').eq('booking_id', params.bookingId).maybeSingle(),
     ])
 
   // Members only, and the booking must belong to the group in the URL.
@@ -138,6 +139,7 @@ export default async function MatchPage({
       groupMembers={activeGroupMembers}
       initialHasRated={!!userRating}
       initialTab={searchParams?.tab || 'players'}
+      auction={auction}
     />
   )
 }
