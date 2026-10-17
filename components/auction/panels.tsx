@@ -98,12 +98,12 @@ export function OnTheBlock({ state, d, size = 'md' }: { state: AuctionState; d: 
     <section aria-label="Player up for bidding" className="relative overflow-hidden rounded-2xl border border-ka-line bg-ka-surface">
       <div className="flex items-stretch">
         <div
-          className={cn('flex shrink-0 items-center justify-center ka-display', big ? 'w-44 text-7xl' : 'w-24 text-4xl')}
+          className={cn('flex shrink-0 items-center justify-center ka-display', big ? 'w-[clamp(5rem,min(14vw,24vh),11rem)] text-[clamp(2rem,min(6vw,10vh),4.5rem)]' : 'w-24 text-4xl')}
           style={{ background: tierColor, color: onColor(tierColor) }}
         >
           {e.avatarUrl ? <img src={e.avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(e.name)}
         </div>
-        <div className={cn('min-w-0 flex-1', big ? 'p-8' : 'p-4')}>
+        <div className={cn('min-w-0 flex-1', big ? 'p-[clamp(1rem,3vw,2rem)]' : 'p-4')}>
           <div className="flex flex-wrap items-center gap-1.5">
             {tier && (
               <span className="rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider" style={{ background: `${tierColor}22`, color: tierColor }}>
@@ -113,9 +113,9 @@ export function OnTheBlock({ state, d, size = 'md' }: { state: AuctionState; d: 
             {e.position && <span className="rounded-full bg-ka-soft px-2 py-0.5 text-[11px] font-bold uppercase text-ka-muted">{e.position}</span>}
             {e.isGuest && <span className="rounded-full bg-ka-soft px-2 py-0.5 text-[11px] font-bold uppercase text-ka-muted">Guest</span>}
           </div>
-          <h2 className={cn('ka-display mt-1 break-words leading-none', big ? 'text-8xl' : 'text-4xl')}>{e.name}</h2>
+          <h2 className={cn('ka-display mt-1 break-words leading-none', big ? 'text-[clamp(2rem,min(7vw,11vh),6rem)]' : 'text-4xl')}>{e.name}</h2>
           {e.status === 'on_block' && !d.top && (
-            <p className={cn('mt-2 text-ka-muted', big ? 'text-3xl' : 'text-sm')}>
+            <p className={cn('mt-2 text-ka-muted', big ? 'text-[clamp(1rem,2.6vw,1.875rem)]' : 'text-sm')}>
               Opening bid <b className="ka-tabular text-ka-ink">{formatMoney(d.minPrice)}</b>
             </p>
           )}
@@ -126,30 +126,30 @@ export function OnTheBlock({ state, d, size = 'md' }: { state: AuctionState; d: 
         {barTeam && (e.status === 'on_block' || e.status === 'sold') && (
           <div
             key={d.top?.id ?? e.id}
-            className={cn('flex items-center justify-between gap-3 ka-bid-flash', big ? 'px-8 py-5' : 'px-4 py-3')}
+            className={cn('flex items-center justify-between gap-3 ka-bid-flash', big ? 'px-[clamp(1rem,3vw,2rem)] py-[clamp(0.5rem,min(2vw,3vh),1.25rem)]' : 'px-4 py-3')}
             style={{ background: barTeam.color, color: onColor(barTeam.color) }}
           >
-            <span className={cn('font-bold', big ? 'text-3xl' : 'text-base')}>
+            <span className={cn('font-bold', big ? 'text-[clamp(1rem,2.6vw,1.875rem)]' : 'text-base')}>
               {e.status === 'sold' ? `Sold to ${barTeam.name}` : `${barTeam.name} leading`}
             </span>
-            <span className={cn('ka-display ka-tabular leading-none', big ? 'text-8xl' : 'text-4xl')}>
+            <span className={cn('ka-display ka-tabular leading-none', big ? 'text-[clamp(2rem,min(7vw,11vh),6rem)]' : 'text-4xl')}>
               {formatMoney(e.status === 'sold' ? e.soldPrice : d.top?.amount)}
             </span>
           </div>
         )}
         {e.status === 'unsold' && (
-          <div className={cn('bg-ka-soft text-center font-bold text-ka-muted', big ? 'py-5 text-3xl' : 'py-3 text-sm')}>No bids — back in the second round</div>
+          <div className={cn('bg-ka-soft text-center font-bold text-ka-muted', big ? 'py-4 text-[clamp(1rem,2.6vw,1.875rem)]' : 'py-3 text-sm')}>No bids — back in the second round</div>
         )}
       </div>
 
       {e.status === 'on_block' && a.callState !== 'none' && (
-        <div role="alert" className={cn('animate-pulse bg-ka-warn text-center ka-display text-ka-on-warn', big ? 'py-4 text-5xl' : 'py-2 text-xl')}>
+        <div role="alert" className={cn('animate-pulse bg-ka-warn text-center ka-display text-ka-on-warn', big ? 'py-2 text-[clamp(1.25rem,min(4.5vw,7vh),3rem)]' : 'py-2 text-xl')}>
           Going {a.callState}…
         </div>
       )}
-      {a.status === 'paused' && <div className={cn('bg-ka-soft text-center ka-display', big ? 'py-4 text-4xl' : 'py-2 text-lg')}>Paused</div>}
+      {a.status === 'paused' && <div className={cn('bg-ka-soft text-center ka-display', big ? 'py-3 text-[clamp(1.25rem,3.6vw,2.25rem)]' : 'py-2 text-lg')}>Paused</div>}
       {e.status === 'sold' && (
-        <span aria-hidden className={cn('ka-stamp pointer-events-none absolute right-3 top-3 rounded-lg border-4 border-ka-primary px-2 ka-display text-ka-primary', big ? 'text-7xl' : 'text-3xl')}>
+        <span aria-hidden className={cn('ka-stamp pointer-events-none absolute right-3 top-3 rounded-lg border-4 border-ka-primary px-2 ka-display text-ka-primary', big ? 'text-[clamp(2rem,6vw,4.5rem)]' : 'text-3xl')}>
           Sold
         </span>
       )}
@@ -159,7 +159,7 @@ export function OnTheBlock({ state, d, size = 'md' }: { state: AuctionState; d: 
 
 function Shell({ children, big }: { children: React.ReactNode; big: boolean }) {
   return (
-    <section className={cn('flex flex-col items-center justify-center gap-2 rounded-2xl border border-ka-line bg-ka-surface p-8 text-center', big ? 'min-h-[50vh]' : 'min-h-48')}>
+    <section className={cn('flex flex-col items-center justify-center gap-2 rounded-2xl border border-ka-line bg-ka-surface p-8 text-center', big ? 'min-h-[40vh]' : 'min-h-48')}>
       {children}
     </section>
   )
