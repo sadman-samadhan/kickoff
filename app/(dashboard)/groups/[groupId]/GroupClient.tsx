@@ -7,7 +7,7 @@ import { Tabs } from '@/components/ui/kit'
 import { format, parseISO } from 'date-fns'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, Shield, ChevronRight, X, Loader2, Copy, Trophy, UserMinus, ShieldCheck, LogOut, MessageCircle, Star } from 'lucide-react'
+import { Settings, CheckCircle, XCircle, Users, Clock, Calendar, MapPin, Plus, Shield, ChevronRight, X, Loader2, Copy, Trophy, UserMinus, ShieldCheck, LogOut, MessageCircle, Star, Share2 } from 'lucide-react'
 import ChatTab from './ChatTab'
 import SettingsTab from './SettingsTab'
 import { Button } from '@/components/ui/button'
@@ -237,6 +237,31 @@ export default function GroupClient({
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Invite link: opens a page where people sign up / sign in and confirm joining this group.
+  const [linkCopied, setLinkCopied] = useState(false)
+  const inviteLink = () => `${window.location.origin}/join/${group.invite_code}`
+  const copyInviteLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink())
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2000)
+    } catch {
+      // clipboard blocked: the link is still shown in Manage
+    }
+  }
+  const shareInviteLink = async () => {
+    const url = inviteLink()
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Join ${group.name} on KhelaHbe`, text: `Join ${group.name} on KhelaHbe ⚽`, url })
+        return
+      } catch (e) {
+        if ((e as Error)?.name === 'AbortError') return
+      }
+    }
+    copyInviteLink()
+  }
+
   let matchStatusLabel = 'Next Match'
   let isMatchStarted = false
   if (nextMatch) {
@@ -262,9 +287,14 @@ export default function GroupClient({
             <span className="flex items-center gap-1.5 text-neutral-600 bg-neutral-100 px-2 py-1 rounded-full">
               <Users className="w-4 h-4" /> {members.length} members
             </span>
-            <span className="bg-neutral-100 text-neutral-600 px-2 py-1 rounded-full font-mono font-bold tracking-widest text-xs border border-neutral-200" onClick={copyInviteCode}>
-              {copied ? 'COPIED!' : group.invite_code}
-            </span>
+            <button
+              type="button"
+              onClick={shareInviteLink}
+              className="flex items-center gap-1.5 rounded-full bg-green-600 px-3 py-1 text-xs font-bold text-white"
+              aria-label="Share the group's invite link"
+            >
+              <Share2 className="w-3.5 h-3.5" aria-hidden /> {linkCopied ? 'Link copied!' : 'Invite'}
+            </button>
           </div>
         </div>
         <div className="flex flex-col gap-2">
@@ -577,6 +607,21 @@ export default function GroupClient({
               </button>
             </div>
             <div className="p-6">
+              <div className="w-full bg-green-50 border border-green-200 rounded-xl p-4 mb-3">
+                <div className="text-[10px] font-bold text-green-800 uppercase tracking-wider mb-2">Invite link</div>
+                <p className="text-xs text-neutral-600 mb-2">Anyone with this link can sign up or sign in and join this group after confirming.</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0 truncate bg-white border border-neutral-200 rounded-lg py-2.5 px-3 text-sm font-semibold text-neutral-800">
+                    {typeof window !== 'undefined' ? inviteLink().replace(/^https?:\/\//, '') : `/join/${group.invite_code}`}
+                  </div>
+                  <Button onClick={copyInviteLink} variant="outline" aria-label="Copy invite link" className="h-[46px] w-[46px] p-0 shrink-0 border-neutral-200 bg-white">
+                    {linkCopied ? <CheckCircle className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5 text-neutral-600" />}
+                  </Button>
+                  <Button onClick={shareInviteLink} aria-label="Share invite link" className="h-[46px] w-[46px] p-0 shrink-0 bg-green-600 text-white hover:bg-green-700">
+                    <Share2 className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
               <div className="w-full bg-neutral-50 border border-neutral-200 rounded-xl p-4">
                 <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Invite Code</div>
                 <div className="flex items-center gap-2">
